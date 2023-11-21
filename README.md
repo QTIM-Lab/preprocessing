@@ -1,0 +1,1 @@
+This is a python package designed for the purpose of preprocessing MRI data at QTIM. It currently supports nifti conversion and brain preprocessing. Its outputs are intended to follow the BIDS organizational scheme.
