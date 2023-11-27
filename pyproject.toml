@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "preprocessing"
+version = "0.1.0"
+description = "QTIM preprocessing package"
+authors = ["Mason Cleveland <mcleveland2@mgh.harvard.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pydicom = "^2.4.3"
+pandas = "^2.1.3"
+visidata = "^2.11.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+preprocessing = "preprocessing.__main__:main"
