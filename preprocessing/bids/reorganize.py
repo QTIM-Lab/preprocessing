@@ -2,10 +2,13 @@
 import pandas as pd
 import glob
 import os
+import shutil
+import multiprocessing
 
 from preprocessing.constants import META_KEYS
 from pydicom import dcmread
 from pathlib import Path
+from tqdm import tqdm
 
 
 def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFrame:
@@ -50,9 +53,7 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
                 dcm_found = False
                 try:
                     dcm = dcmread(file, stop_before_pixels=True)
-                    if (not hasattr(dcm, "PatientID")) or (
-                        not hasattr(dcm, "StudyInstanceUID")
-                    ):
+                    if not hasattr(dcm, "StudyInstanceUID"):
                         continue
                     dcm_found = True
                     break
@@ -74,7 +75,6 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
                 continue
 
             anon_key = {
-                "PatientID": getattr(dcm, "PatientID"),
                 "Anon_PatientID": patient,
                 "StudyInstanceUID": getattr(dcm, "StudyInstanceUID"),
                 "Anon_StudyID": f"Visit_{i+1:02d}",
@@ -90,10 +90,74 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
     return df
 
 
+def copy_dicoms(
+    sub_dir: Path, new_dicom_dir: Path, anon_df: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Helper function for reorganize_dicoms
+    """
+
+    files = list(sub_dir.glob("**/*"))
+    rows = []
+
+    for file in files:
+        try:
+            dcm = dcmread(file, stop_before_pixels=True)
+            if not hasattr(dcm, "StudyInstanceUID"):
+                continue
+
+        except Exception:
+            continue
+
+        anon_keys = anon_df[
+            # (anon_df["PatientID"] == dcm.PatientID) # multiple PatientID values
+            # &
+            (anon_df["StudyInstanceUID"] == dcm.StudyInstanceUID)
+        ]
+
+        try:
+            row = {
+                "Anon_PatientID": anon_keys.loc[anon_keys.index[0], "Anon_PatientID"],
+                "Anon_StudyID": anon_keys.loc[anon_keys.index[0], "Anon_StudyID"],
+            }
+        except Exception as error:
+            error = f"{file} encountered: {error}\n"
+            errorfile = open(new_dicom_dir / "reorganization_errors.txt", "a")
+            errorfile.write(error)
+
+            row = {"Anon_PatientID": None, "Anon_StudyID": None}
+
+        for key in META_KEYS:
+            attr = getattr(dcm, key, None)
+            row[key] = attr
+
+        save_path = new_dicom_dir / dcm.SeriesInstanceUID
+        row["save_path"] = save_path
+        out_file = save_path / f"{dcm.SOPInstanceUID}.dcm"
+        os.makedirs(save_path, exist_ok=True)
+        shutil.copy(file, out_file)
+
+        rows.append(row)
+    df = (
+        pd.DataFrame(rows)
+        .drop_duplicates(subset=["SeriesInstanceUID"])
+        .reset_index(drop=True)
+    )
+    print(df)
+    return df
+
+
+def copy_dicoms_star(args) -> pd.DataFrame:
+    """
+    imap compatible version of copy_dicoms
+    """
+    return copy_dicoms(*args)
+
+
 def reorganize_dicoms(
     original_dicom_dir: Path | str,
     new_dicom_dir: Path | str,
-    anon_csv: Path | str | pd.DataFrame,
+    anon_csv: Path | str | pd.DataFrame,  # make optional and define afterward?
     cpus: int = 0,
 ) -> None:
     if isinstance(original_dicom_dir, str):
@@ -108,34 +172,33 @@ def reorganize_dicoms(
     elif isinstance(anon_csv, pd.DataFrame):
         anon_df = anon_csv
 
-    files = list(original_dicom_dir.glob("**/*"))
+    sub_dirs = list(original_dicom_dir.glob("*/"))
 
-    for file in files:
-        try:
-            dcm = dcmread(file)
-            if (not hasattr(dcm, "PatientID")) or (
-                not hasattr(dcm, "StudyInstanceUID")
-            ):
-                continue
-
-        except Exception:
-            continue
-
-        anon_keys = anon_df[
-            (anon_df["PatientID"] == dcm.PatientID)
-            & (anon_df["StudyInstanceUID"] == dcm.StudyInstanceUID)
+    if cpus == 0:
+        outputs = [
+            copy_dicoms(sub_dir, new_dicom_dir, anon_df)
+            for sub_dir in tqdm(sub_dirs, desc="Copying DICOMs")
         ]
 
-        row = {
-            "Anon_PatientID": anon_keys.loc[anon_keys.index[0], "Anon_PatientID"],
-            "Anon_StudyID": anon_keys.loc[anon_keys.index[0], "Anon_StudyID"],
-        }
+    else:
+        inputs = [[sub_dir, new_dicom_dir, anon_df] for sub_dir in sub_dirs]
 
-        for key in META_KEYS:
-            attr = getattr(dcm, key, None)
-            row[key] = attr
+        with multiprocessing.Pool(cpus) as pool:
+            outputs = list(
+                tqdm(
+                    pool.imap(copy_dicoms_star, inputs),
+                    total=len(sub_dirs),
+                    desc="Copying DICOMs",
+                )
+            )
 
-        print(row)
-        quit()
+    df = (
+        pd.concat(outputs, ignore_index=True)
+        .drop_duplicates(subset=["SeriesInstanceUID"])
+        .sort_values("Anon_PatientID")
+        .reset_index(drop=True)
+    )
+    print(df)
+    df.to_csv((new_dicom_dir / "reorganization.csv"), index=False)
 
-    # return df
+    return df

@@ -1,9 +1,9 @@
 META_KEYS = [
     "SeriesInstanceUID",
     "StudyInstanceUID",
-    "SOPInstanceUID",
+    # "SOPInstanceUID",
     "PatientID",
-    "SubjectID",
+    # "SubjectID",
     "AccessionNumber",
     "StudyDate",
     "StudyDescription",

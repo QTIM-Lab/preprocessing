@@ -1,6 +1,8 @@
 import argparse
 import sys
 
+from pathlib import Path
+
 
 class preprocessing_cli(object):
     def __init__(self):
@@ -13,6 +15,10 @@ The following commands are available:
                                 from previous QTIM organizational scheme. Should be compatible
                                 with data following a following <Patient_ID>/<Study_ID> directory
                                 hierarchy.
+    reorganize_dicoms           Reorganize DICOMs to follow the BIDS convention. Any DICOMs found
+                                recursively within this directory will be reorganized (at least 
+                                one level of subdirectories is assumed). Anonomyzation keys for
+                                PatientIDs and StudyIDs are provided within a csv.
 
 """,
         )
@@ -60,7 +66,58 @@ The following commands are available:
 
         args = parser.parse_args(sys.argv[2:])
 
-        find_anon_keys(args.input_dir, args.output_dir)
+        find_anon_keys(input_dir=args.input_dir, output_dir=args.output_dir)
+
+    def reorganize_dicoms(self):
+        from preprocessing.bids import reorganize_dicoms
+
+        parser = argparse.ArgumentParser()
+
+        parser.add_argument(
+            "original_dicom_dir",
+            type=Path,
+            help=(
+                "The directory containing all of the DICOM files you wish to "
+                "organize."
+            ),
+        )
+
+        parser.add_argument(
+            "new_dicom_dir",
+            type=Path,
+            help=(
+                "The directory that will contain the same DICOM files "
+                "reorganized to follow the BIDS convention."
+            ),
+        )
+
+        parser.add_argument(
+            "anon_csv",
+            type=Path,
+            help=(
+                "A csv mapping PatientID and StudyInstanceUID to " "anonymous values."
+            ),
+        )
+
+        parser.add_argument(
+            "-c",
+            "--cpus",
+            type=int,
+            default=0,
+            help=(
+                "Number of cpus to use for multiprocessing. Defaults "
+                "to 0 (no multiprocessing)."
+            ),
+        )
+
+        args = parser.parse_args(sys.argv[2:])
+
+        reorganize_dicoms(
+            original_dicom_dir=args.original_dicom_dir,
+            new_dicom_dir=args.new_dicom_dir,
+            anon_csv=args.anon_csv,
+            cpus=args.cpus,
+        )
 
 
 def main():
