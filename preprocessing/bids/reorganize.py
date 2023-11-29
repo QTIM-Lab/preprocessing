@@ -76,7 +76,9 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
 
             anon_key = {
                 "Anon_PatientID": patient,
-                "StudyInstanceUID": getattr(dcm, "StudyInstanceUID"),
+                "StudyInstanceUID": getattr(
+                    dcm, "StudyInstanceUID", None
+                ),  # cover edge cases
                 "Anon_StudyID": f"Visit_{i+1:02d}",
             }
 
@@ -109,11 +111,7 @@ def copy_dicoms(
         except Exception:
             continue
 
-        anon_keys = anon_df[
-            # (anon_df["PatientID"] == dcm.PatientID) # multiple PatientID values
-            # &
-            (anon_df["StudyInstanceUID"] == dcm.StudyInstanceUID)
-        ]
+        anon_keys = anon_df[(anon_df["StudyInstanceUID"] == dcm.StudyInstanceUID)]
 
         try:
             row = {
@@ -122,6 +120,7 @@ def copy_dicoms(
             }
         except Exception as error:
             error = f"{file} encountered: {error}\n"
+            print(error)
             errorfile = open(new_dicom_dir / "reorganization_errors.txt", "a")
             errorfile.write(error)
 
@@ -132,8 +131,17 @@ def copy_dicoms(
             row[key] = attr
 
         save_path = new_dicom_dir / dcm.SeriesInstanceUID
-        row["save_path"] = save_path
-        out_file = save_path / f"{dcm.SOPInstanceUID}.dcm"
+        row["dicoms"] = save_path
+        try:
+            out_file = save_path / f"{dcm.SOPInstanceUID}.dcm"
+        except Exception as error:
+            error = f"{file} encountered: {error}\n"
+            print(error)
+            errorfile = open(new_dicom_dir / "reorganization_errors.txt", "a")
+            errorfile.write(error)
+            # file is likely corrupted, so skip
+            continue
+
         os.makedirs(save_path, exist_ok=True)
         shutil.copy(file, out_file)
 
@@ -198,7 +206,6 @@ def reorganize_dicoms(
         .sort_values("Anon_PatientID")
         .reset_index(drop=True)
     )
-    print(df)
     df.to_csv((new_dicom_dir / "reorganization.csv"), index=False)
 
     return df
