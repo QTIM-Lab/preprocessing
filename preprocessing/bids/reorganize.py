@@ -38,12 +38,12 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
     os.chdir(input_dir)
     dicts = []
 
-    patients = list(glob.glob("*/"))
+    patients = sorted(list(glob.glob("*/")))
 
     for patient in patients:
         patient = patient.replace("/", "")
         os.chdir(os.path.join(input_dir, patient))
-        studies = list(glob.glob("*/"))
+        studies = sorted(list(glob.glob("*/")))
         for i, study in enumerate(studies):
             study = study.replace("/", "")
             os.chdir(os.path.join(input_dir, patient, study))
@@ -203,9 +203,9 @@ def reorganize_dicoms(
     df = (
         pd.concat(outputs, ignore_index=True)
         .drop_duplicates(subset=["SeriesInstanceUID"])
-        .sort_values("Anon_PatientID")
+        .sort_values(["Anon_PatientID", "Anon_StudyID"])
         .reset_index(drop=True)
     )
-    df.to_csv((new_dicom_dir / "reorganization.csv"), index=False)
+    df.to_csv((new_dicom_dir / "dataset.csv"), index=False)
 
     return df
