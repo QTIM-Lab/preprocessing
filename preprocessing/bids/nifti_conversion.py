@@ -8,7 +8,7 @@ from tqdm import tqdm
 from pathlib import Path
 
 
-def convert_nifti(
+def convert_to_nifti(
     dicom_dir: Path | str,
     nifti_dir: Path | str,
     anon_patientID: str,
@@ -16,7 +16,6 @@ def convert_nifti(
     normalized_series_description: str,
     subdir: Literal["anat", "func", "dwi"],
     overwrite: bool = False,
-    suffix: str = "",
 ) -> str | None:
     if isinstance(nifti_dir, str):
         nifti_dir = Path(nifti_dir)
@@ -24,7 +23,7 @@ def convert_nifti(
     output_dir = nifti_dir / anon_patientID / anon_studyID / subdir
     output_nifti = (
         output_dir
-        / f"{anon_patientID}-{anon_studyID}-{normalized_series_description.replace(' ', '_') + suffix}"
+        / f"{anon_patientID}_{anon_studyID}_{normalized_series_description.replace(' ', '_')}"
     )
 
     if (not overwrite) and output_nifti.with_suffix(".nii.gz").exists():
@@ -32,7 +31,7 @@ def convert_nifti(
 
     os.makedirs(output_dir, exist_ok=True)
 
-    command = f"dcm2niix {dicom_dir} -z y -f {output_nifti} -o {output_dir}"
+    command = f"dcm2niix -z y -f {output_nifti.name} -o {output_dir} -b y {dicom_dir}"
     print(command)
 
     run(
@@ -44,7 +43,7 @@ def convert_nifti(
 
 
 def convert_study(
-    study_df: pd.DataFrame, nifti_dir: Path, overwrite_nifti: bool
+    study_df: pd.DataFrame, nifti_dir: Path, overwrite_nifti: bool = False
 ) -> pd.DataFrame:
     """
     Helper function for convert_batch_to_nifti
@@ -59,15 +58,14 @@ def convert_study(
         output_niftis = []
 
         for i in range(series_df.shape[0]):
-            output_nifti = convert_nifti(
+            output_nifti = convert_to_nifti(
                 dicom_dir=series_df.loc[series_df.index[i], "dicoms"],
                 nifti_dir=nifti_dir,
                 anon_patientID=series_df.loc[series_df.index[i], "Anon_PatientID"],
                 anon_studyID=series_df.loc[series_df.index[i], "Anon_StudyID"],
                 normalized_series_description=series_description,
-                subdir=series_df.loc[series_df.index[i], ""],
+                subdir=series_df.loc[series_df.index[i], "SeriesType"],
                 overwrite=overwrite_nifti,
-                suffix=f"_{i}",
             )
             output_niftis.append(output_nifti)
 

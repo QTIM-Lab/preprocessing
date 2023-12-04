@@ -75,11 +75,11 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
                 continue
 
             anon_key = {
-                "Anon_PatientID": patient,
+                "Anon_PatientID": f"sub-{patient.replace('_', '')}",
                 "StudyInstanceUID": getattr(
                     dcm, "StudyInstanceUID", None
                 ),  # cover edge cases
-                "Anon_StudyID": f"Visit_{i+1:02d}",
+                "Anon_StudyID": f"ses-{i+1:02d}",
             }
 
             print(anon_key)
