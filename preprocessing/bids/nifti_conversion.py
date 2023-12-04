@@ -26,12 +26,9 @@ def convert_to_nifti(
         / f"{anon_patientID}_{anon_studyID}_{normalized_series_description.replace(' ', '_')}"
     )
 
-    if (not overwrite) and output_nifti.with_suffix(".nii.gz").exists():
-        return str(output_nifti) + ".nii.gz"
-
     os.makedirs(output_dir, exist_ok=True)
 
-    command = f"dcm2niix -z y -f {output_nifti.name} -o {output_dir} -b y {dicom_dir}"
+    command = f"dcm2niix -z y -f {output_nifti.name} -o {output_dir} -b y -w {int(overwrite)} {dicom_dir}"
     print(command)
 
     run(
@@ -54,7 +51,7 @@ def convert_study(
     for series_description in series_descriptions:
         series_df = study_df[
             study_df["NormalizedSeriesDescription"] == series_description
-        ]
+        ].copy()
         output_niftis = []
 
         for i in range(series_df.shape[0]):
@@ -96,7 +93,7 @@ def convert_batch_to_nifti(
     if cpus == 0:
         outputs = [
             convert_study(
-                filtered_df[filtered_df["StudyInstanceUID"] == study_uid],
+                filtered_df[filtered_df["StudyInstanceUID"] == study_uid].copy(),
                 nifti_dir,
                 overwrite_nifti,
             )
