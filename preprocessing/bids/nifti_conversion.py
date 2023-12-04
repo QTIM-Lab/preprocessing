@@ -86,7 +86,7 @@ def convert_batch_to_nifti(
 ) -> pd.DataFrame:
     df = pd.read_csv(csv)
 
-    filtered_df = df.drop_na(subset="NormalizedSeriesDescription")
+    filtered_df = df.dropna(subset="NormalizedSeriesDescription")
 
     study_uids = filtered_df["StudyInstanceUID"].unique()
 
@@ -103,7 +103,7 @@ def convert_batch_to_nifti(
     else:
         inputs = [
             [
-                filtered_df[filtered_df["StudyInstanceUID"] == study_uid],
+                filtered_df[filtered_df["StudyInstanceUID"] == study_uid].copy(),
                 nifti_dir,
                 overwrite_nifti,
             ]
