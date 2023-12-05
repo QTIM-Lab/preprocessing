@@ -26,6 +26,9 @@ def convert_to_nifti(
         / f"{anon_patientID}_{anon_studyID}_{normalized_series_description.replace(' ', '_')}"
     )
 
+    if (not overwrite) and (output_nifti.with_suffix(".nii.gz").exists()):
+        return str(output_nifti) + ".nii.gz"
+
     os.makedirs(output_dir, exist_ok=True)
 
     command = f"dcm2niix -z y -f {output_nifti.name} -o {output_dir} -b y -w {int(overwrite)} {dicom_dir}"
@@ -36,7 +39,11 @@ def convert_to_nifti(
         env={"PATH": "/usr/pubsw/packages/fsl/6.0.6/bin/:" + os.environ["PATH"]},
     )
 
-    return str(output_nifti) + ".nii.gz"
+    if output_nifti.with_suffix(".nii.gz").exists():
+        return str(output_nifti) + ".nii.gz"
+
+    else:
+        return None
 
 
 def convert_study(
@@ -86,7 +93,7 @@ def convert_batch_to_nifti(
 ) -> pd.DataFrame:
     df = pd.read_csv(csv)
 
-    filtered_df = df.dropna(subset="NormalizedSeriesDescription")
+    filtered_df = df.copy().dropna(subset="NormalizedSeriesDescription")
 
     study_uids = filtered_df["StudyInstanceUID"].unique()
 
@@ -119,7 +126,7 @@ def convert_batch_to_nifti(
                 )
             )
 
-    for output in outputs:
-        df = df.update(output)
-
+    nifti_df = pd.concat(outputs)
+    df = pd.merge(df, nifti_df, how="outer")
+    df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(drop=True)
     df.to_csv(csv, index=False)

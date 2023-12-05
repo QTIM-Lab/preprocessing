@@ -13,6 +13,7 @@ visidata = "^2.11.1"
 tqdm = "^4.57.0"
 bids-validator = "^1.14.0"
 pybids = "^0.16.4"
+nipype = "^1.8.6"
 
 
 [build-system]
