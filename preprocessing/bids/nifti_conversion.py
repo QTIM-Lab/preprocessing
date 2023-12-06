@@ -130,3 +130,4 @@ def convert_batch_to_nifti(
     df = pd.merge(df, nifti_df, how="outer")
     df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(drop=True)
     df.to_csv(csv, index=False)
+    return df

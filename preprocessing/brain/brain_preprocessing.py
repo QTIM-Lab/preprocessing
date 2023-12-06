@@ -469,6 +469,7 @@ def preprocess_from_csv(
             )
 
     preprocessed_df = pd.concat(outputs)
-    df = pd.merge(df, nifti_df, how="outer")
+    df = pd.merge(df, preprocessed_df, how="outer")
     df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(drop=True)
-    df.to_csv(csv, index=False)    
+    df.to_csv(csv, index=False)
+    return df
