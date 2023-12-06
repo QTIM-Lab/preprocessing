@@ -174,7 +174,7 @@ def preprocess_study(
                     e = open(f"{preprocessed_dir}/errors.txt", "a")
                     e.write(f"{error}\n")
                     return study_df
-                
+
                 command = (
                     f"{slicer_dir} --launch ResampleScalarVectorDWIVolume "
                     f"{preprocessed_file} {preprocessed_file} -i bs -f {transform_outfile}"
@@ -230,7 +230,6 @@ def preprocess_study(
                 e = open(f"{preprocessed_dir}/errors.txt", "a")
                 e.write(f"{error}\n")
                 return study_df
-
 
     ### appy final skullmask if skullstripping
     if skullstrip:
@@ -369,14 +368,16 @@ def preprocess_patient(
             skullstrip=skullstrip,
         )
     )
-    
-    if len(study_uids>1):
+
+    if len(study_uids > 1):
         if longitudinal_registration:
             registration_target = preprocessed_dfs[0][pipeline_key][0]
 
             for study_uid in study_uids[1:]:
-                study_df = patient_df[patient_df["StudyInstanceUID"] == study_uid].copy()
-                
+                study_df = patient_df[
+                    patient_df["StudyInstanceUID"] == study_uid
+                ].copy()
+
                 preprocessed_dfs.append(
                     preprocess_study(
                         study_df=study_df,
@@ -391,8 +392,10 @@ def preprocess_patient(
 
         else:
             for study_uid in study_uids[1:]:
-                study_df = patient_df[patient_df["StudyInstanceUID"] == study_uid.copy()
-                
+                study_df = patient_df[
+                    patient_df["StudyInstanceUID"] == study_uid
+                ].copy()
+
                 preprocessed_dfs.append(
                     preprocess_study(
                         study_df=study_df,
@@ -405,8 +408,8 @@ def preprocess_patient(
                     )
                 )
 
-
     return pd.concat(preprocessed_dfs, ignore_index=True)
+
 
 def preprocess_patient_star(args):
     return preprocess_patient(*args)
@@ -422,14 +425,12 @@ def preprocess_from_csv(
     skullstrip: bool = True,
     cpus: int = 0,
 ) -> pd.DataFrame:
-
     if isinstance(preprocessed_dir, str):
         preprocessed_dir = Path(preprocessed_dir)
 
     df = pd.read_csv(csv)
     filtered_df = df.copy().dropna(subset="nifti")
     patients = filtered_df["Anon_PatientID"].unique()
-
 
     if cpus == 0:
         outputs = [
@@ -440,7 +441,7 @@ def preprocess_from_csv(
                 longitudinal_registration,
                 orientation,
                 spacing,
-                skullstrip
+                skullstrip,
             )
             for patient in tqdm(patients, desc="Preprocessing patients")
         ]
@@ -454,7 +455,7 @@ def preprocess_from_csv(
                 longitudinal_registration,
                 orientation,
                 spacing,
-                skullstrip
+                skullstrip,
             ]
             for patient in patients
         ]
@@ -463,7 +464,7 @@ def preprocess_from_csv(
             outputs = list(
                 tqdm(
                     pool.imap(preprocess_patient_star, inputs),
-                    total=len(study_uids),
+                    total=len(patients),
                     desc="Preprocessing patients",
                 )
             )

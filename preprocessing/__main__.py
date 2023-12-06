@@ -26,7 +26,11 @@ The following commands are available:
                                 the context for filenames. The outputs will comply with the BIDS
                                 conventions.
 
-Run `preprocessing <command> --help` for more details about each individual command. 
+    brain_preprocessing         Preprocess NIfTI files for deep learning. A csv is required to 
+                                indicate the location of source files and to procide the context 
+                                for filenames. The outputs will comply with BIDS conventions.
+
+Run `preprocessing <command> --help` for more details about how to use each individual command. 
 
 """,
         )
@@ -125,6 +129,18 @@ Run `preprocessing <command> --help` for more details about each individual comm
             cpus=args.cpus,
         )
 
+    def validate_bids(self):
+        from preprocessing.bids import validate
+
+        paths = sys.argv[2:]
+
+        if ("--help" in paths) or ("-h" in paths):
+            print(
+                "File(s) validated for BIDS convention. Use spaces to delimit multiple files."
+            )
+        else:
+            validate(paths)
+
     def dataset_to_nifti(self):
         from preprocessing.bids import convert_batch_to_nifti
 
@@ -150,7 +166,7 @@ Run `preprocessing <command> --help` for more details about each individual comm
         parser.add_argument(
             "--overwrite",
             action="store_true",
-            help="Whether to overwrite the .nii.gz files. Defaults to False.",
+            help="Whether to overwrite the .nii.gz files. False if not specified.",
         )
 
         parser.add_argument(
@@ -170,17 +186,100 @@ Run `preprocessing <command> --help` for more details about each individual comm
             nifti_dir=args.nifti_dir, csv=args.csv, overwrite_nifti=args.overwrite
         )
 
-    def validate_bids(self):
-        from preprocessing.bids import validate
+    def brain_preprocessing(self):
+        from preprocessing.brain import preprocess_from_csv
 
-        paths = sys.argv[2:]
+        parser = argparse.ArgumentParser()
 
-        if ("--help" in paths) or ("-h" in paths):
-            print(
-                "File(s) validated for BIDS convention. Use spaces to delimit multiple files."
-            )
-        else:
-            validate(paths)
+        parser.add_argument(
+            "preprocessed_dir",
+            type=Path,
+            help=("The directory that will contain the preprocessed NIfTI files."),
+        )
+
+        parser.add_argument(
+            "csv",
+            type=Path,
+            help=(
+                "A csv containing nifti location and information required "
+                "for the output file names. It must contain the columns: "
+                "'nifti', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', "
+                "'NormalizedSeriesDescription', and 'SeriesType'."
+            ),
+        )
+
+        parser.add_argument(
+            "--pipeline_key",
+            type=str,
+            default="preprocessed",
+            help=(
+                "The key that will be used in the csv to indicate the new locations "
+                "of preprocessed files. Defaults to 'preprocessed'."
+            ),
+        )
+
+        parser.add_argument(
+            "--longitudinal_registration",
+            action="store_true",
+            help=(
+                "Whether to use longitudinal registration. Additional studies "
+                "for the same patient will be registered to the first study "
+                "(chronologically). False if not specified."
+            ),
+        )
+
+        parser.add_argument(
+            "--orientation",
+            type=str,
+            default="RAI",
+            help=(
+                "The orientation standard that you wish to set for preprocessed "
+                "data. Defaults to 'RAI'."
+            ),
+        )
+
+        parser.add_argument(
+            "--spacing",
+            type=str,
+            default="1,1,1",
+            help=(
+                "A comma delimited list indicating the desired spacing of preprocessed "
+                "data. Measurements are in mm. Defaults to '1,1,1'."
+            ),
+        )
+
+        parser.add_argument(
+            "--no_skullstrip",
+            action="store_true",
+            help=(
+                "Whether to not apply skullstripping to preprocessed data. "
+                "Skullstripping will be applied if not specified."
+            ),
+        )
+
+        parser.add_argument(
+            "-c",
+            "--cpus",
+            type=int,
+            default=0,
+            help=(
+                "Number of cpus to use for multiprocessing. Defaults "
+                "to 0 (no multiprocessing)."
+            ),
+        )
+
+        args = parser.parse_args(sys.argv[2:])
+
+        preprocess_from_csv(
+            csv=args.csv,
+            preprocessed_dir=args.preprocessed_dir,
+            pipeline_key=args.pipeline_key,
+            longitudinal_registration=args.longitudinal_registration,
+            orientation=args.orientation,
+            spacing=args.spacing,
+            skullstrip=not args.no_skullstrip,
+            cpus=args.cpus,
+        )
 
 
 def main():
