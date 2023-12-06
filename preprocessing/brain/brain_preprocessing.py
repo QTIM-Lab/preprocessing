@@ -11,6 +11,7 @@ from nipype.interfaces.ants import N4BiasFieldCorrection
 from typing import Sequence
 from pathlib import Path
 from subprocess import run
+from tqdm import tqdm
 
 slicer_env = {
     "PATH": "/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/:" + os.environ["PATH"]
@@ -141,7 +142,7 @@ def preprocess_study(
         main_SS_mask_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
         main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
 
-    ### Register based on Loose skullstrip if i>0
+    ### Register based on loose skullstrip
     fixed_image_path = main_SS_mask_file
     if registration_target is None:
         if n > 1:
@@ -407,27 +408,67 @@ def preprocess_patient(
 
     return pd.concat(preprocessed_dfs, ignore_index=True)
 
+def preprocess_patient_star(args):
+    return preprocess_patient(*args)
+
 
 def preprocess_from_csv(
-    csv: str,
-    output_dir: str,
+    csv: Path | str,
+    preprocessed_dir: Path | str,
+    pipeline_key: str = "preprocessed",
+    longitudinal_registration: bool = False,
     orientation: str = "RAI",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
     cpus: int = 0,
 ) -> pd.DataFrame:
-    df = pd.read_csv(csv)
 
-    # if cpus == 0:
-    #     results = []
-    #     for row in rows:
-    #         results.append(
-    #             preprocess_single_case(row, output_dir, im_keys, seg_keys, skullstrip)
-    #         )
-    # if cpus > 0:
-    #     inputs = [[row, output_dir, im_keys, seg_keys, skullstrip] for row in rows]
-    #     with multiprocessing.Pool(cpus) as pool:
-    #         results = pool.starmap(preprocess_single_case, inputs)
-    #
-    # df = pd.DataFrame(results)
-    # df.to_csv(csv, index=False)
+    if isinstance(preprocessed_dir, str):
+        preprocessed_dir = Path(preprocessed_dir)
+
+    df = pd.read_csv(csv)
+    filtered_df = df.copy().dropna(subset="nifti")
+    patients = filtered_df["Anon_PatientID"].unique()
+
+
+    if cpus == 0:
+        outputs = [
+            preprocess_patient(
+                filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
+                preprocessed_dir,
+                pipeline_key,
+                longitudinal_registration,
+                orientation,
+                spacing,
+                skullstrip
+            )
+            for patient in tqdm(patients, desc="Preprocessing patients")
+        ]
+
+    else:
+        inputs = [
+            [
+                filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
+                preprocessed_dir,
+                pipeline_key,
+                longitudinal_registration,
+                orientation,
+                spacing,
+                skullstrip
+            ]
+            for patient in patients
+        ]
+
+        with multiprocessing.Pool(cpus) as pool:
+            outputs = list(
+                tqdm(
+                    pool.imap(preprocess_patient_star, inputs),
+                    total=len(study_uids),
+                    desc="Preprocessing patients",
+                )
+            )
+
+    preprocessed_df = pd.concat(outputs)
+    df = pd.merge(df, nifti_df, how="outer")
+    df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(drop=True)
+    df.to_csv(csv, index=False)    
