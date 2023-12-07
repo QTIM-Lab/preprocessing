@@ -219,6 +219,18 @@ Run `preprocessing <command> --help` for more details about how to use each indi
         )
 
         parser.add_argument(
+            "--registration_key",
+            type=str,
+            default="T1Post",
+            help=(
+                "The value that will be used to select the fixed image during registration. "
+                "This should correspond to a value within the 'NormalizedSeriesDescription' "
+                "column in the csv. If you have segmentation files in your data. They should "
+                "correspond to this same series. Defaults to 'T1Post'."
+            ),
+        )
+
+        parser.add_argument(
             "--longitudinal_registration",
             action="store_true",
             help=(
@@ -268,17 +280,29 @@ Run `preprocessing <command> --help` for more details about how to use each indi
             ),
         )
 
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            action="store_true",
+            help=(
+                "If specified, the commands that are called and their outputs "
+                "will be printed to the console."
+            ),
+        )
+
         args = parser.parse_args(sys.argv[2:])
 
         preprocess_from_csv(
             csv=args.csv,
             preprocessed_dir=args.preprocessed_dir,
             pipeline_key=args.pipeline_key,
+            registration_key=args.registration_key,
             longitudinal_registration=args.longitudinal_registration,
             orientation=args.orientation,
             spacing=args.spacing,
             skullstrip=not args.no_skullstrip,
             cpus=args.cpus,
+            verbose=args.verbose,
         )
 
 

@@ -12,15 +12,14 @@ from typing import Sequence
 from pathlib import Path
 from subprocess import run
 from tqdm import tqdm
+from preprocessing.utils import source_external_software
 
-slicer_env = {
-    "PATH": "/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/:" + os.environ["PATH"]
-}
+source_external_software()
 
 
 def copy_metadata(row: dict, preprocessing_args: dict) -> None:
     original_metafile = row["nifti"].replace(".nii.gz", ".json")
-    with open(original_metadata, "r") as json_file:
+    with open(original_metafile, "r") as json_file:
         data = json.load(json_file)
     meta_dict = {
         "source_file": row["nifti"],
@@ -40,21 +39,26 @@ def preprocess_study(
     study_df: pd.DataFrame,
     preprocessed_dir: Path,
     pipeline_key: str,
+    registration_key: str = "T1Post",
     registration_target: str | None = None,
     orientation: str = "RAI",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
+    verbose: bool = False,
 ) -> pd.DataFrame:
-    anon_patientID = study_df["Anon_PatientID"][0]
-    anon_studyID = study_df["Anon_StudyID"][0]
+    def registration_sort(series):
+        return (series != registration_key).astype(int)
 
     filtered_df = (
         study_df.copy()
         .dropna(subset="NormalizedSeriesDescription")
-        .sort_values(["seg"])  # use the segmentation case for registration
+        .sort_values(["NormalizedSeriesDescription"], key=registration_sort)
     )
-    if filtered_df.empty():
+    if filtered_df.empty:
         return study_df
+
+    anon_patientID = filtered_df.loc[filtered_df.index[0], "Anon_PatientID"]
+    anon_studyID = filtered_df.loc[filtered_df.index[0], "Anon_StudyID"]
 
     rows = filtered_df.to_dict("records")
     n = len(rows)
@@ -65,6 +69,8 @@ def preprocess_study(
         output_dir = (
             preprocessed_dir / anon_patientID / anon_studyID / rows[i]["SeriesType"]
         )
+        os.makedirs(output_dir, exist_ok=True)
+
         input_file = rows[i]["nifti"]
         preprocessed_file = output_dir / os.path.basename(input_file)
         shutil.copy(input_file, preprocessed_file)
@@ -91,9 +97,10 @@ def preprocess_study(
             f"Slicer --launch OrientScalarVolume "
             f"{preprocessed_file} {preprocessed_file} -o {orientation}"
         )
-        print(command)
+        if verbose:
+            print(command)
         try:
-            run(command.split(" "), env=slicer_env).check_returncode()
+            run(command.split(" "), capture_output=not verbose).check_returncode()
 
         except Exception as error:
             print(error)
@@ -108,9 +115,10 @@ def preprocess_study(
             f"Slicer --launch ResampleScalarVolume "
             f"{preprocessed_file} {preprocessed_file} -i bspline -s {spacing}"
         )
-        print(command)
+        if verbose:
+            print(command)
         try:
-            run(command.split(" "), env=slicer_env).check_returncode()
+            run(command.split(" "), capture_output=not verbose).check_returncode()
 
         except Exception as error:
             print(error)
@@ -124,10 +132,11 @@ def preprocess_study(
         SS_file = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
         SS_mask = preprocessed_file.replace(".nii.gz", "_SS_mask.nii.gz")
 
-        command = f"mri_synthstrip -i {input_file} -o {SS_file} -m {SS_mask}"
-        print(command)
+        command = f"mri_synthstrip -i {preprocessed_file} -o {SS_file} -m {SS_mask}"
+        if verbose:
+            print(command)
         try:
-            run(command.split(" "), env=slicer_env).check_returncode()
+            run(command.split(" "), capture_output=not verbose).check_returncode()
 
         except Exception as error:
             print(error)
@@ -136,7 +145,7 @@ def preprocess_study(
             return study_df
 
     if registration_target is None:
-        main_SS_mask_file = rows[i][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
+        main_SS_mask_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
         main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
     else:
         main_SS_mask_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
@@ -165,9 +174,12 @@ def preprocess_study(
                     f"--samplingPercentage {sampling_percentage}"
                 )
 
-                print(command)
+                if verbose:
+                    print(command)
                 try:
-                    run(command.split(" "), env=slicer_env).check_returncode()
+                    run(
+                        command.split(" "), capture_output=not verbose
+                    ).check_returncode()
 
                 except Exception as error:
                     print(error)
@@ -176,12 +188,15 @@ def preprocess_study(
                     return study_df
 
                 command = (
-                    f"{slicer_dir} --launch ResampleScalarVectorDWIVolume "
+                    f"Slicer --launch ResampleScalarVectorDWIVolume "
                     f"{preprocessed_file} {preprocessed_file} -i bs -f {transform_outfile}"
                 )
-                print(command)
+                if verbose:
+                    print(command)
                 try:
-                    run(command.split(" "), env=slicer_env).check_returncode()
+                    run(
+                        command.split(" "), capture_output=not verbose
+                    ).check_returncode()
 
                 except Exception as error:
                     print(error)
@@ -207,9 +222,10 @@ def preprocess_study(
                 f"--samplingPercentage {sampling_percentage}"
             )
 
-            print(command)
+            if verbose:
+                print(command)
             try:
-                run(command.split(" "), env=slicer_env).check_returncode()
+                run(command.split(" "), capture_output=not verbose).check_returncode()
 
             except Exception as error:
                 print(error)
@@ -218,12 +234,13 @@ def preprocess_study(
                 return study_df
 
             command = (
-                f"{slicer_dir} --launch ResampleScalarVectorDWIVolume "
+                f"Slicer --launch ResampleScalarVectorDWIVolume "
                 f"{preprocessed_file} {preprocessed_file} -i bs -f {transform_outfile}"
             )
-            print(command)
+            if verbose:
+                print(command)
             try:
-                run(command.split(" "), env=slicer_env).check_returncode()
+                run(command.split(" "), capture_output=not verbose).check_returncode()
 
             except Exception as error:
                 print(error)
@@ -270,9 +287,12 @@ def preprocess_study(
         nib.save(output_nifti, preprocessed_file)
 
     ### Process segmentation
-    input_file = rows[0]["seg"]
+    if "seg" in rows[0]:
+        input_file = rows[0]["seg"]
+    else:
+        input_file = None
 
-    if not np.isnan(input_file):
+    if isinstance(input_file, str):
         output_dir = (
             preprocessed_dir / anon_patientID / anon_studyID / rows[i]["SeriesType"]
         )
@@ -298,9 +318,10 @@ def preprocess_study(
             "Slicer --launch OrientScalarVolume "
             f"{preprocessed_file} {preprocessed_file} -o {orientation}"
         )
-        print(command)
+        if verbose:
+            print(command)
         try:
-            run(command.split(" "), env=slicer_env).check_returncode()
+            run(command.split(" "), capture_output=not verbose).check_returncode()
         except Exception as error:
             print(error)
             e = open(f"{preprocessed_dir}/errors.txt", "a")
@@ -314,9 +335,10 @@ def preprocess_study(
             "Slicer --launch ResampleScalarVectorDWIVolume "
             f"{preprocessed_file} {preprocessed_file} -i nn -R {reference_file}"
         )
-        print(command)
+        if verbose:
+            print(command)
         try:
-            run(command.split(" "), env=slicer_env).check_returncode()
+            run(command.split(" "), capture_output=not verbose).check_returncode()
         except Exception as error:
             print(error)
             e = open(f"{preprocessed_dir}/errors.txt", "a")
@@ -345,11 +367,13 @@ def preprocess_study(
 def preprocess_patient(
     patient_df: pd.DataFrame,
     preprocessed_dir: Path,
-    pipeline_key: str,
+    pipeline_key: str = "preprocessed",
+    registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
     orientation: str = "RAI",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
+    verbose: bool = False,
 ):
     study_uids = patient_df["StudyInstanceUID"].unique()
 
@@ -362,15 +386,18 @@ def preprocess_patient(
             study_df=study_df,
             preprocessed_dir=preprocessed_dir,
             pipeline_key=pipeline_key,
+            registration_key=registration_key,
             registration_target=None,
             orientation=orientation,
             spacing=spacing,
             skullstrip=skullstrip,
+            verbose=verbose,
         )
     )
 
-    if len(study_uids > 1):
+    if len(study_uids) > 1:
         if longitudinal_registration:
+            # TODO change registration target by a series description key
             registration_target = preprocessed_dfs[0][pipeline_key][0]
 
             for study_uid in study_uids[1:]:
@@ -383,10 +410,12 @@ def preprocess_patient(
                         study_df=study_df,
                         preprocessed_dir=preprocessed_dir,
                         pipeline_key=pipeline_key,
+                        registration_key=registration_key,
                         registration_target=registration_target,
                         orientation=orientation,
                         spacing=spacing,
                         skullstrip=skullstrip,
+                        verbose=verbose,
                     )
                 )
 
@@ -401,10 +430,12 @@ def preprocess_patient(
                         study_df=study_df,
                         preprocessed_dir=preprocessed_dir,
                         pipeline_key=pipeline_key,
+                        registration_key=registration_key,
                         registration_target=None,
                         orientation=orientation,
                         spacing=spacing,
                         skullstrip=skullstrip,
+                        verbose=verbose,
                     )
                 )
 
@@ -419,11 +450,13 @@ def preprocess_from_csv(
     csv: Path | str,
     preprocessed_dir: Path | str,
     pipeline_key: str = "preprocessed",
+    registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
     orientation: str = "RAI",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
     cpus: int = 0,
+    verbose: bool = False,
 ) -> pd.DataFrame:
     if isinstance(preprocessed_dir, str):
         preprocessed_dir = Path(preprocessed_dir)
@@ -438,10 +471,12 @@ def preprocess_from_csv(
                 filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
                 preprocessed_dir,
                 pipeline_key,
+                registration_key,
                 longitudinal_registration,
                 orientation,
                 spacing,
                 skullstrip,
+                verbose,
             )
             for patient in tqdm(patients, desc="Preprocessing patients")
         ]
@@ -452,10 +487,12 @@ def preprocess_from_csv(
                 filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
                 preprocessed_dir,
                 pipeline_key,
+                registration_key,
                 longitudinal_registration,
                 orientation,
                 spacing,
                 skullstrip,
+                verbose,
             ]
             for patient in patients
         ]
