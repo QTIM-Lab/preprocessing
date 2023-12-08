@@ -3,6 +3,7 @@ META_KEYS = [
     "StudyInstanceUID",
     "PatientID",
     "AccessionNumber",
+    "Manufacturer",
     "StudyDate",
     "StudyDescription",
     "SeriesDescription",

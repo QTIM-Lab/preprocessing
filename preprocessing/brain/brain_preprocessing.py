@@ -18,23 +18,7 @@ source_external_software()
 
 def copy_metadata(row: dict, preprocessing_args: dict) -> None:
     original_metafile = row["nifti"].replace(".nii.gz", ".json")
-    with open(original_metafile, "r") as json_file:
-        data = json.load(json_file)
-    meta_dict = {
-        "source_file": row["nifti"],
-        "original_metafile": data,
-        "preprocessing_args": preprocessing_args,
-    }
-    preprocessed_metafile = row[preprocessing_args["pipeline_key"]].replace(
-        ".nii.gz", ".json"
-    )
-    with open(preprocessed_metafile, "w") as json_file:
-        json.dump(
-            meta_dict, json_file, sort_keys=True, indent=2, separators=(",", ": ")
-        )
-
-    if "seg" in row:
-        original_metafile = row["seg"].replace(".nii.gz", ".json")
+    if Path(original_metafile).exists():
         with open(original_metafile, "r") as json_file:
             data = json.load(json_file)
         meta_dict = {
@@ -42,13 +26,47 @@ def copy_metadata(row: dict, preprocessing_args: dict) -> None:
             "original_metafile": data,
             "preprocessing_args": preprocessing_args,
         }
-        preprocessed_metafile = row[
-            f"{preprocessing_args['pipeline_key']}_seg"
-        ].replace(".nii.gz", ".json")
+        preprocessed_metafile = row[preprocessing_args["pipeline_key"]].replace(
+            ".nii.gz", ".json"
+        )
         with open(preprocessed_metafile, "w") as json_file:
             json.dump(
                 meta_dict, json_file, sort_keys=True, indent=2, separators=(",", ": ")
             )
+    else:
+        error = f"{original_metafile} does not exist. New metafile will not be created"
+        print(error)
+        e = open(f"{preprocessing_args['preprocessed_dir']}/errors.txt", "a")
+        e.write(f"{error}\n")
+
+    if "seg" in row:
+        original_metafile = row["seg"].replace(".nii.gz", ".json")
+        if Path(original_metafile).exists():
+            with open(original_metafile, "r") as json_file:
+                data = json.load(json_file)
+            meta_dict = {
+                "source_file": row["nifti"],
+                "original_metafile": data,
+                "preprocessing_args": preprocessing_args,
+            }
+            preprocessed_metafile = row[
+                f"{preprocessing_args['pipeline_key']}_seg"
+            ].replace(".nii.gz", ".json")
+            with open(preprocessed_metafile, "w") as json_file:
+                json.dump(
+                    meta_dict,
+                    json_file,
+                    sort_keys=True,
+                    indent=2,
+                    separators=(",", ": "),
+                )
+        else:
+            error = (
+                f"{original_metafile} does not exist. New metafile will not be created"
+            )
+            print(error)
+            e = open(f"{preprocessing_args['preprocessed_dir']}/errors.txt", "a")
+            e.write(f"{error}\n")
 
 
 def preprocess_study(

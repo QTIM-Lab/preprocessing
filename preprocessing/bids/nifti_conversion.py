@@ -1,11 +1,16 @@
 import multiprocessing
 import os
 import pandas as pd
+import shutil
 
 from subprocess import run
 from typing import Literal
 from tqdm import tqdm
 from pathlib import Path
+from preprocessing.utils import source_external_software
+from dicom2nifti import convert_directory
+
+source_external_software()
 
 
 def convert_to_nifti(
@@ -13,6 +18,7 @@ def convert_to_nifti(
     nifti_dir: Path | str,
     anon_patientID: str,
     anon_studyID: str,
+    manufacturer: str,
     normalized_series_description: str,
     subdir: Literal["anat", "func", "dwi"],
     overwrite: bool = False,
@@ -26,7 +32,14 @@ def convert_to_nifti(
         / f"{anon_patientID}_{anon_studyID}_{normalized_series_description.replace(' ', '_')}"
     )
 
-    if (not overwrite) and (output_nifti.with_suffix(".nii.gz").exists()):
+    if not isinstance(manufacturer, str):
+        manufacturer = "n.a."
+
+    if (
+        (not overwrite)
+        and (output_nifti.with_suffix(".nii.gz").exists())
+        and ("hitachi" not in manufacturer.lower())
+    ):
         return str(output_nifti) + ".nii.gz"
 
     os.makedirs(output_dir, exist_ok=True)
@@ -34,10 +47,16 @@ def convert_to_nifti(
     command = f"dcm2niix -z y -f {output_nifti.name} -o {output_dir} -b y -w {int(overwrite)} {dicom_dir}"
     print(command)
 
-    run(
-        command.split(" "),
-        env={"PATH": "/usr/pubsw/packages/fsl/6.0.6/bin/:" + os.environ["PATH"]},
-    )
+    run(command.split(" "))
+
+    if "hitachi" in manufacturer.lower():
+        # reconvert the cases from hitachi to avoid GEIR, but use dcm2niix originally to generate json
+        for file in output_dir.glob("*.nii.gz"):
+            os.remove(file)
+        convert_directory(dicom_dir, output_dir)
+
+        nifti = list(output_dir.glob("*.nii.gz"))[0]
+        os.rename(nifti, output_nifti.with_suffix(".nii.gz"))
 
     if output_nifti.with_suffix(".nii.gz").exists():
         return str(output_nifti) + ".nii.gz"
@@ -67,6 +86,7 @@ def convert_study(
                 nifti_dir=nifti_dir,
                 anon_patientID=series_df.loc[series_df.index[i], "Anon_PatientID"],
                 anon_studyID=series_df.loc[series_df.index[i], "Anon_StudyID"],
+                manufacturer=series_df.loc[series_df.index[i], "Manufacturer"],
                 normalized_series_description=series_description,
                 subdir=series_df.loc[series_df.index[i], "SeriesType"],
                 overwrite=overwrite_nifti,
