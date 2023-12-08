@@ -33,23 +33,22 @@ def copy_metadata(row: dict, preprocessing_args: dict) -> None:
             meta_dict, json_file, sort_keys=True, indent=2, separators=(",", ": ")
         )
 
-    # if "seg" in row:
-    #     original_metafile = row["seg"].replace(".nii.gz", ".json")
-    #     with open(original_metafile, "r") as json_file:
-    #         data = json.load(json_file)
-    #     meta_dict = {
-    #         "source_file": row["nifti"],
-    #         "original_metafile": data,
-    #         "preprocessing_args": preprocessing_args,
-    #     }
-    #     preprocessed_metafile = row[preprocessing_args["pipeline_key"]].replace(
-    #         ".nii.gz", ".json"
-    #     )
-    #     with open(preprocessed_metafile, "w") as json_file:
-    #         json.dump(
-    #             meta_dict, json_file, sort_keys=True, indent=2, separators=(",", ": ")
-    #         )
-    #
+    if "seg" in row:
+        original_metafile = row["seg"].replace(".nii.gz", ".json")
+        with open(original_metafile, "r") as json_file:
+            data = json.load(json_file)
+        meta_dict = {
+            "source_file": row["nifti"],
+            "original_metafile": data,
+            "preprocessing_args": preprocessing_args,
+        }
+        preprocessed_metafile = row[
+            f"{preprocessing_args['pipeline_key']}_seg"
+        ].replace(".nii.gz", ".json")
+        with open(preprocessed_metafile, "w") as json_file:
+            json.dump(
+                meta_dict, json_file, sort_keys=True, indent=2, separators=(",", ": ")
+            )
 
 
 def preprocess_study(
@@ -235,7 +234,7 @@ def preprocess_study(
                     ".nii.gz", "_transform.tfm"
                 )
                 sampling_percentage = 0.002
-                result_size = f"{main_SS_mask_array.shape}"[1:-1].replace(" ", "")
+                x, y, z = main_SS_mask_array.shape
 
                 command = (
                     f"Slicer "
@@ -246,7 +245,6 @@ def preprocess_study(
                     "--interpolationMode BSpline "
                     f"--outputTransform {transform_outfile} "
                     f"--samplingPercentage {sampling_percentage} "
-                    f"-z {result_size}"
                 )
 
                 if verbose:
@@ -279,12 +277,46 @@ def preprocess_study(
                     e.write(f"{error}\n")
                     return study_df
 
+                command = (
+                    f"Slicer --launch ResampleScalarVectorDWIVolume "
+                    f"{preprocessed_file} {preprocessed_file} -i bs -R {main_SS_file} -z {x},{y},{z}"
+                )
+                if verbose:
+                    print(command)
+                try:
+                    run(
+                        command.split(" "), capture_output=not verbose
+                    ).check_returncode()
+
+                except Exception as error:
+                    print(error)
+                    e = open(f"{preprocessed_dir}/errors.txt", "a")
+                    e.write(f"{error}\n")
+                    return study_df
+
                 if "seg" in rows[i]:
                     preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
 
                     command = (
                         f"Slicer --launch ResampleScalarVectorDWIVolume "
                         f"{preprocessed_seg} {preprocessed_seg} -i nn -f {transform_outfile}"
+                    )
+                    if verbose:
+                        print(command)
+                    try:
+                        run(
+                            command.split(" "), capture_output=not verbose
+                        ).check_returncode()
+
+                    except Exception as error:
+                        print(error)
+                        e = open(f"{preprocessed_dir}/errors.txt", "a")
+                        e.write(f"{error}\n")
+                        return study_df
+
+                    command = (
+                        f"Slicer --launch ResampleScalarVectorDWIVolume "
+                        f"{preprocessed_seg} {preprocessed_seg} -i nn -R {main_SS_file} -z {x},{y},{z}"
                     )
                     if verbose:
                         print(command)
@@ -540,7 +572,25 @@ def preprocess_patient(
                     )
                 )
 
-    return pd.concat(preprocessed_dfs, ignore_index=True)
+    # clear extra files
+    anon_patientID = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
+    patient_dir = preprocessed_dir / anon_patientID
+
+    out_df = pd.concat(preprocessed_dfs, ignore_index=True)
+
+    extra_files = (
+        list(patient_dir.glob("**/*SS.nii.gz"))
+        + list(patient_dir.glob("**/*SS_mask.nii.gz"))
+        + list(patient_dir.glob("**/*.tfm"))
+        + list(patient_dir.glob("**/*.h5"))
+    )
+
+    print("......Clearing unnecessary files......")
+    for file in extra_files:
+        os.remove(file)
+    print(f"Finished preprocessing {anon_patientID}:")
+    print(out_df)
+    return out_df
 
 
 def preprocess_patient_star(args):
