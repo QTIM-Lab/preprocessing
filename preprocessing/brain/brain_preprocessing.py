@@ -8,7 +8,6 @@ import multiprocessing
 import json
 
 from nipype.interfaces.ants import N4BiasFieldCorrection
-from typing import Sequence
 from pathlib import Path
 from subprocess import run
 from tqdm import tqdm
@@ -33,6 +32,24 @@ def copy_metadata(row: dict, preprocessing_args: dict) -> None:
         json.dump(
             meta_dict, json_file, sort_keys=True, indent=2, separators=(",", ": ")
         )
+
+    # if "seg" in row:
+    #     original_metafile = row["seg"].replace(".nii.gz", ".json")
+    #     with open(original_metafile, "r") as json_file:
+    #         data = json.load(json_file)
+    #     meta_dict = {
+    #         "source_file": row["nifti"],
+    #         "original_metafile": data,
+    #         "preprocessing_args": preprocessing_args,
+    #     }
+    #     preprocessed_metafile = row[preprocessing_args["pipeline_key"]].replace(
+    #         ".nii.gz", ".json"
+    #     )
+    #     with open(preprocessed_metafile, "w") as json_file:
+    #         json.dump(
+    #             meta_dict, json_file, sort_keys=True, indent=2, separators=(",", ": ")
+    #         )
+    #
 
 
 def preprocess_study(
@@ -89,6 +106,25 @@ def preprocess_study(
                 e.write(f"{error}\n")
                 return study_df
 
+        if "seg" in rows[i]:
+            input_file = rows[i]["seg"]
+            preprocessed_seg = output_dir / os.path.basename(input_file)
+            shutil.copy(input_file, preprocessed_seg)
+
+            if os.path.exists(preprocessed_seg):
+                rows[i][f"{pipeline_key}_seg"] = str(preprocessed_seg)
+            else:
+                os.makedirs(output_dir, exist_ok=True)
+                shutil.copy(input_file, preprocessed_seg)
+                if os.path.exists(preprocessed_file):
+                    rows[i][f"{pipeline_key}_seg"] = str(preprocessed_file)
+                else:
+                    error = f"Could not create {preprocessed_seg}"
+                    print(error)
+                    e = open(f"{preprocessed_dir}/errors.txt", "a")
+                    e.write(f"{error}\n")
+                    return study_df
+
     ### Orientation
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
@@ -108,6 +144,24 @@ def preprocess_study(
             e.write(f"{error}\n")
             return study_df
 
+        if "seg" in rows[i]:
+            preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+
+            command = (
+                f"Slicer --launch OrientScalarVolume "
+                f"{preprocessed_seg} {preprocessed_seg} -o {orientation}"
+            )
+            if verbose:
+                print(command)
+            try:
+                run(command.split(" "), capture_output=not verbose).check_returncode()
+
+            except Exception as error:
+                print(error)
+                e = open(f"{preprocessed_dir}/errors.txt", "a")
+                e.write(f"{error}\n")
+                return study_df
+
     ### Spacing
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
@@ -125,6 +179,23 @@ def preprocess_study(
             e = open(f"{preprocessed_dir}/errors.txt", "a")
             e.write(f"{error}\n")
             return study_df
+
+        if "seg" in rows[i]:
+            preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+            command = (
+                f"Slicer --launch ResampleScalarVolume "
+                f"{preprocessed_seg} {preprocessed_seg} -i nearestNeighbor -s {spacing}"
+            )
+            if verbose:
+                print(command)
+            try:
+                run(command.split(" "), capture_output=not verbose).check_returncode()
+
+            except Exception as error:
+                print(error)
+                e = open(f"{preprocessed_dir}/errors.txt", "a")
+                e.write(f"{error}\n")
+                return study_df
 
     ### Loose Skullstrip
     for i in range(n):
@@ -145,14 +216,16 @@ def preprocess_study(
             return study_df
 
     if registration_target is None:
-        main_SS_mask_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
+        main_SS_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
+        main_SS_mask_file = rows[0][pipeline_key].replace(".nii.gz", "_SS_mask.nii.gz")
         main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
     else:
-        main_SS_mask_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
+        main_SS_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
+        main_SS_mask_file = registration_target.replace(".nii.gz", "_SS_mask.nii.gz")
         main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
 
     ### Register based on loose skullstrip
-    fixed_image_path = main_SS_mask_file
+    fixed_image_path = main_SS_file
     if registration_target is None:
         if n > 1:
             for i in range(1, n):
@@ -162,6 +235,7 @@ def preprocess_study(
                     ".nii.gz", "_transform.tfm"
                 )
                 sampling_percentage = 0.002
+                result_size = f"{main_SS_mask_array.shape}"[1:-1].replace(" ", "")
 
                 command = (
                     f"Slicer "
@@ -171,7 +245,8 @@ def preprocess_study(
                     "--initializeTransformMode useGeometryAlign "
                     "--interpolationMode BSpline "
                     f"--outputTransform {transform_outfile} "
-                    f"--samplingPercentage {sampling_percentage}"
+                    f"--samplingPercentage {sampling_percentage} "
+                    f"-z {result_size}"
                 )
 
                 if verbose:
@@ -204,12 +279,33 @@ def preprocess_study(
                     e.write(f"{error}\n")
                     return study_df
 
+                if "seg" in rows[i]:
+                    preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+
+                    command = (
+                        f"Slicer --launch ResampleScalarVectorDWIVolume "
+                        f"{preprocessed_seg} {preprocessed_seg} -i nn -f {transform_outfile}"
+                    )
+                    if verbose:
+                        print(command)
+                    try:
+                        run(
+                            command.split(" "), capture_output=not verbose
+                        ).check_returncode()
+
+                    except Exception as error:
+                        print(error)
+                        e = open(f"{preprocessed_dir}/errors.txt", "a")
+                        e.write(f"{error}\n")
+                        return study_df
+
     else:
         for i in range(n):
             preprocessed_file = rows[i][pipeline_key]
             moving_image_path = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
             transform_outfile = preprocessed_file.replace(".nii.gz", "_transform.tfm")
             sampling_percentage = 0.002
+            x, y, z = main_SS_mask_array.shape
 
             command = (
                 f"Slicer "
@@ -219,7 +315,7 @@ def preprocess_study(
                 "--initializeTransformMode useGeometryAlign "
                 "--interpolationMode BSpline "
                 f"--outputTransform {transform_outfile} "
-                f"--samplingPercentage {sampling_percentage}"
+                f"--samplingPercentage {sampling_percentage} "
             )
 
             if verbose:
@@ -248,6 +344,58 @@ def preprocess_study(
                 e.write(f"{error}\n")
                 return study_df
 
+            command = (
+                f"Slicer --launch ResampleScalarVectorDWIVolume "
+                f"{preprocessed_file} {preprocessed_file} -i bs -R {main_SS_file} -z {x},{y},{z}"
+            )
+            if verbose:
+                print(command)
+            try:
+                run(command.split(" "), capture_output=not verbose).check_returncode()
+
+            except Exception as error:
+                print(error)
+                e = open(f"{preprocessed_dir}/errors.txt", "a")
+                e.write(f"{error}\n")
+                return study_df
+
+            if "seg" in rows[i]:
+                preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+
+                command = (
+                    f"Slicer --launch ResampleScalarVectorDWIVolume "
+                    f"{preprocessed_seg} {preprocessed_seg} -i nn -f {transform_outfile}"
+                )
+                if verbose:
+                    print(command)
+                try:
+                    run(
+                        command.split(" "), capture_output=not verbose
+                    ).check_returncode()
+
+                except Exception as error:
+                    print(error)
+                    e = open(f"{preprocessed_dir}/errors.txt", "a")
+                    e.write(f"{error}\n")
+                    return study_df
+
+                command = (
+                    f"Slicer --launch ResampleScalarVectorDWIVolume "
+                    f"{preprocessed_seg} {preprocessed_seg} -i nn -R {main_SS_file} -z {x},{y},{z}"
+                )
+                if verbose:
+                    print(command)
+                try:
+                    run(
+                        command.split(" "), capture_output=not verbose
+                    ).check_returncode()
+
+                except Exception as error:
+                    print(error)
+                    e = open(f"{preprocessed_dir}/errors.txt", "a")
+                    e.write(f"{error}\n")
+                    return study_df
+
     ### appy final skullmask if skullstripping
     if skullstrip:
         for i in range(n):
@@ -261,6 +409,18 @@ def preprocess_study(
                 array, affine=nifti.affine, header=nifti.header
             )
             nib.save(output_nifti, preprocessed_file)
+
+            if "seg" in rows[i]:
+                preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+                nifti = nib.load(preprocessed_seg)
+                array = nifti.get_fdata()
+
+                array = array * main_SS_mask_array
+
+                output_nifti = nib.Nifti1Image(
+                    array, affine=nifti.affine, header=nifti.header
+                )
+                nib.save(output_nifti, preprocessed_seg)
 
     ### Bias correction
     for i in range(n):
@@ -285,65 +445,6 @@ def preprocess_study(
 
         output_nifti = nib.Nifti1Image(array, affine=nifti.affine, header=nifti.header)
         nib.save(output_nifti, preprocessed_file)
-
-    ### Process segmentation
-    if "seg" in rows[0]:
-        input_file = rows[0]["seg"]
-    else:
-        input_file = None
-
-    if isinstance(input_file, str):
-        output_dir = (
-            preprocessed_dir / anon_patientID / anon_studyID / rows[i]["SeriesType"]
-        )
-        preprocessed_file = output_dir / os.path.basename(input_file)
-        shutil.copy(input_file, preprocessed_file)
-
-        if os.path.exists(preprocessed_file):
-            rows[i][f"{pipeline_key}_seg"] = str(preprocessed_file)
-        else:
-            os.makedirs(output_dir, exist_ok=True)
-            shutil.copy(input_file, preprocessed_file)
-            if os.path.exists(preprocessed_file):
-                rows[i][f"{pipeline_key}_seg"] = str(preprocessed_file)
-            else:
-                error = f"Could not create {preprocessed_file}"
-                print(error)
-                e = open(f"{preprocessed_dir}/errors.txt", "a")
-                e.write(f"{error}\n")
-                return study_df
-
-        ### orientation
-        command = (
-            "Slicer --launch OrientScalarVolume "
-            f"{preprocessed_file} {preprocessed_file} -o {orientation}"
-        )
-        if verbose:
-            print(command)
-        try:
-            run(command.split(" "), capture_output=not verbose).check_returncode()
-        except Exception as error:
-            print(error)
-            e = open(f"{preprocessed_dir}/errors.txt", "a")
-            e.write(f"{error}\n")
-            return study_df
-
-        ### resample to input file
-        reference_file = rows[0][pipeline_key]
-
-        command = (
-            "Slicer --launch ResampleScalarVectorDWIVolume "
-            f"{preprocessed_file} {preprocessed_file} -i nn -R {reference_file}"
-        )
-        if verbose:
-            print(command)
-        try:
-            run(command.split(" "), capture_output=not verbose).check_returncode()
-        except Exception as error:
-            print(error)
-            e = open(f"{preprocessed_dir}/errors.txt", "a")
-            e.write(f"{error}\n")
-            return study_df
 
     ### copy metadata
     preprocessing_args = {
