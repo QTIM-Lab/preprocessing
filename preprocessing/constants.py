@@ -7,4 +7,5 @@ META_KEYS = [
     "StudyDate",
     "StudyDescription",
     "SeriesDescription",
+    "Modality",
 ]

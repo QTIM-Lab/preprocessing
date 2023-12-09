@@ -167,7 +167,7 @@ def reorganize_dicoms(
     new_dicom_dir: Path | str,
     anon_csv: Path | str | pd.DataFrame,  # make optional and define afterward?
     cpus: int = 0,
-) -> None:
+) -> pd.DataFrame:
     if isinstance(original_dicom_dir, str):
         original_dicom_dir = Path(original_dicom_dir)
 

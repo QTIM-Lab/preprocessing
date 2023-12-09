@@ -3,12 +3,14 @@ import sys
 
 from pathlib import Path
 
+from preprocessing.bids import convert_batch_to_nifti
+from preprocessing.bids import find_anon_keys
+from preprocessing.bids import reorganize_dicoms
+from preprocessing.bids import validate
+from preprocessing.brain import preprocess_from_csv
 
-class preprocessing_cli(object):
-    def __init__(self):
-        parser = argparse.ArgumentParser(
-            description="Useful commands for QTIM data preprocessing",
-            usage="""preprocessing <command> [<args>]
+
+USAGE_STR = """preprocessing <command> [<args>]
 
 The following commands are available:
     old_project_anon_keys       Create anonymization keys for anonymous PatientID and VisitID
@@ -32,7 +34,14 @@ The following commands are available:
 
 Run `preprocessing <command> --help` for more details about how to use each individual command. 
 
-""",
+"""
+
+
+class PreprocessingCli(object):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            description="Useful commands for QTIM data preprocessing",
+            usage=USAGE_STR,
         )
 
         parser.add_argument("command", help="Subcommand to run")
@@ -47,8 +56,6 @@ Run `preprocessing <command> --help` for more details about how to use each indi
         getattr(self, args.command)()
 
     def old_project_anon_keys(self):
-        from preprocessing.bids import find_anon_keys
-
         parser = argparse.ArgumentParser(
             description=(
                 "Create anonymization keys for anonymous PatientID and StudyID "
@@ -81,7 +88,6 @@ Run `preprocessing <command> --help` for more details about how to use each indi
         find_anon_keys(input_dir=args.input_dir, output_dir=args.output_dir)
 
     def reorganize_dicoms(self):
-        from preprocessing.bids import reorganize_dicoms
 
         parser = argparse.ArgumentParser()
 
@@ -130,7 +136,6 @@ Run `preprocessing <command> --help` for more details about how to use each indi
         )
 
     def validate_bids(self):
-        from preprocessing.bids import validate
 
         paths = sys.argv[2:]
 
@@ -142,8 +147,6 @@ Run `preprocessing <command> --help` for more details about how to use each indi
             validate(paths)
 
     def dataset_to_nifti(self):
-        from preprocessing.bids import convert_batch_to_nifti
-
         parser = argparse.ArgumentParser()
 
         parser.add_argument(
@@ -187,8 +190,6 @@ Run `preprocessing <command> --help` for more details about how to use each indi
         )
 
     def brain_preprocessing(self):
-        from preprocessing.brain import preprocess_from_csv
-
         parser = argparse.ArgumentParser()
 
         parser.add_argument(
@@ -204,7 +205,7 @@ Run `preprocessing <command> --help` for more details about how to use each indi
                 "A csv containing nifti location and information required "
                 "for the output file names. It must contain the columns: "
                 "'nifti', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', "
-                "'NormalizedSeriesDescription', and 'SeriesType'."
+                "'Manufacturer', NormalizedSeriesDescription', and 'SeriesType'."
             ),
         )
 
@@ -307,4 +308,4 @@ Run `preprocessing <command> --help` for more details about how to use each indi
 
 
 def main():
-    preprocessing_cli()
+    PreprocessingCli()
