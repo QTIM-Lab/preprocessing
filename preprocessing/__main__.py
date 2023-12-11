@@ -19,7 +19,7 @@ The following commands are available:
                                 hierarchy.
 
     reorganize_dicoms           Reorganize DICOMs to follow the BIDS convention. Any DICOMs found
-                                recursively within this directory will be reorganized (at least 
+                                recursively within this directory will be reorganized (at least
                                 one level of subdirectories is assumed). Anonomyzation keys for
                                 PatientIDs and StudyIDs are provided within a csv.
 
@@ -28,11 +28,11 @@ The following commands are available:
                                 the context for filenames. The outputs will comply with the BIDS
                                 conventions.
 
-    brain_preprocessing         Preprocess NIfTI files for deep learning. A csv is required to 
-                                indicate the location of source files and to procide the context 
+    brain_preprocessing         Preprocess NIfTI files for deep learning. A csv is required to
+                                indicate the location of source files and to procide the context
                                 for filenames. The outputs will comply with BIDS conventions.
 
-Run `preprocessing <command> --help` for more details about how to use each individual command. 
+Run `preprocessing <command> --help` for more details about how to use each individual command.
 
 """
 
