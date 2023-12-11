@@ -162,7 +162,7 @@ class PreprocessingCli(object):
                 "A csv containing dicom location and information required "
                 "for the nifti file names. It must contain the columns: "
                 "'dicoms', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', "
-                "'NormalizedSeriesDescription', and 'SeriesType'."
+                "'Manufacturer', 'NormalizedSeriesDescription', and 'SeriesType'."
             ),
         )
 
@@ -205,7 +205,7 @@ class PreprocessingCli(object):
                 "A csv containing nifti location and information required "
                 "for the output file names. It must contain the columns: "
                 "'nifti', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', "
-                "'Manufacturer', NormalizedSeriesDescription', and 'SeriesType'."
+                "'NormalizedSeriesDescription', and 'SeriesType'."
             ),
         )
 
