@@ -22,8 +22,7 @@ def convert_to_nifti(
     subdir: Literal["anat", "func", "dwi"],
     overwrite: bool = False,
 ) -> str | None:
-    if isinstance(nifti_dir, str):
-        nifti_dir = Path(nifti_dir)
+    nifti_dir = Path(nifti_dir)
 
     output_dir = nifti_dir / anon_patient_id / anon_study_id / subdir
     output_nifti = (
@@ -65,7 +64,7 @@ def convert_to_nifti(
 
 
 def convert_study(
-    study_df: pd.DataFrame, nifti_dir: Path, overwrite_nifti: bool = False
+    study_df: pd.DataFrame, nifti_dir: Path | str, overwrite_nifti: bool = False
 ) -> pd.DataFrame:
     """
     Helper function for convert_batch_to_nifti
@@ -110,7 +109,6 @@ def convert_batch_to_nifti(
     overwrite_nifti: bool = False,
     cpus: int = 0,
 ) -> pd.DataFrame:
-    nifti_dir = Path(nifti_dir)
     df = pd.read_csv(csv)
 
     filtered_df = df.copy().dropna(subset="NormalizedSeriesDescription")
