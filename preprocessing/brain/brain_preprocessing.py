@@ -11,9 +11,7 @@ from nipype.interfaces.ants import N4BiasFieldCorrection
 from pathlib import Path
 from subprocess import run
 from tqdm import tqdm
-from preprocessing.utils import source_external_software
-
-source_external_software()
+from preprocessing.utils import source_external_software, check_required_columns
 
 
 def copy_metadata(row: dict, preprocessing_args: dict) -> None:
@@ -79,7 +77,25 @@ def preprocess_study(
     spacing: str = "1,1,1",
     skullstrip: bool = True,
     verbose: bool = False,
+    source_software: bool = True,
+    check_columns: bool = True,
 ) -> pd.DataFrame:
+    if source_software:
+        source_external_software()
+
+    if check_columns:
+        required_columns = [
+            "nifti",
+            "Anon_PatientID",
+            "Anon_StudyID",
+            "StudyInstanceUID",
+            "NormalizedSeriesDescription",
+            "SeriesType",
+        ]
+        optional_columns = ["seg"]
+
+        check_required_columns(study_df, required_columns, optional_columns)
+
     def registration_sort(series):
         return (series != registration_key).astype(int)
 
@@ -525,7 +541,25 @@ def preprocess_patient(
     spacing: str = "1,1,1",
     skullstrip: bool = True,
     verbose: bool = False,
+    source_software: bool = True,
+    check_columns: bool = True,
 ):
+    if source_software:
+        source_external_software()
+
+    if check_columns:
+        required_columns = [
+            "nifti",
+            "Anon_PatientID",
+            "Anon_StudyID",
+            "StudyInstanceUID",
+            "NormalizedSeriesDescription",
+            "SeriesType",
+        ]
+        optional_columns = ["seg"]
+
+        check_required_columns(patient_df, required_columns, optional_columns)
+
     study_uids = patient_df["StudyInstanceUID"].unique()
 
     preprocessed_dfs = []
@@ -543,6 +577,8 @@ def preprocess_patient(
             spacing=spacing,
             skullstrip=skullstrip,
             verbose=verbose,
+            source_software=False,
+            check_columns=False,
         )
     )
 
@@ -567,6 +603,8 @@ def preprocess_patient(
                         spacing=spacing,
                         skullstrip=skullstrip,
                         verbose=verbose,
+                        source_software=False,
+                        check_columns=False,
                     )
                 )
 
@@ -587,6 +625,8 @@ def preprocess_patient(
                         spacing=spacing,
                         skullstrip=skullstrip,
                         verbose=verbose,
+                        source_software=False,
+                        check_columns=False,
                     )
                 )
 
@@ -627,10 +667,24 @@ def preprocess_from_csv(
     cpus: int = 0,
     verbose: bool = False,
 ) -> pd.DataFrame:
-    if isinstance(preprocessed_dir, str):
-        preprocessed_dir = Path(preprocessed_dir)
+    source_external_software()
+
+    preprocessed_dir = Path(preprocessed_dir)
 
     df = pd.read_csv(csv)
+
+    required_columns = [
+        "nifti",
+        "Anon_PatientID",
+        "Anon_StudyID",
+        "StudyInstanceUID",
+        "NormalizedSeriesDescription",
+        "SeriesType",
+    ]
+    optional_columns = ["seg"]
+
+    check_required_columns(df, required_columns, optional_columns)
+
     filtered_df = df.copy().dropna(subset="nifti")
     patients = filtered_df["Anon_PatientID"].unique()
 
@@ -646,6 +700,8 @@ def preprocess_from_csv(
                 spacing,
                 skullstrip,
                 verbose,
+                False,
+                False,
             )
             for patient in tqdm(patients, desc="Preprocessing patients")
         ]
@@ -662,6 +718,8 @@ def preprocess_from_csv(
                 spacing,
                 skullstrip,
                 verbose,
+                False,
+                False,
             ]
             for patient in patients
         ]

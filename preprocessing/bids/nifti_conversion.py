@@ -6,10 +6,8 @@ from subprocess import run
 from typing import Literal
 from tqdm import tqdm
 from pathlib import Path
-from preprocessing.utils import source_external_software
+from preprocessing.utils import source_external_software, check_required_columns
 from dicom2nifti import convert_directory
-
-source_external_software()
 
 
 def convert_to_nifti(
@@ -21,7 +19,11 @@ def convert_to_nifti(
     normalized_series_description: str,
     subdir: Literal["anat", "func", "dwi"],
     overwrite: bool = False,
+    source_software: bool = True,
 ) -> str | None:
+    if source_software:
+        source_external_software()
+
     nifti_dir = Path(nifti_dir)
 
     output_dir = nifti_dir / anon_patient_id / anon_study_id / subdir
@@ -64,11 +66,31 @@ def convert_to_nifti(
 
 
 def convert_study(
-    study_df: pd.DataFrame, nifti_dir: Path | str, overwrite_nifti: bool = False
+    study_df: pd.DataFrame,
+    nifti_dir: Path | str,
+    overwrite_nifti: bool = False,
+    source_software: bool = True,
+    check_columns: bool = True,
 ) -> pd.DataFrame:
     """
     Helper function for convert_batch_to_nifti
     """
+    if source_software:
+        source_external_software()
+
+    if check_columns:
+        required_columns = [
+            "dicoms",
+            "Anon_PatientID",
+            "Anon_StudyID",
+            "StudyInstanceUID",
+            "Manufacturer",
+            "NormalizedSeriesDescription",
+            "SeriesType",
+        ]
+
+        check_required_columns(study_df, required_columns)
+
     series_descriptions = study_df["NormalizedSeriesDescription"].unique()
 
     series_dfs = []
@@ -88,6 +110,7 @@ def convert_study(
                 normalized_series_description=series_description,
                 subdir=series_df.loc[series_df.index[i], "SeriesType"],
                 overwrite=overwrite_nifti,
+                source_software=False,
             )
             output_niftis.append(output_nifti)
 
@@ -109,7 +132,21 @@ def convert_batch_to_nifti(
     overwrite_nifti: bool = False,
     cpus: int = 0,
 ) -> pd.DataFrame:
+    source_external_software()
+
     df = pd.read_csv(csv)
+
+    required_columns = [
+        "dicoms",
+        "Anon_PatientID",
+        "Anon_StudyID",
+        "StudyInstanceUID",
+        "Manufacturer",
+        "NormalizedSeriesDescription",
+        "SeriesType",
+    ]
+
+    check_required_columns(df, required_columns)
 
     filtered_df = df.copy().dropna(subset="NormalizedSeriesDescription")
 
@@ -121,6 +158,8 @@ def convert_batch_to_nifti(
                 filtered_df[filtered_df["StudyInstanceUID"] == study_uid].copy(),
                 nifti_dir,
                 overwrite_nifti,
+                False,
+                False,
             )
             for study_uid in tqdm(study_uids, desc="Converting to NIfTI")
         ]
@@ -131,6 +170,8 @@ def convert_batch_to_nifti(
                 filtered_df[filtered_df["StudyInstanceUID"] == study_uid].copy(),
                 nifti_dir,
                 overwrite_nifti,
+                False,
+                False,
             ]
             for study_uid in study_uids
         ]
