@@ -5,8 +5,11 @@ from typing import Sequence
 
 
 class MissingSoftwareError(Exception):
-    def __init__(self, software: str):
-        super().__init__(f"The required software '{software}' is not installed.")
+    def __init__(self, software: str, required_software: Sequence[str]):
+        super().__init__(
+            f"The required software '{software}' is not installed. This library depends on: {required_software}. "
+            "Please ensure these are installed and sourced correctly if you are not on a Martinos machine."
+        )
 
 
 def source_external_software():
@@ -35,7 +38,7 @@ def source_external_software():
         required_software = ["dcm2niix", "Slicer", "ANTS"]
         for software in required_software:
             if which(software) is None:
-                raise MissingSoftwareError(software)
+                raise MissingSoftwareError(software, required_software)
 
 
 class MissingColumnsError(Exception):
