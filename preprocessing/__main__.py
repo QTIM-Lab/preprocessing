@@ -3,12 +3,14 @@ import sys
 
 from pathlib import Path
 
+from preprocessing.bids import convert_batch_to_nifti
+from preprocessing.bids import find_anon_keys
+from preprocessing.bids import reorganize_dicoms
+from preprocessing.bids import validate
+from preprocessing.brain import preprocess_from_csv
 
-class preprocessing_cli(object):
-    def __init__(self):
-        parser = argparse.ArgumentParser(
-            description="Useful commands for QTIM data preprocessing",
-            usage="""preprocessing <command> [<args>]
+
+USAGE_STR = """preprocessing <command> [<args>]
 
 The following commands are available:
     old_project_anon_keys       Create anonymization keys for anonymous PatientID and VisitID
@@ -17,7 +19,7 @@ The following commands are available:
                                 hierarchy.
 
     reorganize_dicoms           Reorganize DICOMs to follow the BIDS convention. Any DICOMs found
-                                recursively within this directory will be reorganized (at least 
+                                recursively within this directory will be reorganized (at least
                                 one level of subdirectories is assumed). Anonomyzation keys for
                                 PatientIDs and StudyIDs are provided within a csv.
 
@@ -26,13 +28,20 @@ The following commands are available:
                                 the context for filenames. The outputs will comply with the BIDS
                                 conventions.
 
-    brain_preprocessing         Preprocess NIfTI files for deep learning. A csv is required to 
-                                indicate the location of source files and to procide the context 
+    brain_preprocessing         Preprocess NIfTI files for deep learning. A csv is required to
+                                indicate the location of source files and to procide the context
                                 for filenames. The outputs will comply with BIDS conventions.
 
-Run `preprocessing <command> --help` for more details about how to use each individual command. 
+Run `preprocessing <command> --help` for more details about how to use each individual command.
 
-""",
+"""
+
+
+class PreprocessingCli(object):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            description="Useful commands for QTIM data preprocessing",
+            usage=USAGE_STR,
         )
 
         parser.add_argument("command", help="Subcommand to run")
@@ -47,8 +56,6 @@ Run `preprocessing <command> --help` for more details about how to use each indi
         getattr(self, args.command)()
 
     def old_project_anon_keys(self):
-        from preprocessing.bids import find_anon_keys
-
         parser = argparse.ArgumentParser(
             description=(
                 "Create anonymization keys for anonymous PatientID and StudyID "
@@ -81,7 +88,6 @@ Run `preprocessing <command> --help` for more details about how to use each indi
         find_anon_keys(input_dir=args.input_dir, output_dir=args.output_dir)
 
     def reorganize_dicoms(self):
-        from preprocessing.bids import reorganize_dicoms
 
         parser = argparse.ArgumentParser()
 
@@ -130,7 +136,6 @@ Run `preprocessing <command> --help` for more details about how to use each indi
         )
 
     def validate_bids(self):
-        from preprocessing.bids import validate
 
         paths = sys.argv[2:]
 
@@ -142,8 +147,6 @@ Run `preprocessing <command> --help` for more details about how to use each indi
             validate(paths)
 
     def dataset_to_nifti(self):
-        from preprocessing.bids import convert_batch_to_nifti
-
         parser = argparse.ArgumentParser()
 
         parser.add_argument(
@@ -159,7 +162,7 @@ Run `preprocessing <command> --help` for more details about how to use each indi
                 "A csv containing dicom location and information required "
                 "for the nifti file names. It must contain the columns: "
                 "'dicoms', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', "
-                "'NormalizedSeriesDescription', and 'SeriesType'."
+                "'Manufacturer', 'NormalizedSeriesDescription', and 'SeriesType'."
             ),
         )
 
@@ -187,8 +190,6 @@ Run `preprocessing <command> --help` for more details about how to use each indi
         )
 
     def brain_preprocessing(self):
-        from preprocessing.brain import preprocess_from_csv
-
         parser = argparse.ArgumentParser()
 
         parser.add_argument(
@@ -307,4 +308,4 @@ Run `preprocessing <command> --help` for more details about how to use each indi
 
 
 def main():
-    preprocessing_cli()
+    PreprocessingCli()

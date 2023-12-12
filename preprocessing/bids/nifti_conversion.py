@@ -1,7 +1,6 @@
 import multiprocessing
 import os
 import pandas as pd
-import shutil
 
 from subprocess import run
 from typing import Literal
@@ -16,20 +15,19 @@ source_external_software()
 def convert_to_nifti(
     dicom_dir: Path | str,
     nifti_dir: Path | str,
-    anon_patientID: str,
-    anon_studyID: str,
+    anon_patient_id: str,
+    anon_study_id: str,
     manufacturer: str,
     normalized_series_description: str,
     subdir: Literal["anat", "func", "dwi"],
     overwrite: bool = False,
 ) -> str | None:
-    if isinstance(nifti_dir, str):
-        nifti_dir = Path(nifti_dir)
+    nifti_dir = Path(nifti_dir)
 
-    output_dir = nifti_dir / anon_patientID / anon_studyID / subdir
+    output_dir = nifti_dir / anon_patient_id / anon_study_id / subdir
     output_nifti = (
         output_dir
-        / f"{anon_patientID}_{anon_studyID}_{normalized_series_description.replace(' ', '_')}"
+        / f"{anon_patient_id}_{anon_study_id}_{normalized_series_description.replace(' ', '_')}"
     )
 
     if not isinstance(manufacturer, str):
@@ -66,7 +64,7 @@ def convert_to_nifti(
 
 
 def convert_study(
-    study_df: pd.DataFrame, nifti_dir: Path, overwrite_nifti: bool = False
+    study_df: pd.DataFrame, nifti_dir: Path | str, overwrite_nifti: bool = False
 ) -> pd.DataFrame:
     """
     Helper function for convert_batch_to_nifti
@@ -84,8 +82,8 @@ def convert_study(
             output_nifti = convert_to_nifti(
                 dicom_dir=series_df.loc[series_df.index[i], "dicoms"],
                 nifti_dir=nifti_dir,
-                anon_patientID=series_df.loc[series_df.index[i], "Anon_PatientID"],
-                anon_studyID=series_df.loc[series_df.index[i], "Anon_StudyID"],
+                anon_patient_id=series_df.loc[series_df.index[i], "Anon_PatientID"],
+                anon_study_id=series_df.loc[series_df.index[i], "Anon_StudyID"],
                 manufacturer=series_df.loc[series_df.index[i], "Manufacturer"],
                 normalized_series_description=series_description,
                 subdir=series_df.loc[series_df.index[i], "SeriesType"],
@@ -142,7 +140,7 @@ def convert_batch_to_nifti(
                 tqdm(
                     pool.imap(convert_study_star, inputs),
                     total=len(study_uids),
-                    desc="Converting to  NIfTI",
+                    desc="Converting to NIfTI",
                 )
             )
 
