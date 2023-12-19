@@ -17,8 +17,11 @@ from preprocessing.utils import source_external_software, check_required_columns
 def copy_metadata(row: dict, preprocessing_args: dict) -> None:
     original_metafile = row["nifti"].replace(".nii.gz", ".json")
     if Path(original_metafile).exists():
-        with open(original_metafile, "r") as json_file:
-            data = json.load(json_file)
+        try:
+            with open(original_metafile, "r") as json_file:
+                data = json.load(json_file)
+        except Exception:
+            data = original_metafile
         meta_dict = {
             "source_file": row["nifti"],
             "original_metafile": data,
@@ -40,8 +43,11 @@ def copy_metadata(row: dict, preprocessing_args: dict) -> None:
     if "seg" in row:
         original_metafile = row["seg"].replace(".nii.gz", ".json")
         if Path(original_metafile).exists():
-            with open(original_metafile, "r") as json_file:
-                data = json.load(json_file)
+            try:
+                with open(original_metafile, "r") as json_file:
+                    data = json.load(json_file)
+            except Exception:
+                data = original_metafile
             meta_dict = {
                 "source_file": row["nifti"],
                 "original_metafile": data,
