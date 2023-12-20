@@ -301,8 +301,8 @@ class PreprocessingCli(object):
             default="T1Post",
             help=(
                 """
-                The value that will be used to select the fixed image during registration.This 
-                should correspond to a value within the 'NormalizedSeriesDescription'column in
+                The value that will be used to select the fixed image during registration. This 
+                should correspond to a value within the 'NormalizedSeriesDescription' column in
                 the csv. If you have segmentation files in your data. They should correspond to
                 this same series. Defaults to 'T1Post'.
                 """

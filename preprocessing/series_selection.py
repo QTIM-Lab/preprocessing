@@ -13,7 +13,22 @@ default_key = {
 }
 
 
-def description_sort(column):
+def description_sort(column: pd.Series) -> pd.Series:
+    """
+    Sort a pd.Series containing the original SeriesDescription values and prioritize
+    relevant substrings. Intended only for use within 'series_in_study' as a custom
+    sort function.
+
+    Parameters
+    __________
+    column: pd.Series
+        Column of the pd.DataFrame corresponding to 'SeriesDescription'.
+
+    Returns
+    _______
+    pd.Series:
+        Priority values for each of the original elements of 'column'.
+    """
     string_priority = {"mprage": 0, "bravo": 0, "high_res": 1, "high-res": 1}
 
     priority_values = []
@@ -37,8 +52,37 @@ def series_in_study(
     description_key: dict = default_key,
     check_columns: bool = True,
 ) -> pd.DataFrame:
+    """
+    Call upon 'mr_series_selection' to add 'NormalizedSeriesDescription' and 'SeriesType'
+    columns to a pd.DataFrame containing a single study.
+
+    Parameters
+    __________
+    study_df: pd.DataFrame
+        A DataFrame containing data for a single study. It must contain the following
+        columns: ['SeriesDescription', 'dicoms'].
+    ruleset: str
+        Ruleset used within mr_series_selection to predict the NormalizedDescription of
+        each series. Options include 'brain', 'lumbar', and 'prostate'. Defaults to 'brain'.
+    description_key: dict
+        Key for combining 'NormalizedDescription's defined by mr_series_selection into desired
+        categories. This information is provided by using a path to a json file containing this
+        information. If nothing is provided, the description_key will default to:
+        default_key = {
+            "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
+            "T1Post": [["iso3D AX T1 WithContrast", "iso3D AX T1 WithContrast RFMT"], "anat"],
+        }
+    check_columns: bool
+        Whether to check 'study_df' for the required columns. Defaults to True.
+
+    Returns
+    _______
+    pd.DataFrame:
+        A DataFrame that contains the new columns: 'NormalizedSeriesDescription' and 'SeriesType'
+        if a series can be predicted by 'mr_series_selection'.
+    """
     if check_columns:
-        required_columns = ["StudyInstanceUID", "SeriesDescription"]
+        required_columns = ["SeriesDescription", "dicoms"]
 
         check_required_columns(study_df, required_columns)
 
@@ -100,6 +144,10 @@ def series_in_study(
 
 
 def series_in_study_star(args):
+    """
+    Helper function intended for use only in 'series_from_csv'. Provides an imap
+    compatible version of 'series_in_study'.
+    """
     return series_in_study(*args)
 
 
@@ -110,10 +158,42 @@ def series_from_csv(
     cpus: int = 0,
     check_columns: bool = True,
 ) -> pd.DataFrame:
+    """
+    Call upon 'mr_series_selection' to add 'NormalizedSeriesDescription' and 'SeriesType'
+    columns to every study within a dataset.
+
+    Parameters
+    __________
+    csv: Path | str
+        The path to a CSV containing an entire dataset. It must contain the following
+        columns: ['StudyInstanceUID', 'SeriesDescription', 'dicoms'].
+    ruleset: str
+        Ruleset used within mr_series_selection to predict the NormalizedDescription of
+        each series. Options include 'brain', 'lumbar', and 'prostate'. Defaults to 'brain'.
+    description_key: dict
+        Key for combining 'NormalizedDescription's defined by mr_series_selection into desired
+        categories. If nothing is provided, the description_key will default to:
+        default_key = {
+            "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
+            "T1Post": [["iso3D AX T1 WithContrast", "iso3D AX T1 WithContrast RFMT"], "anat"],
+        }
+    cpus: int
+        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
+    check_columns: bool
+        Whether to check the CSV for the required columns. Defaults to True.
+
+    Returns
+    _______
+    pd.DataFrame:
+        A DataFrame that contains the new columns: 'NormalizedSeriesDescription' and 'SeriesType'
+        if a series can be predicted by 'mr_series_selection'. This function will also overwrite
+        the input CSV with this DataFrame.
+    """
+
     df = pd.read_csv(csv, dtype=str)
 
     if check_columns:
-        required_columns = ["StudyInstanceUID", "SeriesDescription"]
+        required_columns = ["StudyInstanceUID", "SeriesDescription", "dicoms"]
 
         check_required_columns(df, required_columns)
 

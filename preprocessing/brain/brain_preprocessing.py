@@ -15,6 +15,26 @@ from preprocessing.utils import source_external_software, check_required_columns
 
 
 def copy_metadata(row: dict, preprocessing_args: dict) -> None:
+    """
+    Copy the metadata file paired with the original nifti file (and optionally the
+    corresponding segmentation) and add the preprocessing arguments into a new metafile
+    to be paired with the preprocessing outputs.
+
+    Parameters
+    __________
+    row: dict
+        A row of a DataFrame represented as a dictionary. It is expected to have a 'nifti'
+        key and optionally 'seg'.
+    preprocessing_args: dict
+        A dictionary containing the arguments originally provided to 'preprocess_study' or
+        'preprocess_from_csv'.
+
+    Returns
+    _______
+    None
+        A metadata json is saved out to be paired with the preprocessed outputs.
+
+    """
     original_metafile = row["nifti"].replace(".nii.gz", ".json")
     if Path(original_metafile).exists():
         try:
@@ -75,7 +95,7 @@ def copy_metadata(row: dict, preprocessing_args: dict) -> None:
 
 def preprocess_study(
     study_df: pd.DataFrame,
-    preprocessed_dir: Path,
+    preprocessed_dir: Path | str,
     pipeline_key: str,
     registration_key: str = "T1Post",
     registration_target: str | None = None,
@@ -86,6 +106,48 @@ def preprocess_study(
     source_software: bool = True,
     check_columns: bool = True,
 ) -> pd.DataFrame:
+    """
+    Preprocess a single study from a DataFrame.
+
+    Parameters
+    __________
+    study_df: pd.DataFrame
+        A DataFrame containing nifti location and information required for the output file names
+        for a single study. It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID',
+        'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+    preprocessed_dir: Path
+        The directory that will contain the preprocessed NIfTI files.
+    pipeline_key: str
+        The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
+        Defaults to 'preprocessed'.
+    registration_key: str
+        The value that will be used to select the fixed image during registration. This should correspond
+        to a value within the 'NormalizedSeriesDescription' column in the csv. If you have segmentation
+        files in your data. They should correspond to this same series. Defaults to 'T1Post'.
+    registration_target: str | None
+        The location of the file that will be used as the fixed image for the purposes of registration.
+    orientation: str
+        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
+    spacing: str
+        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
+        are in mm. Defaults to '1,1,1'.
+    skullstrip: bool
+        Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    verbose: bool
+        Whether to print additional information related like commands and their arguments are printed.
+    source_software: bool
+        Whether to call `source_external_software` to add software required for preprocessing. Defaults
+        to True.
+    check_columns: bool
+        Whether to check `study_df` for required columns. Defaults to True.
+
+    Returns
+    _______
+    pd.DataFrame:
+        A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
+        the locations of the preprocessing outputs.
+
+    """
     if source_software:
         source_external_software()
 
@@ -102,13 +164,17 @@ def preprocess_study(
 
         check_required_columns(study_df, required_columns, optional_columns)
 
-    def registration_sort(series):
-        return (series != registration_key).astype(int)
+    preprocessed_dir = Path(preprocessed_dir)
+    # def registration_sort(series):
+    #     return (series != registration_key).astype(int)
 
     filtered_df = (
         study_df.copy()
         .dropna(subset="NormalizedSeriesDescription")
-        .sort_values(["NormalizedSeriesDescription"], key=registration_sort)
+        .sort_values(
+            ["NormalizedSeriesDescription"],
+            key=lambda x: (x != registration_key).astype(int),
+        )
     )
     if filtered_df.empty:
         return study_df
@@ -539,7 +605,7 @@ def preprocess_study(
 
 def preprocess_patient(
     patient_df: pd.DataFrame,
-    preprocessed_dir: Path,
+    preprocessed_dir: Path | str,
     pipeline_key: str = "preprocessed",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
@@ -550,6 +616,52 @@ def preprocess_patient(
     source_software: bool = True,
     check_columns: bool = True,
 ):
+    """
+    Preprocess all of the studies for a patient in a DataFrame.
+
+    Parameters
+    __________
+    patient_df: pd.DataFrame
+        A DataFrame containing nifti location and information required for the output file names
+        for a single patient. It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID',
+        'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+    preprocessed_dir: Path
+        The directory that will contain the preprocessed NIfTI files.
+    pipeline_key: str
+        The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
+        Defaults to 'preprocessed'.
+    registration_key: str
+        The value that will be used to select the fixed image during registration. This should correspond
+        to a value within the 'NormalizedSeriesDescription' column in the csv. If you have segmentation
+        files in your data. They should correspond to this same series. Defaults to 'T1Post'.
+    longitudinal_registration: bool
+        Whether to register all of the subsequent studies for a patient to the first study. Defaults to
+        False.
+    registration_target: str | None
+        The location of the file that will be used as the fixed image for the purposes of registration.
+    orientation: str
+        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
+    spacing: str
+        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
+        are in mm. Defaults to '1,1,1'.
+    skullstrip: bool
+        Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    verbose: bool
+        Whether to print additional information related like commands and their arguments are printed.
+    source_software: bool
+        Whether to call `source_external_software` to add software required for preprocessing. Defaults
+        to True.
+    check_columns: bool
+        Whether to check `study_df` for required columns. Defaults to True.
+
+    Returns
+    _______
+    pd.DataFrame:
+        A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
+        the locations of the preprocessing outputs.
+
+    """
+
     if source_software:
         source_external_software()
 
@@ -565,6 +677,8 @@ def preprocess_patient(
         optional_columns = ["seg"]
 
         check_required_columns(patient_df, required_columns, optional_columns)
+
+    preprocessed_dir = Path(preprocessed_dir)
 
     study_uids = patient_df["StudyInstanceUID"].unique()
 
@@ -658,6 +772,11 @@ def preprocess_patient(
 
 
 def preprocess_patient_star(args):
+    """
+    Helper function intended for use only in 'preprocess_from_csv'. Provides an imap
+    compatible version of 'preprocess_patient'.
+    """
+
     return preprocess_patient(*args)
 
 
@@ -673,9 +792,52 @@ def preprocess_from_csv(
     cpus: int = 0,
     verbose: bool = False,
 ) -> pd.DataFrame:
-    source_external_software()
+    """
+    Preprocess all of the studies for a patient in a DataFrame.
 
-    preprocessed_dir = Path(preprocessed_dir)
+    Parameters
+    __________
+    csv: Path | str
+        The path to a CSV containing an entire dataset. It must contain the following columns:  'nifti',
+        'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+    preprocessed_dir: Path
+        The directory that will contain the preprocessed NIfTI files.
+    pipeline_key: str
+        The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
+        Defaults to 'preprocessed'.
+    registration_key: str
+        The value that will be used to select the fixed image during registration. This should correspond
+        to a value within the 'NormalizedSeriesDescription' column in the csv. If you have segmentation
+        files in your data. They should correspond to this same series. Defaults to 'T1Post'.
+    longitudinal_registration: bool
+        Whether to register all of the subsequent studies for a patient to the first study. Defaults to
+        False.
+    registration_target: str | None
+        The location of the file that will be used as the fixed image for the purposes of registration.
+    orientation: str
+        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
+    spacing: str
+        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
+        are in mm. Defaults to '1,1,1'.
+    skullstrip: bool
+        Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    verbose: bool
+        Whether to print additional information related like commands and their arguments are printed.
+    source_software: bool
+        Whether to call `source_external_software` to add software required for preprocessing. Defaults
+        to True.
+    check_columns: bool
+        Whether to check `study_df` for required columns. Defaults to True.
+
+    Returns
+    _______
+    pd.DataFrame:
+        A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
+        the locations of the preprocessing outputs. This function will also overwrite the input CSV with
+        this DataFrame.
+    """
+
+    source_external_software()
 
     df = pd.read_csv(csv)
 
@@ -690,6 +852,8 @@ def preprocess_from_csv(
     optional_columns = ["seg"]
 
     check_required_columns(df, required_columns, optional_columns)
+
+    preprocessed_dir = Path(preprocessed_dir)
 
     filtered_df = df.copy().dropna(subset="nifti")
     patients = filtered_df["Anon_PatientID"].unique()
