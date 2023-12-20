@@ -237,6 +237,16 @@ class PreprocessingCli(object):
             ),
         )
 
+        parser.add_argument(
+            "-c",
+            "--cpus",
+            type=int,
+            default=0,
+            help=(
+                "Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
+            ),
+        )
+
         args = parser.parse_args(sys.argv[2:])
 
         if args.description_key is None:

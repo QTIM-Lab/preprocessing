@@ -13,13 +13,22 @@ default_key = {
 }
 
 
-def description_sort(description):
-    if ("mprage" in description.lower()) or ("bravo" in description.lower()):
-        return 0
-    elif "high_res" in description.lower():
-        return 1
-    else:
-        return 2
+def description_sort(column):
+    string_priority = {"mprage": 0, "bravo": 0, "high_res": 1, "high-res": 1}
+
+    priority_values = []
+
+    for description in column:
+        found = False
+        for string, priority in string_priority.items():
+            if string in description.lower():
+                priority_values.append(priority)
+                found = True
+                break
+        if not found:
+            priority_values.append(len(string_priority) + 1)
+
+    return pd.Series(priority_values)
 
 
 def series_in_study(
@@ -39,6 +48,18 @@ def series_in_study(
         .sort_values(["SeriesDescription"], key=description_sort)
     )
 
+    # skip manual predictions
+    skip_keys = []
+    if "NormalizedSeriesDescription" in filtered_df.keys():
+        for description in filtered_df["NormalizedSeriesDescription"].dropna().unique():
+            if description in description_key:
+                skip_keys.append(description)
+                filtered_df = filtered_df[
+                    ~filtered_df["NormalizedSeriesDescription"].str.contains(
+                        description, na=False
+                    )
+                ]
+
     normalized_descriptions = []
     series_types = []
     for dicom_dir in filtered_df["dicoms"]:
@@ -50,14 +71,13 @@ def series_in_study(
             except Exception:
                 continue
 
-        normalized_description = getattr(
-            get_series_classification(ruleset, dcms), "NormalizedDescription", None
-        )
+        classification = get_series_classification(ruleset, dcms)
+        normalized_description = classification.get("NormalizedDescription", None)
 
         found = False
         for key in description_key.keys():
             if normalized_description in description_key[key][0]:
-                if key not in normalized_descriptions:
+                if (key not in normalized_descriptions) and (key not in skip_keys):
                     normalized_descriptions.append(key)
                     series_types.append(description_key[key][1])
                 else:
@@ -71,10 +91,12 @@ def series_in_study(
             normalized_descriptions.append(None)
             series_types.append(None)
 
-    study_df["NormalizedSeriesDescription"] = normalized_descriptions
-    study_df["SeriesType"] = series_types
+    filtered_df["NormalizedSeriesDescription"] = normalized_descriptions
+    filtered_df["SeriesType"] = series_types
 
-    return study_df
+    # print(normalized_descriptions)
+    # print(list(filtered_df["SeriesDescription"]))
+    return filtered_df
 
 
 def series_in_study_star(args):
@@ -106,7 +128,7 @@ def series_from_csv(
                 description_key,
                 False,
             )
-            for study_uid in study_uids
+            for study_uid in tqdm(study_uids, "Predicting on studies")
         ]
 
     else:
