@@ -1,5 +1,6 @@
 import argparse
 import sys
+import json
 
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from preprocessing.bids import find_anon_keys
 from preprocessing.bids import reorganize_dicoms
 from preprocessing.bids import validate
 from preprocessing.brain import preprocess_from_csv
+from preprocessing.series_selection import series_from_csv, default_key
 
 
 USAGE_STR = """preprocessing <command> [<args>]
@@ -27,6 +29,12 @@ The following commands are available:
                                 DICOM series to the resulting .nii.gz file and to provide
                                 the context for filenames. The outputs will comply with the BIDS
                                 conventions.
+
+    predict_series              Predict the sequence type for every series in your dataset. A csv
+                                is required to indicate the location of the corresponding DICOMs.
+                                Predictions are made using the mr_series_selection repo's analysis
+                                of the DICOM header. A json can be provided to combine multiple
+                                NormalizedDescriptions into a single category.
 
     brain_preprocessing         Preprocess NIfTI files for deep learning. A csv is required to
                                 indicate the location of source files and to procide the context
@@ -58,10 +66,12 @@ class PreprocessingCli(object):
     def old_project_anon_keys(self):
         parser = argparse.ArgumentParser(
             description=(
-                "Create anonymization keys for anonymous PatientID and StudyID "
-                "from the previous QTIM organizational scheme. Is compatible "
-                "with data following a following <Patient_ID>/<Study_ID> directory "
-                "hierarchy."
+                """
+                Create anonymization keys for anonymous PatientID and StudyID
+                from the previous QTIM organizational scheme. Is compatible 
+                with data following a following <Patient_ID>/<Study_ID> directory
+                hierarchy.
+                """
             )
         )
 
@@ -69,8 +79,10 @@ class PreprocessingCli(object):
             "input_dir",
             type=str,
             help=(
-                "The directory containing all of the dicom files for a project. "
-                "Should follow the <Patient_ID>/<Study_ID> convention"
+                """
+                The directory containing all of the dicom files for a project.
+                It is expected to follow the <Patient_ID>/<Study_ID> convention.
+                """
             ),
         )
 
@@ -78,8 +90,10 @@ class PreprocessingCli(object):
             "output_dir",
             type=str,
             help=(
-                "The directory that will contain the output csv and "
-                "potentially an error file."
+                """
+                The directory that will contain the output csv and potentially
+                an error file.
+                """
             ),
         )
 
@@ -88,15 +102,13 @@ class PreprocessingCli(object):
         find_anon_keys(input_dir=args.input_dir, output_dir=args.output_dir)
 
     def reorganize_dicoms(self):
-
         parser = argparse.ArgumentParser()
 
         parser.add_argument(
             "original_dicom_dir",
             type=Path,
             help=(
-                "The directory containing all of the DICOM files you wish to "
-                "organize."
+                "The directory containing all of the DICOM files you wish to reorganize."
             ),
         )
 
@@ -104,8 +116,10 @@ class PreprocessingCli(object):
             "new_dicom_dir",
             type=Path,
             help=(
-                "The directory that will contain the same DICOM files "
-                "reorganized to follow the BIDS convention."
+                """
+                The directory that will contain the same DICOM files reorganized to 
+                follow the BIDS convention.
+                """
             ),
         )
 
@@ -121,8 +135,7 @@ class PreprocessingCli(object):
             type=int,
             default=0,
             help=(
-                "Number of cpus to use for multiprocessing. Defaults "
-                "to 0 (no multiprocessing)."
+                "Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
             ),
         )
 
@@ -136,7 +149,6 @@ class PreprocessingCli(object):
         )
 
     def validate_bids(self):
-
         paths = sys.argv[2:]
 
         if ("--help" in paths) or ("-h" in paths):
@@ -159,10 +171,12 @@ class PreprocessingCli(object):
             "csv",
             type=Path,
             help=(
-                "A csv containing dicom location and information required "
-                "for the nifti file names. It must contain the columns: "
-                "'dicoms', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', "
-                "'Manufacturer', 'NormalizedSeriesDescription', and 'SeriesType'."
+                """
+                A csv containing dicom location and information required for the nifti file
+                names. It must contain the columns: 'dicoms', 'Anon_PatientID', 
+                'Anon_StudyID', 'StudyInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription',
+                and 'SeriesType'.
+                """
             ),
         )
 
@@ -178,8 +192,7 @@ class PreprocessingCli(object):
             type=int,
             default=0,
             help=(
-                "Number of cpus to use for multiprocessing. Defaults "
-                "to 0 (no multiprocessing)."
+                "Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
             ),
         )
 
@@ -187,6 +200,56 @@ class PreprocessingCli(object):
 
         convert_batch_to_nifti(
             nifti_dir=args.nifti_dir, csv=args.csv, overwrite_nifti=args.overwrite
+        )
+
+    def predict_series(self):
+        parser = argparse.ArgumentParser()
+
+        parser.add_argument("csv", type=Path)
+
+        parser.add_argument(
+            "--ruleset",
+            type=str,
+            default="brain",
+            help=(
+                """
+                Ruleset used within mr_series_selection to predict the NormalizedDescription of
+                each series. Options include 'brain', 'lumbar', and 'prostate'. Defaults to 'brain'.
+                """
+            ),
+        )
+
+        parser.add_argument(
+            "--description_key",
+            type=str,
+            default=None,
+            help=(
+                """
+                Key for combining 'NormalizedDescription's defined by mr_series_selection into desired
+                categories. This information is provided by using a path to a json file containing this
+                information. If nothing is provided, the description_key will default to: 
+
+                default_key = {
+                    "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
+                    "T1Post": [["iso3D AX T1 WithContrast", "iso3D AX T1 WithContrast RFMT"], "anat"],
+                }
+                """
+            ),
+        )
+
+        args = parser.parse_args(sys.argv[2:])
+
+        if args.description_key is None:
+            description_key = default_key
+        else:
+            with open(args.description_key, "r") as json_file:
+                description_key = json.load(json_file)
+
+        series_from_csv(
+            csv=args.csv,
+            ruleset=args.ruleset,
+            description_key=description_key,
+            cpus=args.cpus,
         )
 
     def brain_preprocessing(self):
@@ -202,10 +265,11 @@ class PreprocessingCli(object):
             "csv",
             type=Path,
             help=(
-                "A csv containing nifti location and information required "
-                "for the output file names. It must contain the columns: "
-                "'nifti', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', "
-                "'NormalizedSeriesDescription', and 'SeriesType'."
+                """
+                A csv containing nifti location and information required for the output file names.
+                It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID', 
+                'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+                """
             ),
         )
 
@@ -214,8 +278,10 @@ class PreprocessingCli(object):
             type=str,
             default="preprocessed",
             help=(
-                "The key that will be used in the csv to indicate the new locations "
-                "of preprocessed files. Defaults to 'preprocessed'."
+                """
+                The key that will be used in the csv to indicate the new locations of preprocessed 
+                files. Defaults to 'preprocessed'.
+                """
             ),
         )
 
@@ -224,10 +290,12 @@ class PreprocessingCli(object):
             type=str,
             default="T1Post",
             help=(
-                "The value that will be used to select the fixed image during registration. "
-                "This should correspond to a value within the 'NormalizedSeriesDescription' "
-                "column in the csv. If you have segmentation files in your data. They should "
-                "correspond to this same series. Defaults to 'T1Post'."
+                """
+                The value that will be used to select the fixed image during registration.This 
+                should correspond to a value within the 'NormalizedSeriesDescription'column in
+                the csv. If you have segmentation files in your data. They should correspond to
+                this same series. Defaults to 'T1Post'.
+                """
             ),
         )
 
@@ -235,9 +303,10 @@ class PreprocessingCli(object):
             "--longitudinal_registration",
             action="store_true",
             help=(
-                "Whether to use longitudinal registration. Additional studies "
-                "for the same patient will be registered to the first study "
-                "(chronologically). False if not specified."
+                """
+                Whether to use longitudinal registration. Additional studies for the same patient
+                will be registered to the first study (chronologically). False if not specified.
+                """
             ),
         )
 
@@ -246,8 +315,7 @@ class PreprocessingCli(object):
             type=str,
             default="RAI",
             help=(
-                "The orientation standard that you wish to set for preprocessed "
-                "data. Defaults to 'RAI'."
+                "The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
             ),
         )
 
@@ -256,8 +324,10 @@ class PreprocessingCli(object):
             type=str,
             default="1,1,1",
             help=(
-                "A comma delimited list indicating the desired spacing of preprocessed "
-                "data. Measurements are in mm. Defaults to '1,1,1'."
+                """
+                A comma delimited list indicating the desired spacing of preprocessed data. Measurements
+                are in mm. Defaults to '1,1,1'.
+                """
             ),
         )
 
@@ -265,8 +335,10 @@ class PreprocessingCli(object):
             "--no_skullstrip",
             action="store_true",
             help=(
-                "Whether to not apply skullstripping to preprocessed data. "
-                "Skullstripping will be applied if not specified."
+                """
+                Whether to not apply skullstripping to preprocessed data. Skullstripping will be
+                applied if not specified."
+                """
             ),
         )
 
@@ -276,8 +348,7 @@ class PreprocessingCli(object):
             type=int,
             default=0,
             help=(
-                "Number of cpus to use for multiprocessing. Defaults "
-                "to 0 (no multiprocessing)."
+                "Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
             ),
         )
 
@@ -286,8 +357,10 @@ class PreprocessingCli(object):
             "--verbose",
             action="store_true",
             help=(
-                "If specified, the commands that are called and their outputs "
-                "will be printed to the console."
+                """
+                If specified, the commands that are called and their outputs will be printed to
+                the console.
+                """
             ),
         )
 

@@ -505,6 +505,27 @@ htmlsoup = ["BeautifulSoup4"]
 source = ["Cython (>=0.29.35)"]
 
 [[package]]
+name = "mr-series-selection"
+version = "0.1.0"
+description = ""
+optional = false
+python-versions = ">=3.6"
+files = []
+develop = false
+
+[package.dependencies]
+click = ">=8.0.0"
+numpy = ">=1.17.0"
+pandas = ">=1.1.5"
+pydicom = ">=1.2.2"
+
+[package.source]
+type = "git"
+url = "git@github.com:QTIM-Lab/mr-series-selection.git"
+reference = "HEAD"
+resolved_reference = "be06c00c112ed7c2bc6b58d4bc8a95c3513d5e16"
+
+[[package]]
 name = "networkx"
 version = "3.2.1"
 description = "Python package for creating and manipulating graphs and networks"
@@ -1440,4 +1461,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "344240b97f6d91177f9ecf581ea2da3fdf144f8689e4420376dda52a342ca277"
+content-hash = "07b7a820ec7a51f5e90e101c636c0572711796743b1eacdb4abb2e995ece8c8e"
