@@ -20,20 +20,19 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
 
     Parameters
     ----------
-    input_dir : Path | str
+    input_dir: Path | str
         The directory containing all of the dicom files for a project.
         Should follow the <Patient_ID>/<Study_ID> convention
-    output_dir : Path | str
+    output_dir: Path | str
         The directory that will contain the output csv and potentially
         an error file.
 
     Returns
     -------
-    df
-        A DataFrame containing the key to match Anonymized PatientID and
-        Visit_ID to their DICOM header values. Also saved as a csv within
-        the output_dir.
-
+    pd.DataFrame
+        A DataFrame containing the key to match an Anonymized PatientID and
+        Visit_ID to the StudyInstanceUID of the DICOMs. Also saved as a CSV within
+        the 'output_dir'.
     """
     os.chdir(input_dir)
     dicts = []
@@ -93,11 +92,31 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
 
 
 def copy_dicoms(
-    sub_dir: Path, new_dicom_dir: Path, anon_df: pd.DataFrame
+    sub_dir: Path | str, new_dicom_dir: Path | str, anon_df: pd.DataFrame
 ) -> pd.DataFrame:
     """
-    Helper function for reorganize_dicoms
+    Copies all of the dicoms present within a directory to
+    <new_dicom_dir>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm
+
+    Parameters
+    __________
+    sub_dir: Path | str
+        A directory containing DICOM files. Intended to be a subdirectory of within
+        the root directory of a DICOM dataset.
+    new_dicom_dir: Path | str
+        The new root directory under which the copied DICOMs will be stored.
+    anon_df: pd.DataFrame
+        A DataFrame containing the key to match an Anonymized PatientID and
+        Visit_ID to the StudyInstanceUID of the DICOMs.
+
+    Returns
+    _______
+    pd.DataFrame:
+        A DataFrame containing the location and metadata of the DICOM data at the
+        series level.
     """
+    sub_dir = Path(sub_dir)
+    new_dicom_dir = Path(new_dicom_dir)
 
     files = list(sub_dir.glob("**/*"))
     rows = []
@@ -157,7 +176,8 @@ def copy_dicoms(
 
 def copy_dicoms_star(args) -> pd.DataFrame:
     """
-    imap compatible version of copy_dicoms
+    Helper function intended for use only in 'reorganize_dicoms'. Provides an imap
+    compatible version of 'copy_dicoms'.
     """
     return copy_dicoms(*args)
 
@@ -168,11 +188,30 @@ def reorganize_dicoms(
     anon_csv: Path | str | pd.DataFrame,  # make optional and define afterward?
     cpus: int = 0,
 ) -> pd.DataFrame:
-    if isinstance(original_dicom_dir, str):
-        original_dicom_dir = Path(original_dicom_dir)
+    """
+    Copies all of the dicoms present within a dataset's root directory to
+    <new_dicom_dir>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm
 
-    if isinstance(new_dicom_dir, str):
-        new_dicom_dir = Path(new_dicom_dir)
+    Parameters
+    __________
+    original_dicom_dir: Path | str
+        The original root directory containing all of the DICOM files for a dataset.
+    new_dicom_dir: Path | str
+        The new root directory under which the copied DICOMs will be stored.
+    anon_csv: pd.DataFrame
+        A CSV containing the key to match an Anonymized PatientID and
+        Visit_ID to the StudyInstanceUID of the DICOMs.
+    cpus: int
+        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
+
+    Returns
+    _______
+    pd.DataFrame:
+        A DataFrame containing the location and metadata of the DICOM data at the
+        series level.
+    """
+    original_dicom_dir = Path(original_dicom_dir)
+    new_dicom_dir = Path(new_dicom_dir)
 
     if isinstance(anon_csv, (Path, str)):
         anon_df = pd.read_csv(anon_csv)
