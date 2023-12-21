@@ -21,6 +21,39 @@ def convert_to_nifti(
     overwrite: bool = False,
     source_software: bool = True,
 ) -> str | None:
+    """
+    Convert a DICOM series to a NIfTI file.
+
+    Parameters
+    __________
+    dicom_dir: Path | str
+        The path to a directory containing all of the DICOM instances in a single series.
+    nifti_dir: Path | str
+        The root directory under which the converted NIfTI files will be written. Subdirectories
+        will be created to follow BIDS convention.
+    anon_patient_id: str
+        The anonymized PatientID for the series being converted (e.g., 'sub-01').
+    anon_study_id: str
+        The anonymized StudyID for the series being converted (e.g., 'ses-01').
+    manufacturer: str
+        The manufacturer information originally stored in the DICOM header.
+    normalized_series_description: str
+        The series_description normalized to a consistent value within a dataset.
+    subdir: Literal['anat', 'func', 'dwi']
+        The subdirectory under the study directory. This represents the modality information for
+        BIDS. Currently, the supported options are 'anat', 'func', and 'dwi'.
+    overwrite: bool
+        Whether to overwrite the NIfTI file if there is already one with the same output name.
+        Defaults to False.
+    source_software: bool
+        Whether to call `source_external_software` to add software required for conversion. Defaults
+        to True.
+
+    Returns
+    _______
+    str | None
+        The output name of the NIfTI file if it is successfully created, else None.
+    """
     if source_software:
         source_external_software()
 
@@ -73,7 +106,30 @@ def convert_study(
     check_columns: bool = True,
 ) -> pd.DataFrame:
     """
-    Helper function for convert_batch_to_nifti
+    Convert a DICOM study to NIfTI files representing each series.
+
+    Parameters
+    __________
+    study_df: pd.DataFrame
+        A DataFrame containing data for a single study. It must contain the following
+        columns: ['dicoms', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID',
+        'Manufacturer', 'NormalizedSeriesDescription', 'SeriesType'].
+    nifti_dir: Path | str
+        The root directory under which the converted NIfTI files will be written. Subdirectories
+        will be created to follow BIDS convention.
+    overwrite: bool
+        Whether to overwrite the NIfTI file if there is already one with the same output name.
+        Defaults to False.
+    source_software: bool
+        Whether to call `source_external_software` to add software required for conversion. Defaults
+        to True.
+    check_columns: bool
+        Whether to check 'study_df' for the required columns. Defaults to True.
+
+    Returns
+    _______
+    pd.DataFrame
+        A DataFrame that contains the new column: 'nifti'
     """
     if source_software:
         source_external_software()
@@ -123,6 +179,10 @@ def convert_study(
 
 
 def convert_study_star(args):
+    """
+    Helper function intended for use only in 'convert_batch_to_nifti'. Provides an imap
+    compatible version of 'convert_study'.
+    """
     return convert_study(*args)
 
 
@@ -131,22 +191,54 @@ def convert_batch_to_nifti(
     csv: Path | str,
     overwrite_nifti: bool = False,
     cpus: int = 0,
+    check_columns: bool = True,
 ) -> pd.DataFrame:
+    """
+    Convert a DICOM dataset to NIfTI files representing each series.
+
+    Parameters
+    __________
+    nifti_dir: Path | str
+        The root directory under which the converted NIfTI files will be written. Subdirectories
+        will be created to follow BIDS convention.
+    csv: Path | str
+        The path to a CSV containing an entire dataset. It must contain the following
+        columns: ['dicoms', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID',
+        'Manufacturer', 'NormalizedSeriesDescription', 'SeriesType'].
+    overwrite: bool
+        Whether to overwrite the NIfTI file if there is already one with the same output name.
+        Defaults to False.
+    source_software: bool
+        Whether to call `source_external_software` to add software required for conversion. Defaults
+        to True.
+    cpus: int
+        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
+    check_columns: bool
+        Whether to check the CSV for the required columns. Defaults to True.
+
+    Returns
+    _______
+    pd.DataFrame
+        A DataFrame that contains the new column: 'nifti'. This DataFrame will be used to overwrite
+        the CSV.
+    """
+
     source_external_software()
 
     df = pd.read_csv(csv)
 
-    required_columns = [
-        "dicoms",
-        "Anon_PatientID",
-        "Anon_StudyID",
-        "StudyInstanceUID",
-        "Manufacturer",
-        "NormalizedSeriesDescription",
-        "SeriesType",
-    ]
+    if check_columns:
+        required_columns = [
+            "dicoms",
+            "Anon_PatientID",
+            "Anon_StudyID",
+            "StudyInstanceUID",
+            "Manufacturer",
+            "NormalizedSeriesDescription",
+            "SeriesType",
+        ]
 
-    check_required_columns(df, required_columns)
+        check_required_columns(df, required_columns)
 
     filtered_df = df.copy().dropna(subset="NormalizedSeriesDescription")
 
