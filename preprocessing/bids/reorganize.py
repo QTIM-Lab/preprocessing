@@ -279,11 +279,11 @@ def reorganize_dicoms(
         df["Anon_PatientID"] = df["PatientID"].apply(anonymize_patient)
 
         for patient in patients:
-            patient_df = df[df["PatientID"] == patient]
+            patient_df = df[df["PatientID"] == patient].copy()
 
             studies = sorted(patient_df["StudyDate"].unique())
             for i, study in enumerate(studies):
-                study_df = patient_df[patient_df["StudyDate"] == study]
+                study_df = patient_df[patient_df["StudyDate"] == study].copy()
                 study_df["Anon_StudyID"] = [f"ses-{i+1:02d}"] * study_df.shape[0]
                 df.update(study_df)
 
