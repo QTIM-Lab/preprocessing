@@ -3,8 +3,10 @@
 
 ## Table of Contents
 * **[Installation Guide](#installation-guide)**
-    * [Python Installation](#python-installation)
-    * [External Software](#external-software)
+   * [Python Installation](#python-installation)
+   * [External Software](#external-software)
+* **[CLI User Guide](#cli-user-guide)**
+   * [old_project_anon_keys Command](old_project_anon_keys-command)
 
 ## Installation Guide
 If you are working on a Martinos machine and want to use `preprocessing` directly, you will already have access to it through the corresponding pyenv environment (visit this [guide](https://github.com/QTIM-Lab/qtim-standards/blob/main/environment_setup.md) for more information on using pyenv at Martinos). Simply run: 
@@ -37,6 +39,13 @@ export FSLDIR=/usr/pubsw/packages/fsl/6.0.6/
 source ${FSLDIR}/etc/fslconf/fsl.sh
 ```
 
+### CLI User Guide
 While you can import this code directly into your own python scripts, the most convenient way to run common functions is through the CLI. Once installed to your project's environment using pip or poetry, you will be able to access the most important functionality through `preprocessing`'s various subcommands. At any time, use `preprocessing --help` for an overview of the available commands and a brief description of each. For more in depth descriptions of each command, use `preprocessing <command> --help`.
 
 This library utilizes csv files for the majority of its functions. Specific columns may be required for each to run properly. If you are using the CLI, use `--help` to view the columns required for a given command. Alternatively, reference the docstrings if you wish to use `preprocessing` directly within python. For an example of what formatting to expect, check [here](example.csv).
+
+## old_project_anon_keys Command
+```
+preprocessing old_project_anon_keys <input_dir> <output_dir>
+```
+This command creates anonymization keys for anonymous PatientID and StudyID from the previous QTIM organizational scheme. Is compatible with data following a following <Patient_ID>/<Study_ID> directory hierarchy.
