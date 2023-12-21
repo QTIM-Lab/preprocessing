@@ -92,7 +92,7 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
 
 
 def copy_dicoms(
-    sub_dir: Path | str, new_dicom_dir: Path | str, anon_df: pd.DataFrame
+    sub_dir: Path | str, new_dicom_dir: Path | str, anon_df: pd.DataFrame | None
 ) -> pd.DataFrame:
     """
     Copies all of the dicoms present within a directory to
@@ -130,12 +130,19 @@ def copy_dicoms(
         except Exception:
             continue
 
-        anon_keys = anon_df[(anon_df["StudyInstanceUID"] == dcm.StudyInstanceUID)]
+        if anon_df is not None:
+            anon_keys = anon_df[(anon_df["StudyInstanceUID"] == dcm.StudyInstanceUID)]
+            anon_patient_id = anon_keys.loc[anon_keys.index[0], "Anon_PatientID"]
+            anon_study_id = anon_keys.loc[anon_keys.index[0], "Anon_StudyID"]
+
+        else:
+            anon_patient_id = None
+            anon_study_id = None
 
         try:
             row = {
-                "Anon_PatientID": anon_keys.loc[anon_keys.index[0], "Anon_PatientID"],
-                "Anon_StudyID": anon_keys.loc[anon_keys.index[0], "Anon_StudyID"],
+                "Anon_PatientID": anon_patient_id,
+                "Anon_StudyID": anon_study_id,
             }
         except Exception as error:
             error = f"{file} encountered: {error}\n"
@@ -185,7 +192,7 @@ def copy_dicoms_star(args) -> pd.DataFrame:
 def reorganize_dicoms(
     original_dicom_dir: Path | str,
     new_dicom_dir: Path | str,
-    anon_csv: Path | str | pd.DataFrame,  # make optional and define afterward?
+    anon_csv: Path | str | pd.DataFrame | None,
     cpus: int = 0,
 ) -> pd.DataFrame:
     """
@@ -198,9 +205,10 @@ def reorganize_dicoms(
         The original root directory containing all of the DICOM files for a dataset.
     new_dicom_dir: Path | str
         The new root directory under which the copied DICOMs will be stored.
-    anon_csv: pd.DataFrame
-        A CSV containing the key to match an Anonymized PatientID and
-        Visit_ID to the StudyInstanceUID of the DICOMs.
+    anon_csv: Path | str | pd.DataFrame | None
+        A CSV or DataFrame containing the key to match an Anonymized PatientID and
+        Visit_ID to the StudyInstanceUID of the DICOMs. If None is provided, the
+        anonymization will be completed automatically based on the DICOM headers.
     cpus: int
         Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
 
@@ -218,6 +226,9 @@ def reorganize_dicoms(
 
     elif isinstance(anon_csv, pd.DataFrame):
         anon_df = anon_csv
+
+    else:
+        anon_df = None
 
     sub_dirs = list(original_dicom_dir.glob("*/"))
 
@@ -239,12 +250,45 @@ def reorganize_dicoms(
                 )
             )
 
-    df = (
-        pd.concat(outputs, ignore_index=True)
-        .drop_duplicates(subset=["SeriesInstanceUID"])
-        .sort_values(["Anon_PatientID", "Anon_StudyID"])
-        .reset_index(drop=True)
-    )
+    if anon_df is not None:
+        df = (
+            pd.concat(outputs, ignore_index=True)
+            .drop_duplicates(subset=["SeriesInstanceUID"])
+            .sort_values(["Anon_PatientID", "Anon_StudyID"])
+            .reset_index(drop=True)
+        )
+
+    else:
+        df = (
+            pd.concat(outputs, ignore_index=True)
+            .drop_duplicates(subset=["SeriesInstanceUID"])
+            .sort_values(["StudyDate"])
+            .reset_index(drop=True)
+        )
+
+        anon_patient_dict = {}
+        patients = df["PatientID"].dropna().unique()
+        for i, patient in enumerate(patients):
+            anon_patient_dict[patient] = f"sub-{i+1:02d}"
+
+        def anonymize_patient(x):
+            if isinstance(x, str):
+                x = anon_patient_dict[x]
+            return x
+
+        df["Anon_PatientID"] = df["PatientID"].apply(anonymize_patient)
+
+        for patient in patients:
+            patient_df = df[df["PatientID"] == patient]
+
+            studies = sorted(patient_df["StudyDate"].unique())
+            for i, study in enumerate(studies):
+                study_df = patient_df[patient_df["StudyDate"] == study]
+                study_df["Anon_StudyID"] = [f"ses-{i+1:02d}"] * study_df.shape[0]
+                df.update(study_df)
+
+        df = df.sort_values(["Anon_PatientID", "Anon_StudyID"])
+
     df.to_csv((new_dicom_dir / "dataset.csv"), index=False)
 
     return df

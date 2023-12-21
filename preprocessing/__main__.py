@@ -124,9 +124,15 @@ class PreprocessingCli(object):
         )
 
         parser.add_argument(
-            "anon_csv",
+            "--anon_csv",
             type=Path,
-            help=("A csv mapping PatientID and StudyInstanceUID to anonymous values."),
+            default=None,
+            help=(
+                """
+                A csv mapping PatientID and StudyInstanceUID to anonymous values. If None is
+                provided, the anonymization will be inferred from the DICOM headers.
+                """
+            ),
         )
 
         parser.add_argument(
@@ -173,9 +179,9 @@ class PreprocessingCli(object):
             help=(
                 """
                 A csv containing dicom location and information required for the nifti file
-                names. It must contain the columns: 'dicoms', 'Anon_PatientID', 
+                names. It must contain the columns: ['dicoms', 'Anon_PatientID', 
                 'Anon_StudyID', 'StudyInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription',
-                and 'SeriesType'.
+                'SeriesType'].
                 """
             ),
         )
