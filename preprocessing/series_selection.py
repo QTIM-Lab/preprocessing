@@ -115,8 +115,11 @@ def series_in_study(
             except Exception:
                 continue
 
-        classification = get_series_classification(ruleset, dcms)
-        normalized_description = classification.get("NormalizedDescription", None)
+        try:
+            classification = get_series_classification(ruleset, dcms)
+            normalized_description = classification.get("NormalizedDescription", None)
+        except Exception:
+            normalized_description = None
 
         found = False
         for key in description_key.keys():
@@ -178,7 +181,7 @@ def series_from_csv(
             "T1Post": [["iso3D AX T1 WithContrast", "iso3D AX T1 WithContrast RFMT"], "anat"],
         }
     cpus: int
-        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
+        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
     check_columns: bool
         Whether to check the CSV for the required columns. Defaults to True.
 

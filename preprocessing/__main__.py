@@ -206,7 +206,16 @@ predict_series = subparsers.add_parser(
     ),
 )
 
-predict_series.add_argument("csv", type=Path)
+predict_series.add_argument(
+    "csv",
+    type=Path,
+    help=(
+        """
+        The path to a CSV containing an entire dataset. It must contain the following
+        columns: ['StudyInstanceUID', 'SeriesDescription', 'dicoms'].
+        """
+    ),
+)
 
 predict_series.add_argument(
     "--ruleset",
