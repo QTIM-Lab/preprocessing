@@ -11,7 +11,8 @@ from preprocessing.brain import preprocess_from_csv
 from preprocessing.series_selection import series_from_csv, default_key
 
 
-USAGE_STR = """preprocessing <command> [<args>]
+USAGE_STR = """
+preprocessing <command> [<args>]
 
 The following commands are available:
     old-project-anon-keys       Create anonymization keys for anonymous PatientID and VisitID
@@ -62,7 +63,8 @@ old_project_anon_keys = subparsers.add_parser(
 
 
 old_project_anon_keys.add_argument(
-    "input-dir",
+    "input_dir",
+    metavar="input-dir",
     type=str,
     help=(
         """
@@ -73,7 +75,8 @@ old_project_anon_keys.add_argument(
 )
 
 old_project_anon_keys.add_argument(
-    "output-dir",
+    "output_dir",
+    metavar="output-dir",
     type=str,
     help=(
         """
@@ -96,13 +99,15 @@ reorganize = subparsers.add_parser(
 )
 
 reorganize.add_argument(
-    "original-dicom-dir",
+    "original_dicom_dir",
+    metavar="original-dicom-dir",
     type=Path,
     help=("The directory containing all of the DICOM files you wish to reorganize."),
 )
 
 reorganize.add_argument(
-    "new-dicom-dir",
+    "new_dicom_dir",
+    metavar="new-dicom-dir",
     type=Path,
     help=(
         """
@@ -159,7 +164,8 @@ dataset_to_nifti = subparsers.add_parser(
 )
 
 dataset_to_nifti.add_argument(
-    "nifti-dir",
+    "nifti_dir",
+    metavar="nifti-dir",
     type=Path,
     help=("The directory that will contain the converted NIfTI files."),
 )
@@ -269,7 +275,8 @@ brain_preprocessing = subparsers.add_parser(
 )
 
 brain_preprocessing.add_argument(
-    "preprocessed-dir",
+    "preprocessed_dir",
+    metavar="preprocessed-dir",
     type=Path,
     help=("The directory that will contain the preprocessed NIfTI files."),
 )
