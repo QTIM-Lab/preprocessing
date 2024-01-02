@@ -57,7 +57,7 @@ This command creates anonymization keys for anonymous PatientID and StudyID from
 ### reorganize-dicoms Command
 ```bash
 preprocessing reorganize-dicoms <original-dicom-dir> <new-dicom-dir> \
-        [--anon_csv=None] [-c | --cpus=0]
+        [--anon-csv=None] [-c | --cpus=0]
 ```
 This command reorganizes DICOMs to follow the BIDS convention. Any DICOMs found recursively within this directory will be reorganized (at least one level of subdirectories is assumed). Anonomyzation keys for PatientIDs and StudyIDs are provided within a csv.
 
