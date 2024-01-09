@@ -2,6 +2,8 @@ import argparse
 import json
 
 from pathlib import Path
+from pycrumbs import tracked
+from typing import Callable, Dict, Any
 
 from preprocessing.bids import convert_batch_to_nifti
 from preprocessing.bids import find_anon_keys
@@ -9,6 +11,16 @@ from preprocessing.bids import reorganize_dicoms
 from preprocessing.bids import validate
 from preprocessing.brain import preprocess_from_csv
 from preprocessing.series_selection import series_from_csv, default_key
+
+
+@tracked(
+    directory_parameter="record_dir",
+    record_filename="preprocessing_cli_record.json",
+    disable_git_tracking=True,
+    chain_records=True,
+)
+def tracked_command(func: Callable, kwargs: Dict[str, Any], record_dir: Path | str):
+    return func(**kwargs)
 
 
 USAGE_STR = """
@@ -389,19 +401,27 @@ def main():
     args = parser.parse_args()
 
     if args.command == "old-project-anon-keys":
-        find_anon_keys(input_dir=args.input_dir, output_dir=args.output_dir)
+        kwargs = {"input_dir": args.input_dir, "output_dir": args.output_dir}
+
+        tracked_command(find_anon_keys, kwargs=kwargs, record_dir=args.output_dir)
 
     elif args.command == "reorganize-dicoms":
-        reorganize_dicoms(
-            original_dicom_dir=args.original_dicom_dir,
-            new_dicom_dir=args.new_dicom_dir,
-            anon_csv=args.anon_csv,
-            cpus=args.cpus,
-        )
+        kwargs = {
+            "original_dicom_dir": args.original_dicom_dir,
+            "new_dicom_dir": args.new_dicom_dir,
+            "anon_csv": args.anon_csv,
+            "cpus": args.cpus,
+        }
+        tracked_command(reorganize_dicoms, kwargs=kwargs, record_dir=args.new_dicom_dir)
 
     elif args.command == "dataset-to-nifti":
-        convert_batch_to_nifti(
-            nifti_dir=args.nifti_dir, csv=args.csv, overwrite_nifti=args.overwrite
+        kwargs = {
+            "nifti_dir": args.nifti_dir,
+            "csv": args.csv,
+            "overwrite_nifti": args.overwrite,
+        }
+        tracked_command(
+            convert_batch_to_nifti, kwargs=kwargs, record_dir=args.nifti_dir
         )
 
     elif args.command == "predict-series":
@@ -411,23 +431,27 @@ def main():
             with open(args.description_key, "r") as json_file:
                 description_key = json.load(json_file)
 
-        series_from_csv(
-            csv=args.csv,
-            ruleset=args.ruleset,
-            description_key=description_key,
-            cpus=args.cpus,
-        )
+        kwargs = {
+            "csv": args.csv,
+            "ruleset": args.ruleset,
+            "description_key": description_key,
+            "cpus": args.cpus,
+        }
+        tracked_command(series_from_csv, kwargs=kwargs, record_dir=args.csv.parent)
 
     elif args.command == "brain-preprocessing":
-        preprocess_from_csv(
-            csv=args.csv,
-            preprocessed_dir=args.preprocessed_dir,
-            pipeline_key=args.pipeline_key,
-            registration_key=args.registration_key,
-            longitudinal_registration=args.longitudinal_registration,
-            orientation=args.orientation,
-            spacing=args.spacing,
-            skullstrip=not args.no_skullstrip,
-            cpus=args.cpus,
-            verbose=args.verbose,
+        kwargs = {
+            "csv": args.csv,
+            "preprocessed_dir": args.preprocessed_dir,
+            "pipeline_key": args.pipeline_key,
+            "registration_key": args.registration_key,
+            "longitudinal_registration": args.longitudinal_registration,
+            "orientation": args.orientation,
+            "spacing": args.spacing,
+            "skullstrip": not args.no_skullstrip,
+            "cpus": args.cpus,
+            "verbose": args.verbose,
+        }
+        tracked_command(
+            preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir
         )

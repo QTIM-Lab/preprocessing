@@ -16,6 +16,7 @@ pybids = "^0.16.4"
 nipype = "^1.8.6"
 dicom2nifti = "^2.4.9"
 mr-series-selection = {git = "git@github.com:QTIM-Lab/mr-series-selection.git"}
+pycrumbs = {git = "git@github.com:mccle/pycrumbs.git", branch = "patch-1"}
 
 
 [build-system]
