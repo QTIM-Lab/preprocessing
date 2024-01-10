@@ -16,7 +16,6 @@ from preprocessing.series_selection import series_from_csv, default_key
 @tracked(
     directory_parameter="record_dir",
     record_filename="preprocessing_cli_record.json",
-    disable_git_tracking=True,
     chain_records=True,
 )
 def tracked_command(func: Callable, kwargs: Dict[str, Any], record_dir: Path | str):
