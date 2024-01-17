@@ -824,6 +824,7 @@ def preprocess_patient(
             verbose=verbose,
             source_software=False,
             check_columns=False,
+            debug=debug,
         )
     )
 
@@ -855,6 +856,7 @@ def preprocess_patient(
                         verbose=verbose,
                         source_software=False,
                         check_columns=False,
+                        debug=debug,
                     )
                 )
 
@@ -877,6 +879,7 @@ def preprocess_patient(
                         verbose=verbose,
                         source_software=False,
                         check_columns=False,
+                        debug=debug,
                     )
                 )
 
