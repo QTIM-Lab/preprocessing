@@ -105,6 +105,7 @@ def preprocess_study(
     verbose: bool = False,
     source_software: bool = True,
     check_columns: bool = True,
+    debug: bool = False,
 ) -> pd.DataFrame:
     """
     Preprocess a single study from a DataFrame.
@@ -140,6 +141,9 @@ def preprocess_study(
         to True.
     check_columns: bool
         Whether to check `study_df` for required columns. Defaults to True.
+    debug: bool
+        Whether to run in 'debug mode' where each step is saved with an individual name and intermediate
+        files are not deleted. Dafaults to False.
 
     Returns
     _______
@@ -165,8 +169,6 @@ def preprocess_study(
         check_required_columns(study_df, required_columns, optional_columns)
 
     preprocessed_dir = Path(preprocessed_dir)
-    # def registration_sort(series):
-    #     return (series != registration_key).astype(int)
 
     filtered_df = (
         study_df.copy()
@@ -234,9 +236,16 @@ def preprocess_study(
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
 
+        if debug:
+            output_file = preprocessed_file.replace(".nii.gz", "_orientation.nii.gz")
+            rows[i][pipeline_key] = output_file
+
+        else:
+            output_file = preprocessed_file
+
         command = (
             f"Slicer --launch OrientScalarVolume "
-            f"{preprocessed_file} {preprocessed_file} -o {orientation}"
+            f"{preprocessed_file} {output_file} -o {orientation}"
         )
         if verbose:
             print(command)
@@ -252,9 +261,16 @@ def preprocess_study(
         if "seg" in rows[i]:
             preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
 
+            if debug:
+                output_seg = preprocessed_seg.replace(".nii.gz", "_orientation.nii.gz")
+                rows[i][f"{pipeline_key}_seg"] = output_seg
+
+            else:
+                output_seg = preprocessed_seg
+
             command = (
                 f"Slicer --launch OrientScalarVolume "
-                f"{preprocessed_seg} {preprocessed_seg} -o {orientation}"
+                f"{preprocessed_seg} {output_seg} -o {orientation}"
             )
             if verbose:
                 print(command)
@@ -270,9 +286,17 @@ def preprocess_study(
     ### Spacing
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
+
+        if debug:
+            output_file = preprocessed_file.replace(".nii.gz", "_spacing.nii.gz")
+            rows[i][pipeline_key] = output_file
+
+        else:
+            output_file = preprocessed_file
+
         command = (
             f"Slicer --launch ResampleScalarVolume "
-            f"{preprocessed_file} {preprocessed_file} -i bspline -s {spacing}"
+            f"{preprocessed_file} {output_file} -i bspline -s {spacing}"
         )
         if verbose:
             print(command)
@@ -287,9 +311,17 @@ def preprocess_study(
 
         if "seg" in rows[i]:
             preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+
+            if debug:
+                output_seg = preprocessed_seg.replace(".nii.gz", "_spacing.nii.gz")
+                rows[i][f"{pipeline_key}_seg"] = output_seg
+
+            else:
+                output_seg = preprocessed_seg
+
             command = (
                 f"Slicer --launch ResampleScalarVolume "
-                f"{preprocessed_seg} {preprocessed_seg} -i nearestNeighbor -s {spacing}"
+                f"{preprocessed_seg} {output_seg} -i nearestNeighbor -s {spacing}"
             )
             if verbose:
                 print(command)
@@ -320,14 +352,35 @@ def preprocess_study(
             e.write(f"{error}\n")
             return study_df
 
-    if registration_target is None:
-        main_SS_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
-        main_SS_mask_file = rows[0][pipeline_key].replace(".nii.gz", "_SS_mask.nii.gz")
-        main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
+    if debug:
+        if registration_target is None:
+            main_SS_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
+            main_SS_mask_file = rows[0][pipeline_key].replace(
+                ".nii.gz", "_SS_mask.nii.gz"
+            )
+            main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
+        else:
+            main_SS_file = registration_target.replace(
+                ".nii.gz", "_orientation_spacing_SS.nii.gz"
+            )
+            main_SS_mask_file = registration_target.replace(
+                ".nii.gz", "_orientation_spacing_SS_mask.nii.gz"
+            )
+            main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
+
     else:
-        main_SS_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
-        main_SS_mask_file = registration_target.replace(".nii.gz", "_SS_mask.nii.gz")
-        main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
+        if registration_target is None:
+            main_SS_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
+            main_SS_mask_file = rows[0][pipeline_key].replace(
+                ".nii.gz", "_SS_mask.nii.gz"
+            )
+            main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
+        else:
+            main_SS_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
+            main_SS_mask_file = registration_target.replace(
+                ".nii.gz", "_SS_mask.nii.gz"
+            )
+            main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
 
     ### Register based on loose skullstrip
     fixed_image_path = main_SS_file
@@ -335,6 +388,16 @@ def preprocess_study(
         if n > 1:
             for i in range(1, n):
                 preprocessed_file = rows[i][pipeline_key]
+
+                if debug:
+                    output_file = preprocessed_file.replace(
+                        ".nii.gz", "_registered.nii.gz"
+                    )
+                    rows[i][pipeline_key] = output_file
+
+                else:
+                    output_file = preprocessed_file
+
                 moving_image_path = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
                 transform_outfile = preprocessed_file.replace(
                     ".nii.gz", "_transform.tfm"
@@ -368,7 +431,7 @@ def preprocess_study(
 
                 command = (
                     f"Slicer --launch ResampleScalarVectorDWIVolume "
-                    f"{preprocessed_file} {preprocessed_file} -i bs -f {transform_outfile}"
+                    f"{preprocessed_file} {output_file} -i bs -f {transform_outfile}"
                 )
                 if verbose:
                     print(command)
@@ -385,7 +448,7 @@ def preprocess_study(
 
                 command = (
                     f"Slicer --launch ResampleScalarVectorDWIVolume "
-                    f"{preprocessed_file} {preprocessed_file} -i bs -R {main_SS_file} -z {x},{y},{z}"
+                    f"{output_file} {output_file} -i bs -R {main_SS_file} -z {x},{y},{z}"
                 )
                 if verbose:
                     print(command)
@@ -403,9 +466,16 @@ def preprocess_study(
                 if "seg" in rows[i]:
                     preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
 
+                    if debug:
+                        output_seg = preprocessed_seg.replace("_registered.nii.gz")
+                        rows[i][f"{pipeline_key}_seg"] = output_seg
+
+                    else:
+                        output_seg = preprocessed_seg
+
                     command = (
                         f"Slicer --launch ResampleScalarVectorDWIVolume "
-                        f"{preprocessed_seg} {preprocessed_seg} -i nn -f {transform_outfile}"
+                        f"{preprocessed_seg} {output_seg} -i nn -f {transform_outfile}"
                     )
                     if verbose:
                         print(command)
@@ -422,7 +492,7 @@ def preprocess_study(
 
                     command = (
                         f"Slicer --launch ResampleScalarVectorDWIVolume "
-                        f"{preprocessed_seg} {preprocessed_seg} -i nn -R {main_SS_file} -z {x},{y},{z}"
+                        f"{output_seg} {output_seg} -i nn -R {main_SS_file} -z {x},{y},{z}"
                     )
                     if verbose:
                         print(command)
@@ -440,6 +510,14 @@ def preprocess_study(
     else:
         for i in range(n):
             preprocessed_file = rows[i][pipeline_key]
+
+            if debug:
+                output_file = preprocessed_file.replace(".nii.gz", "_registered.nii.gz")
+                rows[i][pipeline_key] = output_file
+
+            else:
+                output_file = preprocessed_file
+
             moving_image_path = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
             transform_outfile = preprocessed_file.replace(".nii.gz", "_transform.tfm")
             sampling_percentage = 0.002
@@ -469,7 +547,7 @@ def preprocess_study(
 
             command = (
                 f"Slicer --launch ResampleScalarVectorDWIVolume "
-                f"{preprocessed_file} {preprocessed_file} -i bs -f {transform_outfile}"
+                f"{preprocessed_file} {output_file} -i bs -f {transform_outfile}"
             )
             if verbose:
                 print(command)
@@ -484,7 +562,7 @@ def preprocess_study(
 
             command = (
                 f"Slicer --launch ResampleScalarVectorDWIVolume "
-                f"{preprocessed_file} {preprocessed_file} -i bs -R {main_SS_file} -z {x},{y},{z}"
+                f"{output_file} {output_file} -i bs -R {main_SS_file} -z {x},{y},{z}"
             )
             if verbose:
                 print(command)
@@ -500,9 +578,18 @@ def preprocess_study(
             if "seg" in rows[i]:
                 preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
 
+                if debug:
+                    output_seg = preprocessed_seg.replace(
+                        ".nii.gz", "_registered.nii.gz"
+                    )
+                    rows[i][f"{pipeline_key}_seg"]
+
+                else:
+                    output_seg = preprocessed_seg
+
                 command = (
                     f"Slicer --launch ResampleScalarVectorDWIVolume "
-                    f"{preprocessed_seg} {preprocessed_seg} -i nn -f {transform_outfile}"
+                    f"{preprocessed_seg} {output_seg} -i nn -f {transform_outfile}"
                 )
                 if verbose:
                     print(command)
@@ -519,7 +606,7 @@ def preprocess_study(
 
                 command = (
                     f"Slicer --launch ResampleScalarVectorDWIVolume "
-                    f"{preprocessed_seg} {preprocessed_seg} -i nn -R {main_SS_file} -z {x},{y},{z}"
+                    f"{output_seg} {output_seg} -i nn -R {main_SS_file} -z {x},{y},{z}"
                 )
                 if verbose:
                     print(command)
@@ -538,6 +625,16 @@ def preprocess_study(
     if skullstrip:
         for i in range(n):
             preprocessed_file = rows[i][pipeline_key]
+
+            if debug:
+                output_file = preprocessed_file.replace(
+                    ".nii.gz", "_skullstripped.nii.gz"
+                )
+                rows[i][pipeline_key] = output_file
+
+            else:
+                output_file = preprocessed_file
+
             nifti = nib.load(preprocessed_file)
             array = nifti.get_fdata()
 
@@ -546,10 +643,20 @@ def preprocess_study(
             output_nifti = nib.Nifti1Image(
                 array, affine=nifti.affine, header=nifti.header
             )
-            nib.save(output_nifti, preprocessed_file)
+            nib.save(output_nifti, output_file)
 
             if "seg" in rows[i]:
                 preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+
+                if debug:
+                    output_seg = preprocessed_seg.replace(
+                        ".nii.gz", "_skullstripped.nii.gz"
+                    )
+                    rows[i][f"{pipeline_key}_seg"] = output_seg
+
+                else:
+                    output_seg = preprocessed_seg
+
                 nifti = nib.load(preprocessed_seg)
                 array = nifti.get_fdata()
 
@@ -558,21 +665,35 @@ def preprocess_study(
                 output_nifti = nib.Nifti1Image(
                     array, affine=nifti.affine, header=nifti.header
                 )
-                nib.save(output_nifti, preprocessed_seg)
+                nib.save(output_nifti, output_seg)
 
     ### Bias correction
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
 
+        if debug:
+            output_file = preprocessed_file.replace(".nii.gz", "_N4.nii.gz")
+            rows[i][pipeline_key] = output_file
+
+        else:
+            output_file = preprocessed_file
+
         n4 = N4BiasFieldCorrection()
         n4.inputs.input_image = preprocessed_file
         n4.inputs.n_iterations = [20, 20, 10, 5]
-        n4.inputs.output_image = preprocessed_file
+        n4.inputs.output_image = output_file
         n4.run()
 
     ### Normalization
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
+
+        if debug:
+            output_file = preprocessed_file.replace(".nii.gz", "_norm.nii.gz")
+            rows[i][pipeline_key] = output_file
+
+        else:
+            output_file = preprocessed_file
 
         nifti = nib.load(preprocessed_file)
         array = nifti.get_fdata()
@@ -582,7 +703,7 @@ def preprocess_study(
         array = (array - mean) / std
 
         output_nifti = nib.Nifti1Image(array, affine=nifti.affine, header=nifti.header)
-        nib.save(output_nifti, preprocessed_file)
+        nib.save(output_nifti, output_file)
 
     ### copy metadata
     preprocessing_args = {
@@ -615,6 +736,7 @@ def preprocess_patient(
     verbose: bool = False,
     source_software: bool = True,
     check_columns: bool = True,
+    debug: bool = False,
 ):
     """
     Preprocess all of the studies for a patient in a DataFrame.
@@ -653,6 +775,9 @@ def preprocess_patient(
         to True.
     check_columns: bool
         Whether to check `study_df` for required columns. Defaults to True.
+    debug: bool
+        Whether to run in 'debug mode' where each step is saved with an individual name and intermediate
+        files are not deleted. Dafaults to False.
 
     Returns
     _______
@@ -704,8 +829,13 @@ def preprocess_patient(
 
     if len(study_uids) > 1:
         if longitudinal_registration:
-            # TODO change registration target by a series description key
-            registration_target = preprocessed_dfs[0][pipeline_key][0]
+            if debug:
+                output_dir = os.path.dirname(preprocessed_dfs[0][pipeline_key][0])
+                base_name = os.path.basename(preprocessed_dfs[0]["nifti"][0])
+                registration_target = f"{output_dir}/{base_name}"
+
+            else:
+                registration_target = preprocessed_dfs[0][pipeline_key][0]
 
             for study_uid in study_uids[1:]:
                 study_df = patient_df[
@@ -756,16 +886,18 @@ def preprocess_patient(
 
     out_df = pd.concat(preprocessed_dfs, ignore_index=True)
 
-    extra_files = (
-        list(patient_dir.glob("**/*SS.nii.gz"))
-        + list(patient_dir.glob("**/*SS_mask.nii.gz"))
-        + list(patient_dir.glob("**/*.tfm"))
-        + list(patient_dir.glob("**/*.h5"))
-    )
+    if not debug:
+        extra_files = (
+            list(patient_dir.glob("**/*SS.nii.gz"))
+            + list(patient_dir.glob("**/*SS_mask.nii.gz"))
+            + list(patient_dir.glob("**/*.tfm"))
+            + list(patient_dir.glob("**/*.h5"))
+        )
 
-    print("......Clearing unnecessary files......")
-    for file in extra_files:
-        os.remove(file)
+        print("......Clearing unnecessary files......")
+        for file in extra_files:
+            os.remove(file)
+
     print(f"Finished preprocessing {anon_patientID}:")
     print(out_df)
     return out_df
