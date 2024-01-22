@@ -9,7 +9,7 @@ from preprocessing.bids import convert_batch_to_nifti
 from preprocessing.bids import find_anon_keys
 from preprocessing.bids import reorganize_dicoms
 from preprocessing.bids import validate
-from preprocessing.brain import preprocess_from_csv
+from preprocessing.brain import preprocess_from_csv, debug_from_csv
 from preprocessing.series_selection import series_from_csv, default_key
 
 
@@ -395,6 +395,140 @@ brain_preprocessing.add_argument(
     ),
 )
 
+debug_preprocessing = subparsers.add_parser(
+    "debug-preprocessing",
+    description=(
+        """
+        Preprocess NIfTI files for deep learning. A csv is required to
+        indicate the location of source files and to procide the context
+        for filenames. The outputs will comply with BIDS conventions.
+        """
+    ),
+)
+
+debug_preprocessing.add_argument(
+    "preprocessed_dir",
+    metavar="preprocessed-dir",
+    type=Path,
+    help=("The directory that will contain the preprocessed NIfTI files."),
+)
+
+debug_preprocessing.add_argument(
+    "csv",
+    type=Path,
+    help=(
+        """
+        A csv containing nifti location and information required for the output file names.
+        It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID', 
+        'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+        """
+    ),
+)
+
+debug_preprocessing.add_argument(
+    "--patients",
+    type=str,
+    default=None,
+    help=(
+        """
+        A comma delimited list of patients to select from the 'Anon_PatientID' column
+        of the CSV
+        """
+    ),
+)
+
+
+debug_preprocessing.add_argument(
+    "--pipeline-key",
+    type=str,
+    default="preprocessed",
+    help=(
+        """
+        The key that will be used in the csv to indicate the new locations of preprocessed 
+        files. Defaults to 'preprocessed'.
+        """
+    ),
+)
+
+debug_preprocessing.add_argument(
+    "--registration-key",
+    type=str,
+    default="T1Post",
+    help=(
+        """
+        The value that will be used to select the fixed image during registration. This 
+        should correspond to a value within the 'NormalizedSeriesDescription' column in
+        the csv. If you have segmentation files in your data. They should correspond to
+        this same series. Defaults to 'T1Post'.
+        """
+    ),
+)
+
+debug_preprocessing.add_argument(
+    "--longitudinal-registration",
+    action="store_true",
+    help=(
+        """
+        Whether to use longitudinal registration. Additional studies for the same patient
+        will be registered to the first study (chronologically). False if not specified.
+        """
+    ),
+)
+
+debug_preprocessing.add_argument(
+    "--orientation",
+    type=str,
+    default="RAI",
+    help=(
+        "The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
+    ),
+)
+
+debug_preprocessing.add_argument(
+    "--spacing",
+    type=str,
+    default="1,1,1",
+    help=(
+        """
+        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
+        are in mm. Defaults to '1,1,1'.
+        """
+    ),
+)
+
+debug_preprocessing.add_argument(
+    "--no-skullstrip",
+    action="store_true",
+    help=(
+        """
+        Whether to not apply skullstripping to preprocessed data. Skullstripping will be
+        applied if not specified."
+        """
+    ),
+)
+
+debug_preprocessing.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=0,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
+    ),
+)
+
+debug_preprocessing.add_argument(
+    "-v",
+    "--verbose",
+    action="store_true",
+    help=(
+        """
+        If specified, the commands that are called and their outputs will be printed to
+        the console.
+        """
+    ),
+)
+
 
 def main():
     args = parser.parse_args()
@@ -454,3 +588,22 @@ def main():
         tracked_command(
             preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir
         )
+
+    elif args.command == "debug-preprocessing":
+        if isinstance(args.patients, str):
+            args.patients = args.patients.split(",")
+
+        kwargs = {
+            "csv": args.csv,
+            "preprocessed_dir": args.preprocessed_dir,
+            "patients": args.patients,
+            "pipeline_key": args.pipeline_key,
+            "registration_key": args.registration_key,
+            "longitudinal_registration": args.longitudinal_registration,
+            "orientation": args.orientation,
+            "spacing": args.spacing,
+            "skullstrip": not args.no_skullstrip,
+            "cpus": args.cpus,
+            "verbose": args.verbose,
+        }
+        tracked_command(debug_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir)
