@@ -48,12 +48,14 @@ def source_external_software():
         'MissingSoftwareError' is raised if any software is not available.
     """
     paths = [
+        "/usr/local/freesurfer/7.3.3/bin",
         "/usr/pubsw/packages/fsl/6.0.6/bin",
         "/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/",
         "/usr/pubsw/packages/ANTS/2.3.5/bin",
     ]
     if all(os.path.exists(path) for path in paths):  # Source on Martinos Machine
         os.environ["PATH"] += (
+            ":/usr/local/freesurfer/7.3.3/bin"
             ":/usr/pubsw/packages/fsl/6.0.6/bin"
             ":/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/"
             ":/usr/pubsw/packages/ANTS/2.3.5/bin"
