@@ -3,15 +3,19 @@ import os
 import shutil
 import pandas as pd
 import numpy as np
-import nibabel as nib
 import multiprocessing
 import json
 
+from nibabel import save, load, as_closest_canonical, Nifti1Image
 from nipype.interfaces.ants import N4BiasFieldCorrection
 from pathlib import Path
 from subprocess import run
 from tqdm import tqdm
-from preprocessing.utils import source_external_software, check_required_columns
+from preprocessing.utils import (
+    source_external_software,
+    check_required_columns,
+    sitk_check,
+)
 from typing import Sequence
 
 
@@ -149,6 +153,7 @@ def registration(
         print(command)
     try:
         run(command.split(" "), capture_output=not verbose).check_returncode()
+        sitk_check(output_file)
 
     except Exception as error:
         return row, error
@@ -165,33 +170,13 @@ def registration(
 
         command = (
             f"Slicer --launch ResampleScalarVectorDWIVolume "
-            f"{preprocessed_seg} {output_seg} -i nn -R {main_SS_file} -z {x},{y},{z}"
+            f"{preprocessed_seg} {output_seg} -i nn -f {transform_outfile} -R {main_SS_file} -z {x},{y},{z}"
         )
         if verbose:
             print(command)
         try:
             run(command.split(" "), capture_output=not verbose).check_returncode()
-
-        except Exception as error:
-            return row, error
-
-        preprocessed_seg = row[f"{pipeline_key}_seg"]
-
-        if debug:
-            output_seg = preprocessed_seg.replace(".nii.gz", "_registered.nii.gz")
-            row[f"{pipeline_key}_seg"]
-
-        else:
-            output_seg = preprocessed_seg
-
-        command = (
-            f"Slicer --launch ResampleScalarVectorDWIVolume "
-            f"{preprocessed_seg} {output_seg} -i nn -f {transform_outfile}"
-        )
-        if verbose:
-            print(command)
-        try:
-            run(command.split(" "), capture_output=not verbose).check_returncode()
+            sitk_check(output_seg)
 
         except Exception as error:
             return row, error
@@ -307,6 +292,7 @@ def preprocess_study(
 
         if os.path.exists(preprocessed_file):
             rows[i][pipeline_key] = str(preprocessed_file)
+            sitk_check(preprocessed_file)
         else:
             os.makedirs(output_dir, exist_ok=True)
             shutil.copy(input_file, preprocessed_file)
@@ -326,6 +312,7 @@ def preprocess_study(
 
             if os.path.exists(preprocessed_seg):
                 rows[i][f"{pipeline_key}_seg"] = str(preprocessed_seg)
+                sitk_check(preprocessed_seg)
             else:
                 os.makedirs(output_dir, exist_ok=True)
                 shutil.copy(input_file, preprocessed_seg)
@@ -357,6 +344,7 @@ def preprocess_study(
             print(command)
         try:
             run(command.split(" "), capture_output=not verbose).check_returncode()
+            sitk_check(output_file)
 
         except Exception as error:
             print(error)
@@ -382,6 +370,7 @@ def preprocess_study(
                 print(command)
             try:
                 run(command.split(" "), capture_output=not verbose).check_returncode()
+                sitk_check(output_seg)
 
             except Exception as error:
                 print(error)
@@ -408,6 +397,7 @@ def preprocess_study(
             print(command)
         try:
             run(command.split(" "), capture_output=not verbose).check_returncode()
+            sitk_check(output_file)
 
         except Exception as error:
             print(error)
@@ -433,6 +423,7 @@ def preprocess_study(
                 print(command)
             try:
                 run(command.split(" "), capture_output=not verbose).check_returncode()
+                sitk_check(output_seg)
 
             except Exception as error:
                 print(error)
@@ -451,6 +442,8 @@ def preprocess_study(
             print(command)
         try:
             run(command.split(" "), capture_output=not verbose).check_returncode()
+            sitk_check(SS_file)
+            sitk_check(SS_mask)
 
         except Exception as error:
             print(error)
@@ -464,7 +457,9 @@ def preprocess_study(
             main_SS_mask_file = rows[0][pipeline_key].replace(
                 ".nii.gz", "_SS_mask.nii.gz"
             )
-            main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
+            main_SS_mask_array = np.round(
+                as_closest_canonical(load(main_SS_mask_file)).get_fdata()
+            )
         else:
             main_SS_file = registration_target.replace(
                 ".nii.gz", "_orientation_spacing_SS.nii.gz"
@@ -472,7 +467,9 @@ def preprocess_study(
             main_SS_mask_file = registration_target.replace(
                 ".nii.gz", "_orientation_spacing_SS_mask.nii.gz"
             )
-            main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
+            main_SS_mask_array = np.round(
+                as_closest_canonical(load(main_SS_mask_file)).get_fdata()
+            )
 
     else:
         if registration_target is None:
@@ -480,13 +477,17 @@ def preprocess_study(
             main_SS_mask_file = rows[0][pipeline_key].replace(
                 ".nii.gz", "_SS_mask.nii.gz"
             )
-            main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
+            main_SS_mask_array = np.round(
+                as_closest_canonical(load(main_SS_mask_file)).get_fdata()
+            )
         else:
             main_SS_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
             main_SS_mask_file = registration_target.replace(
                 ".nii.gz", "_SS_mask.nii.gz"
             )
-            main_SS_mask_array = np.round(nib.load(main_SS_mask_file).get_fdata())
+            main_SS_mask_array = np.round(
+                as_closest_canonical(load(main_SS_mask_file)).get_fdata()
+            )
 
     ### Register based on loose skullstrip
     fixed_image_path = main_SS_file
@@ -547,15 +548,14 @@ def preprocess_study(
             else:
                 output_file = preprocessed_file
 
-            nifti = nib.load(preprocessed_file)
+            nifti = as_closest_canonical(load(preprocessed_file))
             array = nifti.get_fdata()
 
             array = array * main_SS_mask_array
 
-            output_nifti = nib.Nifti1Image(
-                array, affine=nifti.affine, header=nifti.header
-            )
-            nib.save(output_nifti, output_file)
+            output_nifti = Nifti1Image(array, affine=nifti.affine, header=nifti.header)
+            save(output_nifti, output_file)
+            sitk_check(output_file)
 
             if "seg" in rows[i]:
                 preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
@@ -569,15 +569,16 @@ def preprocess_study(
                 else:
                     output_seg = preprocessed_seg
 
-                nifti = nib.load(preprocessed_seg)
+                nifti = as_closest_canonical(load(preprocessed_seg))
                 array = nifti.get_fdata()
 
                 array = array * main_SS_mask_array
 
-                output_nifti = nib.Nifti1Image(
+                output_nifti = Nifti1Image(
                     array, affine=nifti.affine, header=nifti.header
                 )
-                nib.save(output_nifti, output_seg)
+                save(output_nifti, output_seg)
+                sitk_check(output_seg)
 
     ### Bias correction
     for i in range(n):
@@ -595,6 +596,7 @@ def preprocess_study(
         n4.inputs.n_iterations = [20, 20, 10, 5]
         n4.inputs.output_image = output_file
         n4.run()
+        sitk_check(output_file)
 
     ### Normalization
     for i in range(n):
@@ -607,15 +609,18 @@ def preprocess_study(
         else:
             output_file = preprocessed_file
 
-        nifti = nib.load(preprocessed_file)
+        nifti = as_closest_canonical(load(preprocessed_file))
         array = nifti.get_fdata()
         masked_input_array = np.ma.masked_where(main_SS_mask_array == 0, array)
         mean = np.ma.mean(masked_input_array)
         std = np.ma.std(masked_input_array)
         array = (array - mean) / (std + 1e-6)
 
-        output_nifti = nib.Nifti1Image(array, affine=nifti.affine, header=nifti.header)
-        nib.save(output_nifti, output_file)
+        output_nifti = as_closest_canonical(
+            Nifti1Image(array, affine=nifti.affine, header=nifti.header)
+        )
+        save(output_nifti, output_file)
+        sitk_check(output_file)
 
     ### copy metadata
     preprocessing_args = {
@@ -988,7 +993,7 @@ def debug_from_csv(
         The directory that will contain the preprocessed NIfTI files.
     pipeline_key: str
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
-        Defaults to 'preprocessed'.
+        Defaults to 'debug'.
     registration_key: str
         The value that will be used to select the fixed image during registration. This should correspond
         to a value within the 'NormalizedSeriesDescription' column in the csv. If you have segmentation
@@ -1095,8 +1100,8 @@ def debug_from_csv(
             )
 
     preprocessed_df = pd.concat(outputs)
-    preprocessed_df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(
-        drop=True
-    )
+    preprocessed_df = preprocessed_df.sort_values(
+        ["Anon_PatientID", "Anon_StudyID"]
+    ).reset_index(drop=True)
     preprocessed_df.to_csv(preprocessed_dir / "debug.csv", index=False)
-    return df
+    return preprocessed_df

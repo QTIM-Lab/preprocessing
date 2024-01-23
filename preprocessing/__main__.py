@@ -441,11 +441,11 @@ debug_preprocessing.add_argument(
 debug_preprocessing.add_argument(
     "--pipeline-key",
     type=str,
-    default="preprocessed",
+    default="debug",
     help=(
         """
         The key that will be used in the csv to indicate the new locations of preprocessed 
-        files. Defaults to 'preprocessed'.
+        files. Defaults to 'debug'.
         """
     ),
 )

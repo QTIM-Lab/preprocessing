@@ -1,5 +1,7 @@
 import os
 import pandas as pd
+import SimpleITK as sitk
+from pathlib import Path
 from shutil import which
 from typing import Sequence
 
@@ -140,3 +142,8 @@ def check_required_columns(
                 required_columns=required_columns,
                 optional_columns=optional_columns,
             )
+
+
+def sitk_check(file: Path | str):
+    sitk_image = sitk.ReadImage(file)
+    sitk.WriteImage(sitk_image, file)
