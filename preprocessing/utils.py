@@ -65,6 +65,9 @@ def source_external_software():
         os.environ["FSLDIR"] = "/usr/pubsw/packages/fsl/6.0.6/"
         os.system(f"source {os.environ['FSLDIR']}/etc/fslconf/fsl.sh")
 
+        os.environ["FREESURFER_HOME"] = "/usr/local/freesurfer/7.3.3"
+        os.system(f"source {os.environ['FREESURFER_HOME']}/SetUpFreeSurfer.sh")
+
     else:
         required_software = ["dcm2niix", "Slicer", "ANTS"]
         for software in required_software:
