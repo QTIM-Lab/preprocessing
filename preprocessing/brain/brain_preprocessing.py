@@ -17,8 +17,13 @@ from preprocessing.utils import (
     sitk_check,
 )
 from typing import Sequence
-from skimage.filters import threshold_otsu
-from scipy.ndimage import binary_closing, binary_dilation, generate_binary_structure
+from scipy.ndimage import (
+    binary_fill_holes,
+    binary_closing,
+    binary_dilation,
+    distance_transform_edt,
+    generate_binary_structure,
+)
 from cc3d import connected_components
 
 
@@ -165,7 +170,7 @@ def registration(
         preprocessed_seg = row[f"{pipeline_key}_seg"]
 
         if debug:
-            output_seg = preprocessed_seg.replace(".nii.gz", "_resampled.nii.gz")
+            output_seg = preprocessed_seg.replace(".nii.gz", "_registered.nii.gz")
             row[f"{pipeline_key}_seg"]
 
         else:
@@ -619,45 +624,33 @@ def preprocess_study(
         std = np.ma.std(masked_input_array)
         array = (array - mean) / (std + 1e-6)
 
+        output_nifti = as_closest_canonical(
+            Nifti1Image(array, affine=nifti.affine, header=nifti.header)
+        )
+        save(output_nifti, output_file)
+        sitk_check(output_file)
+
         ### set background back to 0 for easy foreground cropping
         if skullstrip:
             array = array * main_SS_mask_array
 
         else:
-            otsu_threshold_value = threshold_otsu(array)
+            initial_foreground = (array > 1).astype(int)
 
-            otsu_foreground = (array > otsu_threshold_value).astype(int)
-
-            otsu_fm_output_file = preprocessed_file.replace(
-                ".nii.gz", "_otsu_mask.nii.gz"
+            initial_foreground_output_file = preprocessed_file.replace(
+                ".nii.gz", "_initial_foreground_mask.nii.gz"
             )
 
             output_nifti = as_closest_canonical(
-                Nifti1Image(otsu_foreground, affine=nifti.affine, header=nifti.header)
+                Nifti1Image(
+                    initial_foreground, affine=nifti.affine, header=nifti.header
+                )
             )
 
-            save(output_nifti, otsu_fm_output_file)
-            sitk_check(otsu_fm_output_file)
+            save(output_nifti, initial_foreground_output_file)
+            sitk_check(initial_foreground_output_file)
 
-            temp_background = 1 - otsu_foreground
-
-            background_cc = connected_components(temp_background)
-
-            background = (background_cc == 1).astype(int)
-
-            dilation_struct = generate_binary_structure(3, 3)
-
-            foreground = 1 - background
-
-            foreground = binary_closing(
-                foreground, structure=dilation_struct, iterations=10
-            ).astype(int)
-
-            foreground = binary_dilation(
-                foreground, structure=dilation_struct, iterations=2
-            )
-
-            foreground_cc = connected_components(foreground)
+            foreground_cc = connected_components(initial_foreground)
             ccs, counts = np.unique(foreground_cc, return_counts=True)
 
             sorted_ccs = sorted(
@@ -667,7 +660,36 @@ def preprocess_study(
 
             largest_cc = sorted_ccs[-1][0]
 
-            foreground = foreground == (largest_cc).astype(int)
+            foreground = (foreground_cc == largest_cc).astype(int)
+
+            struct_2d = generate_binary_structure(2, 2)
+
+            for z in range(foreground.shape[-1]):
+                foreground_slice = foreground[..., z]
+                if 1 not in np.unique(foreground_slice):
+                    continue
+                border_mask = np.ones_like(foreground_slice)
+                border_mask[0, :] = border_mask[-1, :] = border_mask[
+                    :, 0
+                ] = border_mask[:, -1] = 0
+                distance = distance_transform_edt(border_mask)
+
+                iterations = int(distance[foreground_slice == 1].min())
+        
+                foreground[..., z] = binary_closing(
+                    foreground_slice, structure=struct_2d, iterations=iterations
+                )
+ 
+            struct_3d = generate_binary_structure(3, 3)
+
+            idx = (
+                binary_dilation(
+                    main_SS_mask_array, structure=struct_3d, iterations=5
+                ).astype(int)
+                == 1
+            )
+
+            foreground[idx] = 1
 
             foreground_output_file = preprocessed_file.replace(
                 ".nii.gz", "_foreground_mask.nii.gz"
@@ -679,8 +701,17 @@ def preprocess_study(
 
             save(output_nifti, foreground_output_file)
             sitk_check(foreground_output_file)
-
+ 
             array = array * foreground
+
+        preprocessed_file = rows[i][pipeline_key]
+
+        if debug:
+            output_file = preprocessed_file.replace(".nii.gz", "_0background.nii.gz")
+            rows[i][pipeline_key] = output_file
+
+        else:
+            output_file = preprocessed_file
 
         output_nifti = as_closest_canonical(
             Nifti1Image(array, affine=nifti.affine, header=nifti.header)
@@ -814,9 +845,10 @@ def preprocess_patient(
         )
     )
 
+    ### TODO add recursive call in case of failure on the first study for a patient
+
     if len(study_uids) > 1:
         if longitudinal_registration:
-            print(preprocessed_dfs[0].keys())
             if debug:
                 output_dir = os.path.dirname(preprocessed_dfs[0][pipeline_key][0])
                 base_name = os.path.basename(preprocessed_dfs[0]["nifti"][0])
