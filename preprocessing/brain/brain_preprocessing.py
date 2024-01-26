@@ -676,8 +676,11 @@ def preprocess_study(
 
                 iterations = int(distance[foreground_slice == 1].min())
         
-                foreground[..., z] = binary_closing(
-                    foreground_slice, structure=struct_2d, iterations=iterations
+                foreground[..., z] = binary_fill_holes(
+                    binary_closing(
+                        foreground_slice, structure=struct_2d, iterations=iterations
+                    ),
+                    structure=struct_2d
                 )
  
             struct_3d = generate_binary_structure(3, 3)
