@@ -147,11 +147,15 @@ def registration(
 
     if verbose:
         print(command)
-    try:
-        run(command.split(" "), capture_output=not verbose).check_returncode()
 
-    except Exception as error:
-        return row, error
+    result = run(command.split(" "), capture_output=True)
+
+    try:
+        result.check_returncode()
+
+    except Exception:
+        print(result.stderr)
+        return row, result.stderr
 
     command = (
         f"Slicer --launch ResampleScalarVectorDWIVolume "
@@ -159,12 +163,15 @@ def registration(
     )
     if verbose:
         print(command)
+    result = run(command.split(" "), capture_output=True)
+
     try:
-        run(command.split(" "), capture_output=not verbose).check_returncode()
+        result.check_returncode()
         sitk_check(output_file)
 
-    except Exception as error:
-        return row, error
+    except Exception:
+        print(result.stderr)
+        return row, result.stderr
 
     if "seg" in row:
         preprocessed_seg = row[f"{pipeline_key}_seg"]
@@ -182,13 +189,15 @@ def registration(
         )
         if verbose:
             print(command)
+        result = run(command.split(" "), capture_output=True)
+
         try:
-            run(command.split(" "), capture_output=not verbose).check_returncode()
+            result.check_returncode()
             sitk_check(output_seg)
 
-        except Exception as error:
-            return row, error
-
+        except Exception:
+            print(result.stderr)
+            return row, result.stderr
     return row, None
 
 
@@ -311,6 +320,7 @@ def preprocess_study(
                 print(error)
                 e = open(f"{preprocessed_dir}/errors.txt", "a")
                 e.write(f"{error}\n")
+                setattr(study_df, "failed_preprocessing", True)
                 return study_df
 
         if "seg" in rows[i]:
@@ -331,6 +341,7 @@ def preprocess_study(
                     print(error)
                     e = open(f"{preprocessed_dir}/errors.txt", "a")
                     e.write(f"{error}\n")
+                    setattr(study_df, "failed_preprocessing", True)
                     return study_df
 
     ### Orientation
@@ -346,18 +357,23 @@ def preprocess_study(
 
         command = (
             f"Slicer --launch OrientScalarVolume "
-            f"{preprocessed_file} {output_file} -o {orientation}"
+            f"{preprocessed_file} {output_file} -o RAS"
         )
         if verbose:
             print(command)
+
+        result = run(command.split(" "), capture_output=True)
+
         try:
-            run(command.split(" "), capture_output=not verbose).check_returncode()
+            result.check_returncode()
             sitk_check(output_file)
 
-        except Exception as error:
+        except Exception:
+            error = result.stderr
             print(error)
             e = open(f"{preprocessed_dir}/errors.txt", "a")
             e.write(f"{error}\n")
+            setattr(study_df, "failed_preprocessing", True)
             return study_df
 
         if "seg" in rows[i]:
@@ -372,18 +388,22 @@ def preprocess_study(
 
             command = (
                 f"Slicer --launch OrientScalarVolume "
-                f"{preprocessed_seg} {output_seg} -o {orientation}"
+                f"{preprocessed_seg} {output_seg} -o RAS"
             )
             if verbose:
                 print(command)
+            result = run(command.split(" "), capture_output=True)
+
             try:
-                run(command.split(" "), capture_output=not verbose).check_returncode()
+                result.check_returncode()
                 sitk_check(output_seg)
 
-            except Exception as error:
+            except Exception:
+                error = result.stderr
                 print(error)
                 e = open(f"{preprocessed_dir}/errors.txt", "a")
                 e.write(f"{error}\n")
+                setattr(study_df, "failed_preprocessing", True)
                 return study_df
 
     ### Spacing
@@ -403,14 +423,19 @@ def preprocess_study(
         )
         if verbose:
             print(command)
+
+        result = run(command.split(" "), capture_output=True)
+
         try:
-            run(command.split(" "), capture_output=not verbose).check_returncode()
+            result.check_returncode()
             sitk_check(output_file)
 
-        except Exception as error:
+        except Exception:
+            error = result.stderr
             print(error)
             e = open(f"{preprocessed_dir}/errors.txt", "a")
             e.write(f"{error}\n")
+            setattr(study_df, "failed_preprocessing", True)
             return study_df
 
         if "seg" in rows[i]:
@@ -429,14 +454,18 @@ def preprocess_study(
             )
             if verbose:
                 print(command)
+            result = run(command.split(" "), capture_output=True)
+
             try:
-                run(command.split(" "), capture_output=not verbose).check_returncode()
+                result.check_returncode()
                 sitk_check(output_seg)
 
-            except Exception as error:
+            except Exception:
+                error = result.stderr
                 print(error)
                 e = open(f"{preprocessed_dir}/errors.txt", "a")
                 e.write(f"{error}\n")
+                setattr(study_df, "failed_preprocessing", True)
                 return study_df
 
     ### Loose Skullstrip
@@ -448,15 +477,20 @@ def preprocess_study(
         command = f"mri_synthstrip -i {preprocessed_file} -o {SS_file} -m {SS_mask}"
         if verbose:
             print(command)
+
+        result = run(command.split(" "), capture_output=True)
+
         try:
-            run(command.split(" "), capture_output=not verbose).check_returncode()
+            result.check_returncode()
             sitk_check(SS_file)
             sitk_check(SS_mask)
 
-        except Exception as error:
+        except Exception:
+            error = result.stderr
             print(error)
             e = open(f"{preprocessed_dir}/errors.txt", "a")
             e.write(f"{error}\n")
+            setattr(study_df, "failed_preprocessing", True)
             return study_df
 
     if debug:
@@ -517,6 +551,7 @@ def preprocess_study(
                     print(error)
                     e = open(f"{preprocessed_dir}/errors.txt", "a")
                     e.write(f"{error}\n")
+                    setattr(study_df, "failed_preprocessing", True)
                     return study_df
 
                 rows[i] = registered_row
@@ -538,6 +573,7 @@ def preprocess_study(
                 print(error)
                 e = open(f"{preprocessed_dir}/errors.txt", "a")
                 e.write(f"{error}\n")
+                setattr(study_df, "failed_preprocessing", True)
                 return study_df
 
             rows[i] = registered_row
@@ -675,14 +711,14 @@ def preprocess_study(
                 distance = distance_transform_edt(border_mask)
 
                 iterations = int(distance[foreground_slice == 1].min())
-        
+
                 foreground[..., z] = binary_fill_holes(
                     binary_closing(
                         foreground_slice, structure=struct_2d, iterations=iterations
                     ),
-                    structure=struct_2d
+                    structure=struct_2d,
                 )
- 
+
             struct_3d = generate_binary_structure(3, 3)
 
             idx = (
@@ -704,7 +740,7 @@ def preprocess_study(
 
             save(output_nifti, foreground_output_file)
             sitk_check(foreground_output_file)
- 
+
             array = array * foreground
 
         preprocessed_file = rows[i][pipeline_key]
@@ -737,6 +773,8 @@ def preprocess_study(
 
     preprocessed_df = pd.DataFrame(rows)
     out_df = pd.merge(study_df, preprocessed_df, "outer")
+
+    setattr(out_df, "failed_preprocessing", False)
 
     return out_df
 
@@ -849,83 +887,105 @@ def preprocess_patient(
     )
 
     ### TODO add recursive call in case of failure on the first study for a patient
-
-    if len(study_uids) > 1:
-        if longitudinal_registration:
-            if debug:
-                output_dir = os.path.dirname(preprocessed_dfs[0][pipeline_key][0])
-                base_name = os.path.basename(preprocessed_dfs[0]["nifti"][0])
-                registration_target = f"{output_dir}/{base_name}"
-
-            else:
-                registration_target = preprocessed_dfs[0][pipeline_key][0]
-
-            for study_uid in study_uids[1:]:
-                study_df = patient_df[
-                    patient_df["StudyInstanceUID"] == study_uid
-                ].copy()
-
-                preprocessed_dfs.append(
-                    preprocess_study(
-                        study_df=study_df,
-                        preprocessed_dir=preprocessed_dir,
-                        pipeline_key=pipeline_key,
-                        registration_key=registration_key,
-                        registration_target=registration_target,
-                        orientation=orientation,
-                        spacing=spacing,
-                        skullstrip=skullstrip,
-                        verbose=verbose,
-                        source_software=False,
-                        check_columns=False,
-                        debug=debug,
-                    )
-                )
+    if getattr(preprocessed_dfs[0], "failed_preprocessing", False):
+        if patient_df.shape[0] > 1:
+            patient_df = patient_df.loc[1:, :]
+            preprocess_patient(
+                patient_df=patient_df,
+                preprocessed_dir=preprocessed_dir,
+                pipeline_key=pipeline_key,
+                registration_key=registration_key,
+                longitudinal_registration=longitudinal_registration,
+                orientation=orientation,
+                spacing=spacing,
+                skullstrip=skullstrip,
+                verbose=verbose,
+                source_software=source_software,
+                check_columns=check_columns,
+                debug=debug,
+            )
 
         else:
-            for study_uid in study_uids[1:]:
-                study_df = patient_df[
-                    patient_df["StudyInstanceUID"] == study_uid
-                ].copy()
+            return patient_df
 
-                preprocessed_dfs.append(
-                    preprocess_study(
-                        study_df=study_df,
-                        preprocessed_dir=preprocessed_dir,
-                        pipeline_key=pipeline_key,
-                        registration_key=registration_key,
-                        registration_target=None,
-                        orientation=orientation,
-                        spacing=spacing,
-                        skullstrip=skullstrip,
-                        verbose=verbose,
-                        source_software=False,
-                        check_columns=False,
-                        debug=debug,
+    else:
+        if len(study_uids) > 1:
+            if longitudinal_registration:
+                if debug:
+                    print(preprocessed_dfs)
+                    output_dir = os.path.dirname(preprocessed_dfs[0][pipeline_key][0])
+                    base_name = os.path.basename(preprocessed_dfs[0]["nifti"][0])
+                    registration_target = f"{output_dir}/{base_name}"
+
+                else:
+                    registration_target = preprocessed_dfs[0][pipeline_key][0]
+
+                for study_uid in study_uids[1:]:
+                    study_df = patient_df[
+                        patient_df["StudyInstanceUID"] == study_uid
+                    ].copy()
+
+                    preprocessed_dfs.append(
+                        preprocess_study(
+                            study_df=study_df,
+                            preprocessed_dir=preprocessed_dir,
+                            pipeline_key=pipeline_key,
+                            registration_key=registration_key,
+                            registration_target=registration_target,
+                            orientation=orientation,
+                            spacing=spacing,
+                            skullstrip=skullstrip,
+                            verbose=verbose,
+                            source_software=False,
+                            check_columns=False,
+                            debug=debug,
+                        )
                     )
-                )
 
-    # clear extra files
-    anon_patientID = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
-    patient_dir = preprocessed_dir / anon_patientID
+            else:
+                for study_uid in study_uids[1:]:
+                    study_df = patient_df[
+                        patient_df["StudyInstanceUID"] == study_uid
+                    ].copy()
 
-    out_df = pd.concat(preprocessed_dfs, ignore_index=True)
+                    preprocessed_dfs.append(
+                        preprocess_study(
+                            study_df=study_df,
+                            preprocessed_dir=preprocessed_dir,
+                            pipeline_key=pipeline_key,
+                            registration_key=registration_key,
+                            registration_target=None,
+                            orientation=orientation,
+                            spacing=spacing,
+                            skullstrip=skullstrip,
+                            verbose=verbose,
+                            source_software=False,
+                            check_columns=False,
+                            debug=debug,
+                        )
+                    )
 
-    if not debug:
-        extra_files = (
-            list(patient_dir.glob("**/*SS.nii.gz"))
-            + list(patient_dir.glob("**/*mask.nii.gz"))
-            + list(patient_dir.glob("**/*.tfm"))
-            + list(patient_dir.glob("**/*.h5"))
-        )
+        # clear extra files
+        anon_patientID = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
+        patient_dir = preprocessed_dir / anon_patientID
 
-        print("......Clearing unnecessary files......")
-        for file in extra_files:
-            os.remove(file)
+        out_df = pd.concat(preprocessed_dfs, ignore_index=True)
 
-    print(f"Finished preprocessing {anon_patientID}:")
-    print(out_df)
-    return out_df
+        if not debug:
+            extra_files = (
+                list(patient_dir.glob("**/*SS.nii.gz"))
+                + list(patient_dir.glob("**/*mask.nii.gz"))
+                + list(patient_dir.glob("**/*.tfm"))
+                + list(patient_dir.glob("**/*.h5"))
+            )
+
+            print("......Clearing unnecessary files......")
+            for file in extra_files:
+                os.remove(file)
+
+        print(f"Finished preprocessing {anon_patientID}:")
+        print(out_df)
+        return out_df
 
 
 def preprocess_patient_star(args):

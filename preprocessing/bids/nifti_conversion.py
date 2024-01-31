@@ -1,13 +1,64 @@
 import multiprocessing
 import os
 import pandas as pd
+import numpy as np
 
 from subprocess import run
 from typing import Literal
 from tqdm import tqdm
 from pathlib import Path
 from preprocessing.utils import source_external_software, check_required_columns
+from preprocessing.dcm_tools import sort_slices, calc_slice_distance
 from dicom2nifti import convert_directory
+from pydicom import dcmread
+from numpy.linalg import norm
+
+
+def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
+    series_dir = Path(series_dir)
+
+    files = list(series_dir.glob("**/*"))
+
+    dcms = []
+
+    for file in files:
+        dcms.append(dcmread(file, stop_before_pixels=True))
+
+    dcms = sort_slices(dcms)
+
+    # orientation unit vectors
+    orientation = dcms[0].ImageOrientationPatient
+
+    if not np.allclose(norm(orientation[:3]), 1, atol=eps) or not np.allclose(
+        norm(orientation[3:]), 1, atol=eps
+    ):
+        return False
+
+    # required metadata is present and consistent
+    required_metadata = ["ImageOrientationPatient", "SliceThickness", "PixelSpacing"]
+
+    try:
+        for meta in required_metadata:
+            meta_0 = getattr(dcms[0], meta)
+            for dcm in dcms[1:]:
+                if not np.allclose(meta_0, getattr(dcm, meta), atol=eps):
+                    return False
+    except Exception:
+        return False
+
+    # consistent distance
+    dists = []
+    for dcm in dcms:
+        dists.append(
+            calc_slice_distance(dcm.ImageOrientationPatient, dcm.ImagePositionPatient)
+        )
+
+    spacing = np.diff(dists)
+
+    if not np.allclose(spacing, spacing.mean(), atol=eps):
+        return False
+
+    return True
 
 
 def convert_to_nifti(
@@ -54,6 +105,12 @@ def convert_to_nifti(
     str | None
         The output name of the NIfTI file if it is successfully created, else None.
     """
+    if not dicom_integrity_checks(dicom_dir):
+        print(
+            f"{dicom_dir} does not pass integrity checks and will not be converted to nifti"
+        )
+        return None
+
     if source_software:
         source_external_software()
 

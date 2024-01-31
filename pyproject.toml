@@ -20,6 +20,7 @@ pycrumbs = "^0.2.0"
 simpleitk = "^2.3.1"
 connected-components-3d = "^3.12.4"
 scikit-image = "^0.22.0"
+highdicom = "^0.22.0"
 
 
 [build-system]
