@@ -6,7 +6,7 @@ import numpy as np
 import multiprocessing
 import json
 
-from nibabel import save, load, as_closest_canonical, Nifti1Image
+from SimpleITK import ReadImage, WriteImage, GetArrayFromImage, GetImageFromArray
 from nipype.interfaces.ants import N4BiasFieldCorrection
 from pathlib import Path
 from subprocess import run
@@ -112,7 +112,6 @@ def registration(
     fixed_image_path,
     main_SS_file,
     main_SS_mask_file,
-    main_SS_mask_array,
     verbose,
     debug,
 ):
@@ -129,7 +128,6 @@ def registration(
     moving_image_skullmask = preprocessed_file.replace(".nii.gz", "_SS_mask.nii.gz")
     transform_outfile = preprocessed_file.replace(".nii.gz", "_transform.tfm")
     sampling_percentage = 0.002
-    x, y, z = main_SS_mask_array.shape
 
     command = (
         f"Slicer "
@@ -159,7 +157,7 @@ def registration(
 
     command = (
         f"Slicer --launch ResampleScalarVectorDWIVolume "
-        f"{preprocessed_file} {output_file} -i bs -f {transform_outfile} -R {main_SS_file} -z {x},{y},{z}"
+        f"{preprocessed_file} {output_file} -i bs -f {transform_outfile} -R {main_SS_file}"
     )
     if verbose:
         print(command)
@@ -185,7 +183,7 @@ def registration(
 
         command = (
             f"Slicer --launch ResampleScalarVectorDWIVolume "
-            f"{preprocessed_seg} {output_seg} -i nn -f {transform_outfile} -R {main_SS_file} -z {x},{y},{z}"
+            f"{preprocessed_seg} {output_seg} -i nn -f {transform_outfile} -R {main_SS_file}"
         )
         if verbose:
             print(command)
@@ -207,7 +205,7 @@ def preprocess_study(
     pipeline_key: str,
     registration_key: str = "T1Post",
     registration_target: str | None = None,
-    orientation: str = "RAI",
+    orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
     verbose: bool = False,
@@ -344,12 +342,12 @@ def preprocess_study(
                     setattr(study_df, "failed_preprocessing", True)
                     return study_df
 
-    ### Orientation
+    ### RAS
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
 
         if debug:
-            output_file = preprocessed_file.replace(".nii.gz", "_orientation.nii.gz")
+            output_file = preprocessed_file.replace(".nii.gz", "_RAS.nii.gz")
             rows[i][pipeline_key] = output_file
 
         else:
@@ -380,7 +378,7 @@ def preprocess_study(
             preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
 
             if debug:
-                output_seg = preprocessed_seg.replace(".nii.gz", "_orientation.nii.gz")
+                output_seg = preprocessed_seg.replace(".nii.gz", "_RAS.nii.gz")
                 rows[i][f"{pipeline_key}_seg"] = output_seg
 
             else:
@@ -500,17 +498,17 @@ def preprocess_study(
                 ".nii.gz", "_SS_mask.nii.gz"
             )
             main_SS_mask_array = np.round(
-                as_closest_canonical(load(main_SS_mask_file)).get_fdata()
+                GetArrayFromImage(ReadImage(main_SS_mask_file))
             )
         else:
             main_SS_file = registration_target.replace(
-                ".nii.gz", "_orientation_spacing_SS.nii.gz"
+                ".nii.gz", "_RAS_spacing_SS.nii.gz"
             )
             main_SS_mask_file = registration_target.replace(
-                ".nii.gz", "_orientation_spacing_SS_mask.nii.gz"
+                ".nii.gz", "_RAS_spacing_SS_mask.nii.gz"
             )
             main_SS_mask_array = np.round(
-                as_closest_canonical(load(main_SS_mask_file)).get_fdata()
+                GetArrayFromImage(ReadImage(main_SS_mask_file))
             )
 
     else:
@@ -520,7 +518,7 @@ def preprocess_study(
                 ".nii.gz", "_SS_mask.nii.gz"
             )
             main_SS_mask_array = np.round(
-                as_closest_canonical(load(main_SS_mask_file)).get_fdata()
+                GetArrayFromImage(ReadImage(main_SS_mask_file))
             )
         else:
             main_SS_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
@@ -528,7 +526,7 @@ def preprocess_study(
                 ".nii.gz", "_SS_mask.nii.gz"
             )
             main_SS_mask_array = np.round(
-                as_closest_canonical(load(main_SS_mask_file)).get_fdata()
+                GetArrayFromImage(ReadImage(main_SS_mask_file))
             )
 
     ### Register based on loose skullstrip
@@ -542,7 +540,6 @@ def preprocess_study(
                     fixed_image_path,
                     main_SS_file,
                     main_SS_mask_file,
-                    main_SS_mask_array,
                     verbose,
                     debug,
                 )
@@ -564,7 +561,6 @@ def preprocess_study(
                 fixed_image_path,
                 main_SS_file,
                 main_SS_mask_file,
-                main_SS_mask_array,
                 verbose,
                 debug,
             )
@@ -592,14 +588,13 @@ def preprocess_study(
             else:
                 output_file = preprocessed_file
 
-            nifti = as_closest_canonical(load(preprocessed_file))
-            array = nifti.get_fdata()
+            nifti = ReadImage(preprocessed_file)
+            array = GetArrayFromImage(nifti)
 
             array = array * main_SS_mask_array
 
-            output_nifti = Nifti1Image(array, affine=nifti.affine, header=nifti.header)
-            save(output_nifti, output_file)
-            sitk_check(output_file)
+            output_nifti = GetImageFromArray(array).CopyInformation(nifti)
+            WriteImage(output_nifti, output_file)
 
             if "seg" in rows[i]:
                 preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
@@ -613,16 +608,13 @@ def preprocess_study(
                 else:
                     output_seg = preprocessed_seg
 
-                nifti = as_closest_canonical(load(preprocessed_seg))
-                array = nifti.get_fdata()
+                nifti = ReadImage(preprocessed_seg)
+                array = GetArrayFromImage(nifti)
 
                 array = array * main_SS_mask_array
 
-                output_nifti = Nifti1Image(
-                    array, affine=nifti.affine, header=nifti.header
-                )
-                save(output_nifti, output_seg)
-                sitk_check(output_seg)
+                output_nifti = GetImageFromArray(array).CopyInformation(nifti)
+                WriteImage(output_nifti, output_seg)
 
     ### Bias correction
     for i in range(n):
@@ -653,38 +645,31 @@ def preprocess_study(
         else:
             output_file = preprocessed_file
 
-        nifti = as_closest_canonical(load(preprocessed_file))
-        array = nifti.get_fdata()
+        nifti = ReadImage(preprocessed_file)
+        array = GetArrayFromImage(nifti)
         masked_input_array = np.ma.masked_where(main_SS_mask_array == 0, array)
         mean = np.ma.mean(masked_input_array)
         std = np.ma.std(masked_input_array)
         array = (array - mean) / (std + 1e-6)
 
-        output_nifti = as_closest_canonical(
-            Nifti1Image(array, affine=nifti.affine, header=nifti.header)
-        )
-        save(output_nifti, output_file)
-        sitk_check(output_file)
+        output_nifti = GetImageFromArray(array)
+        output_nifti.CopyInformation(nifti)
+        WriteImage(output_nifti, output_file)
 
         ### set background back to 0 for easy foreground cropping
         if skullstrip:
             array = array * main_SS_mask_array
 
         else:
-            initial_foreground = (array > 1).astype(int)
+            initial_foreground = (array > 0).astype(int)
 
             initial_foreground_output_file = preprocessed_file.replace(
                 ".nii.gz", "_initial_foreground_mask.nii.gz"
             )
 
-            output_nifti = as_closest_canonical(
-                Nifti1Image(
-                    initial_foreground, affine=nifti.affine, header=nifti.header
-                )
-            )
-
-            save(output_nifti, initial_foreground_output_file)
-            sitk_check(initial_foreground_output_file)
+            output_nifti = GetImageFromArray(initial_foreground)
+            output_nifti.CopyInformation(nifti)
+            WriteImage(output_nifti, initial_foreground_output_file)
 
             foreground_cc = connected_components(initial_foreground)
             ccs, counts = np.unique(foreground_cc, return_counts=True)
@@ -700,8 +685,8 @@ def preprocess_study(
 
             struct_2d = generate_binary_structure(2, 2)
 
-            for z in range(foreground.shape[-1]):
-                foreground_slice = foreground[..., z]
+            for z in range(foreground.shape[0]):
+                foreground_slice = foreground[z, ...]
                 if 1 not in np.unique(foreground_slice):
                     continue
                 border_mask = np.ones_like(foreground_slice)
@@ -712,7 +697,7 @@ def preprocess_study(
 
                 iterations = int(distance[foreground_slice == 1].min())
 
-                foreground[..., z] = binary_fill_holes(
+                foreground[z, ...] = binary_fill_holes(
                     binary_closing(
                         foreground_slice, structure=struct_2d, iterations=iterations
                     ),
@@ -734,12 +719,9 @@ def preprocess_study(
                 ".nii.gz", "_foreground_mask.nii.gz"
             )
 
-            output_nifti = as_closest_canonical(
-                Nifti1Image(foreground, affine=nifti.affine, header=nifti.header)
-            )
-
-            save(output_nifti, foreground_output_file)
-            sitk_check(foreground_output_file)
+            output_nifti = GetImageFromArray(foreground)
+            output_nifti.CopyInformation(nifti)
+            WriteImage(output_nifti, foreground_output_file)
 
             array = array * foreground
 
@@ -752,11 +734,76 @@ def preprocess_study(
         else:
             output_file = preprocessed_file
 
-        output_nifti = as_closest_canonical(
-            Nifti1Image(array, affine=nifti.affine, header=nifti.header)
-        )
-        save(output_nifti, output_file)
-        sitk_check(output_file)
+        output_nifti = GetImageFromArray(array)
+        output_nifti.CopyInformation(nifti)
+        WriteImage(output_nifti, output_file)
+
+    ### Orientation
+    if orientation != "RAS":
+        for i in range(n):
+            preprocessed_file = rows[i][pipeline_key]
+
+            if debug:
+                output_file = preprocessed_file.replace(
+                    ".nii.gz", f"_{orientation}.nii.gz"
+                )
+                rows[i][pipeline_key] = output_file
+
+            else:
+                output_file = preprocessed_file
+
+            command = (
+                f"Slicer --launch OrientScalarVolume "
+                f"{preprocessed_file} {output_file} -o {orientation}"
+            )
+            if verbose:
+                print(command)
+
+            result = run(command.split(" "), capture_output=True)
+
+            try:
+                result.check_returncode()
+                sitk_check(output_file)
+
+            except Exception:
+                error = result.stderr
+                print(error)
+                e = open(f"{preprocessed_dir}/errors.txt", "a")
+                e.write(f"{error}\n")
+                setattr(study_df, "failed_preprocessing", True)
+                return study_df
+
+            if "seg" in rows[i]:
+                preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+
+                if debug:
+                    output_seg = preprocessed_seg.replace(
+                        ".nii.gz", f"_{orientation}.nii.gz"
+                    )
+                    rows[i][f"{pipeline_key}_seg"] = output_seg
+
+                else:
+                    output_seg = preprocessed_seg
+
+                command = (
+                    f"Slicer --launch OrientScalarVolume "
+                    f"{preprocessed_seg} {output_seg} -o {orientation}"
+                )
+                if verbose:
+                    print(command)
+                result = run(command.split(" "), capture_output=True)
+
+                try:
+                    result.check_returncode()
+                    sitk_check(output_seg)
+
+                except Exception:
+                    error = result.stderr
+                    print(error)
+                    e = open(f"{preprocessed_dir}/errors.txt", "a")
+                    e.write(f"{error}\n")
+                    setattr(study_df, "failed_preprocessing", True)
+                    return study_df
 
     ### copy metadata
     preprocessing_args = {
@@ -785,7 +832,7 @@ def preprocess_patient(
     pipeline_key: str = "preprocessed",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
-    orientation: str = "RAI",
+    orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
     verbose: bool = False,
@@ -1003,7 +1050,7 @@ def preprocess_from_csv(
     pipeline_key: str = "preprocessed",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
-    orientation: str = "RAI",
+    orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
     cpus: int = 0,
@@ -1137,7 +1184,7 @@ def debug_from_csv(
     pipeline_key: str = "debug",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
-    orientation: str = "RAI",
+    orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
     cpus: int = 0,
