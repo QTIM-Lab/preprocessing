@@ -593,7 +593,8 @@ def preprocess_study(
 
             array = array * main_SS_mask_array
 
-            output_nifti = GetImageFromArray(array).CopyInformation(nifti)
+            output_nifti = GetImageFromArray(array)
+            output_nifti.CopyInformation(nifti)
             WriteImage(output_nifti, output_file)
 
             if "seg" in rows[i]:
