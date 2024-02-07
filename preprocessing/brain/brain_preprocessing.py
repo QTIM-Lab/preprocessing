@@ -124,24 +124,60 @@ def registration(
     else:
         output_file = preprocessed_file
 
-    moving_image_path = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
-    moving_image_skullmask = preprocessed_file.replace(".nii.gz", "_SS_mask.nii.gz")
-    transform_outfile = preprocessed_file.replace(".nii.gz", "_transform.tfm")
-    sampling_percentage = 0.002
+    # moving_image_path = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
+    # moving_image_skullmask = preprocessed_file.replace(".nii.gz", "_SS_mask.nii.gz")
+    # transform_outfile = preprocessed_file.replace(".nii.gz", "_transform.tfm")
+    # sampling_percentage = 0.002
+    #
+    # command = (
+    #     f"Slicer "
+    #     f"--launch BRAINSFit --fixedVolume {fixed_image_path} "
+    #     f"--movingVolume {moving_image_path} "
+    #     "--transformType Rigid,ScaleVersor3D,ScaleSkewVersor3D,Affine "
+    #     "--initializeTransformMode useCenterOfROIAlign "
+    #     "--interpolationMode WindowedSinc "
+    #     f"--outputTransform {transform_outfile} "
+    #     f"--samplingPercentage {sampling_percentage} "
+    #     f"--movingBinaryVolume {moving_image_skullmask} "
+    #     f"--fixedBinaryVolume {main_SS_mask_file} "
+    #     "--maskProcessingMode ROI"
+    # )
+    #
+    # if verbose:
+    #     print(command)
+    #
+    # result = run(command.split(" "), capture_output=True)
+    #
+    # try:
+    #     result.check_returncode()
+    #
+    # except Exception:
+    #     print(result.stderr)
+    #     return row, result.stderr
+    #
+    # command = (
+    #     f"Slicer --launch ResampleScalarVectorDWIVolume "
+    #     f"{preprocessed_file} {output_file} -i bs -f {transform_outfile} -R {main_SS_file}"
+    # )
+    # if verbose:
+    #     print(command)
+    # result = run(command.split(" "), capture_output=True)
+    #
+    # try:
+    #     result.check_returncode()
+    #     sitk_check(output_file)
+    #
+    # except Exception:
+    #     print(result.stderr)
+    #     return row, result.stderr
 
-    command = (
-        f"Slicer "
-        f"--launch BRAINSFit --fixedVolume {fixed_image_path} "
-        f"--movingVolume {moving_image_path} "
-        "--transformType Rigid,ScaleVersor3D,ScaleSkewVersor3D,Affine "
-        "--initializeTransformMode useCenterOfROIAlign "
-        "--interpolationMode WindowedSinc "
-        f"--outputTransform {transform_outfile} "
-        f"--samplingPercentage {sampling_percentage} "
-        f"--movingBinaryVolume {moving_image_skullmask} "
-        f"--fixedBinaryVolume {main_SS_mask_file} "
-        "--maskProcessingMode ROI"
-    )
+    moving_image_path = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
+    moving_image_mask_file = preprocessed_file.replace(".nii.gz", "_SS_mask.nii.gz")
+    initialization = preprocessed_file.replace(".nii.gz", "_initialization.txt")
+    transform_mgz = preprocessed_file.replace(".nii.gz", "_transform.mgz")
+    transform_m3z = preprocessed_file.replace(".nii.gz", "_transform.m3z")
+
+    command = f"mri_synthmorph {'-g ' if 'USE_GPU_FOR_SYNTHMORPH' in os.environ else ''}-m rigid -t {initialization} {moving_image_mask_file} {main_SS_mask_file}"
 
     if verbose:
         print(command)
@@ -156,16 +192,44 @@ def registration(
         return row, result.stderr
 
     command = (
-        f"Slicer --launch ResampleScalarVectorDWIVolume "
-        f"{preprocessed_file} {output_file} -i bs -f {transform_outfile} -R {main_SS_file}"
+        f"mri_synthmorph {'-g ' if 'USE_GPU_FOR_SYNTHMORPH' in os.environ else ''}-i {initialization} -t {transform_mgz} {moving_image_path} {fixed_image_path}"
     )
+
     if verbose:
         print(command)
+
     result = run(command.split(" "), capture_output=True)
 
     try:
         result.check_returncode()
-        sitk_check(output_file)
+
+    except Exception:
+        print(result.stderr)
+        return row, result.stderr
+
+    command = f"mri_warp_convert -g {moving_image_path} --inras {transform_mgz} --outm3z {transform_m3z}"
+
+    if verbose:
+        print(command)
+
+    result = run(command.split(" "), capture_output=True)
+
+    try:
+        result.check_returncode()
+
+    except Exception:
+        print(result.stderr)
+        return row, result.stderr
+
+    command = f"mri_convert --apply_transform {transform_m3z} {preprocessed_file} {output_file}"
+
+    if verbose:
+        print(command)
+
+    result = run(command.split(" "), capture_output=True)
+
+    try:
+        result.check_returncode()
 
     except Exception:
         print(result.stderr)
@@ -181,21 +245,36 @@ def registration(
         else:
             output_seg = preprocessed_seg
 
-        command = (
-            f"Slicer --launch ResampleScalarVectorDWIVolume "
-            f"{preprocessed_seg} {output_seg} -i nn -f {transform_outfile} -R {main_SS_file}"
-        )
+        # command = (
+        #     f"Slicer --launch ResampleScalarVectorDWIVolume "
+        #     f"{preprocessed_seg} {output_seg} -i nn -f {transform_outfile} -R {main_SS_file}"
+        # )
+        # if verbose:
+        #     print(command)
+        # result = run(command.split(" "), capture_output=True)
+        #
+        # try:
+        #     result.check_returncode()
+        #     sitk_check(output_seg)
+        #
+        # except Exception:
+        #     print(result.stderr)
+        #     return row, result.stderr
+
+        command = f"mri_convert --apply_transform {transform_m3z} {preprocessed_seg} {output_seg}"
+
         if verbose:
             print(command)
+
         result = run(command.split(" "), capture_output=True)
 
         try:
             result.check_returncode()
-            sitk_check(output_seg)
 
         except Exception:
             print(result.stderr)
             return row, result.stderr
+
     return row, None
 
 
@@ -1023,8 +1102,9 @@ def preprocess_patient(
             extra_files = (
                 list(patient_dir.glob("**/*SS.nii.gz"))
                 + list(patient_dir.glob("**/*mask.nii.gz"))
-                + list(patient_dir.glob("**/*.tfm"))
-                + list(patient_dir.glob("**/*.h5"))
+                + list(patient_dir.glob("**/*.mgz"))
+                + list(patient_dir.glob("**/*.m3z"))
+                + list(patient_dir.glob("**/*.txt"))
             )
 
             print("......Clearing unnecessary files......")
@@ -1263,6 +1343,7 @@ def debug_from_csv(
         patients = filtered_df["Anon_PatientID"].unique()
 
     if cpus == 0:
+        os.environ["USE_GPU_FOR_SYNTHMORPH"] = "TRUE"
         outputs = [
             preprocess_patient(
                 filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),

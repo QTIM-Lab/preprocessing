@@ -52,14 +52,21 @@ def source_external_software():
         "/usr/pubsw/packages/fsl/6.0.6/bin",
         "/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/",
         "/usr/pubsw/packages/ANTS/2.3.5/bin",
+        "/usr/pubsw/packages/CUDA/11.8/bin",
     ]
     if all(os.path.exists(path) for path in paths):  # Source on Martinos Machine
-        os.environ["PATH"] += (
-            ":/usr/local/freesurfer/7.4.1/bin"
-            ":/usr/pubsw/packages/fsl/6.0.6/bin"
-            ":/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/"
-            ":/usr/pubsw/packages/ANTS/2.3.5/bin"
+        os.environ["PATH"] = (
+            "/usr/local/freesurfer/7.4.1/bin:"
+            "/usr/pubsw/packages/fsl/6.0.6/bin:"
+            "/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/:"
+            "/usr/pubsw/packages/ANTS/2.3.5/bin:"
+            "/usr/pubsw/packages/CUDA/11.8/bin:"
+        ) + os.environ["PATH"]
+
+        os.environ["LD_LIBRARY_PATH"] = (
+            "/usr/pubsw/packages/CUDA/11.8/lib64:" + os.environ["LD_LIBRARY_PATH"]
         )
+
         os.environ["ANTSPATH"] = "/usr/pubsw/packages/ANTS/2.3.5/bin"
 
         os.environ["FSLDIR"] = "/usr/pubsw/packages/fsl/6.0.6/"
