@@ -16,6 +16,7 @@ from preprocessing.utils import (
     check_required_columns,
     sitk_check,
 )
+from preprocessing.synthmorph import synthmorph_registration
 from typing import Sequence
 from scipy.ndimage import (
     binary_fill_holes,
@@ -106,176 +107,122 @@ def copy_metadata(row: dict, preprocessing_args: dict) -> None:
             e.write(f"{error}\n")
 
 
-def registration(
-    row,
-    pipeline_key,
-    fixed_image_path,
-    main_SS_file,
-    main_SS_mask_file,
-    verbose,
-    debug,
+def local_reg(
+    row, pipeline_key, fixed_image_path, model="affine", verbose=False, debug=False
 ):
     preprocessed_file = row[pipeline_key]
 
     if debug:
-        output_file = preprocessed_file.replace(".nii.gz", "_registered.nii.gz")
+        output_file = preprocessed_file.replace(".nii.gz", "_localreg.nii.gz")
         row[pipeline_key] = output_file
 
     else:
         output_file = preprocessed_file
 
-    # moving_image_path = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
-    # moving_image_skullmask = preprocessed_file.replace(".nii.gz", "_SS_mask.nii.gz")
-    # transform_outfile = preprocessed_file.replace(".nii.gz", "_transform.tfm")
-    # sampling_percentage = 0.002
-    #
-    # command = (
-    #     f"Slicer "
-    #     f"--launch BRAINSFit --fixedVolume {fixed_image_path} "
-    #     f"--movingVolume {moving_image_path} "
-    #     "--transformType Rigid,ScaleVersor3D,ScaleSkewVersor3D,Affine "
-    #     "--initializeTransformMode useCenterOfROIAlign "
-    #     "--interpolationMode WindowedSinc "
-    #     f"--outputTransform {transform_outfile} "
-    #     f"--samplingPercentage {sampling_percentage} "
-    #     f"--movingBinaryVolume {moving_image_skullmask} "
-    #     f"--fixedBinaryVolume {main_SS_mask_file} "
-    #     "--maskProcessingMode ROI"
-    # )
-    #
-    # if verbose:
-    #     print(command)
-    #
-    # result = run(command.split(" "), capture_output=True)
-    #
-    # try:
-    #     result.check_returncode()
-    #
-    # except Exception:
-    #     print(result.stderr)
-    #     return row, result.stderr
-    #
-    # command = (
-    #     f"Slicer --launch ResampleScalarVectorDWIVolume "
-    #     f"{preprocessed_file} {output_file} -i bs -f {transform_outfile} -R {main_SS_file}"
-    # )
-    # if verbose:
-    #     print(command)
-    # result = run(command.split(" "), capture_output=True)
-    #
-    # try:
-    #     result.check_returncode()
-    #     sitk_check(output_file)
-    #
-    # except Exception:
-    #     print(result.stderr)
-    #     return row, result.stderr
-
     moving_image_path = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
-    moving_image_mask_file = preprocessed_file.replace(".nii.gz", "_SS_mask.nii.gz")
-    initialization = preprocessed_file.replace(".nii.gz", "_initialization.txt")
-    transform_mgz = preprocessed_file.replace(".nii.gz", "_transform.mgz")
-    transform_m3z = preprocessed_file.replace(".nii.gz", "_transform.m3z")
 
-    command = f"mri_synthmorph {'-g ' if 'USE_GPU_FOR_SYNTHMORPH' in os.environ else ''}-m rigid -t {initialization} {moving_image_mask_file} {main_SS_mask_file}"
-
-    if verbose:
-        print(command)
-
-    result = run(command.split(" "), capture_output=True)
-
-    try:
-        result.check_returncode()
-
-    except Exception:
-        print(result.stderr)
-        return row, result.stderr
-
-    command = (
-        f"mri_synthmorph {'-g ' if 'USE_GPU_FOR_SYNTHMORPH' in os.environ else ''}-i {initialization} -t {transform_mgz} {moving_image_path} {fixed_image_path}"
-    )
-
-    if verbose:
-        print(command)
-
-    result = run(command.split(" "), capture_output=True)
-
-    try:
-        result.check_returncode()
-
-    except Exception:
-        print(result.stderr)
-        return row, result.stderr
-
-    command = f"mri_warp_convert -g {moving_image_path} --inras {transform_mgz} --outm3z {transform_m3z}"
-
-    if verbose:
-        print(command)
-
-    result = run(command.split(" "), capture_output=True)
-
-    try:
-        result.check_returncode()
-
-    except Exception:
-        print(result.stderr)
-        return row, result.stderr
-
-    command = f"mri_convert --apply_transform {transform_m3z} {preprocessed_file} {output_file}"
-
-    if verbose:
-        print(command)
-
-    result = run(command.split(" "), capture_output=True)
-
-    try:
-        result.check_returncode()
-
-    except Exception:
-        print(result.stderr)
-        return row, result.stderr
+    accompanying_images = [{"moving": preprocessed_file, "out_moving": output_file}]
 
     if "seg" in row:
         preprocessed_seg = row[f"{pipeline_key}_seg"]
-
         if debug:
-            output_seg = preprocessed_seg.replace(".nii.gz", "_registered.nii.gz")
-            row[f"{pipeline_key}_seg"]
+            output_seg = preprocessed_seg.replace(".nii.gz", "_localreg.nii.gz")
+            row[f"{pipeline_key}_seg"] = output_seg
 
         else:
             output_seg = preprocessed_seg
 
-        # command = (
-        #     f"Slicer --launch ResampleScalarVectorDWIVolume "
-        #     f"{preprocessed_seg} {output_seg} -i nn -f {transform_outfile} -R {main_SS_file}"
-        # )
-        # if verbose:
-        #     print(command)
-        # result = run(command.split(" "), capture_output=True)
-        #
-        # try:
-        #     result.check_returncode()
-        #     sitk_check(output_seg)
-        #
-        # except Exception:
-        #     print(result.stderr)
-        #     return row, result.stderr
+        accompanying_images.append(
+            {
+                "moving": preprocessed_seg,
+                "out_moving": output_seg,
+                "interp_method": "nearest",
+            }
+        )
 
-        command = f"mri_convert --apply_transform {transform_m3z} {preprocessed_seg} {output_seg}"
+    synthmorph_registration(
+        moving_image_path,
+        fixed_image_path,
+        accompanying_images=accompanying_images,
+        m=model,
+    )
+    if verbose:
+        print(
+            f"Registered files generated to {[d['out_moving'] for d in accompanying_images]}"
+        )
 
-        if verbose:
-            print(command)
+    return row
 
-        result = run(command.split(" "), capture_output=True)
 
-        try:
-            result.check_returncode()
+def long_reg(
+    rows,
+    pipeline_key,
+    fixed_image_path,
+    study_SS_mask_file,
+    model="affine",
+    verbose=False,
+    debug=False,
+):
+    moving_image_path = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
+    if debug:
+        moved_image_path = moving_image_path.replace(".nii.gz", "_longreg.nii.gz")
 
-        except Exception:
-            print(result.stderr)
-            return row, result.stderr
+    else:
+        moved_image_path = moving_image_path
 
-    return row, None
+    accompanying_images = [
+        {
+            "moving": study_SS_mask_file,
+            "out_moving": study_SS_mask_file.replace(".nii.gz", "_longreg.nii.gz"),
+            "interp_method": "nearest",
+        }
+    ]
+
+    for i, row in enumerate(rows):
+        preprocessed_file = row[pipeline_key]
+
+        if debug:
+            output_file = preprocessed_file.replace(".nii.gz", "_longreg.nii.gz")
+            row[pipeline_key] = output_file
+
+        else:
+            output_file = preprocessed_file
+
+        accompanying_images.append(
+            {"moving": preprocessed_file, "out_moving": output_file}
+        )
+
+        if "seg" in row:
+            preprocessed_seg = row[f"{pipeline_key}_seg"]
+            if debug:
+                output_seg = preprocessed_seg.replace(".nii.gz", "_longreg.nii.gz")
+                row[f"{pipeline_key}_seg"] = output_seg
+
+            else:
+                output_seg = preprocessed_seg
+
+            accompanying_images.append(
+                {
+                    "moving": preprocessed_seg,
+                    "out_moving": output_seg,
+                    "interp_method": "nearest",
+                }
+            )
+        rows[i] = row
+
+    synthmorph_registration(
+        moving_image_path,
+        fixed_image_path,
+        o=moved_image_path,
+        accompanying_images=accompanying_images,
+        m=model,
+    )
+    if verbose:
+        print(
+            f"Registered files generated to {[d['out_moving'] for d in accompanying_images]}"
+        )
+
+    return rows
 
 
 def preprocess_study(
@@ -573,85 +520,31 @@ def preprocess_study(
     if debug:
         if registration_target is None:
             main_SS_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
-            main_SS_mask_file = rows[0][pipeline_key].replace(
-                ".nii.gz", "_SS_mask.nii.gz"
-            )
-            main_SS_mask_array = np.round(
-                GetArrayFromImage(ReadImage(main_SS_mask_file))
-            )
         else:
             main_SS_file = registration_target.replace(
                 ".nii.gz", "_RAS_spacing_SS.nii.gz"
-            )
-            main_SS_mask_file = registration_target.replace(
-                ".nii.gz", "_RAS_spacing_SS_mask.nii.gz"
-            )
-            main_SS_mask_array = np.round(
-                GetArrayFromImage(ReadImage(main_SS_mask_file))
             )
 
     else:
         if registration_target is None:
             main_SS_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
-            main_SS_mask_file = rows[0][pipeline_key].replace(
-                ".nii.gz", "_SS_mask.nii.gz"
-            )
-            main_SS_mask_array = np.round(
-                GetArrayFromImage(ReadImage(main_SS_mask_file))
-            )
         else:
             main_SS_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
-            main_SS_mask_file = registration_target.replace(
-                ".nii.gz", "_SS_mask.nii.gz"
-            )
-            main_SS_mask_array = np.round(
-                GetArrayFromImage(ReadImage(main_SS_mask_file))
-            )
+
+    study_SS_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
+    study_SS_mask_file = rows[0][pipeline_key].replace(".nii.gz", "_SS_mask.nii.gz")
 
     ### Register based on loose skullstrip
-    fixed_image_path = main_SS_file
-    if registration_target is None:
-        if n > 1:
-            for i in range(1, n):
-                registered_row, error = registration(
-                    rows[i],
-                    pipeline_key,
-                    fixed_image_path,
-                    main_SS_file,
-                    main_SS_mask_file,
-                    verbose,
-                    debug,
-                )
+    model = os.environ.get("PREPROCESSING_REGISTRATION_MODEL", "affine")
+    for i in range(1, n):
+        rows[i] = local_reg(rows[i], pipeline_key, study_SS_file, model, verbose, debug)
 
-                if error is not None:
-                    print(error)
-                    e = open(f"{preprocessed_dir}/errors.txt", "a")
-                    e.write(f"{error}\n")
-                    setattr(study_df, "failed_preprocessing", True)
-                    return study_df
-
-                rows[i] = registered_row
-
-    else:
-        for i in range(n):
-            registered_row, error = registration(
-                rows[i],
-                pipeline_key,
-                fixed_image_path,
-                main_SS_file,
-                main_SS_mask_file,
-                verbose,
-                debug,
-            )
-
-            if error is not None:
-                print(error)
-                e = open(f"{preprocessed_dir}/errors.txt", "a")
-                e.write(f"{error}\n")
-                setattr(study_df, "failed_preprocessing", True)
-                return study_df
-
-            rows[i] = registered_row
+    if registration_target is not None:
+        rows = long_reg(
+            rows, pipeline_key, main_SS_file, study_SS_mask_file, model, verbose, debug
+        )
+        study_SS_mask_file = study_SS_mask_file.replace(".nii.gz", "_longreg.nii.gz")
+    study_SS_mask_array = np.round(GetArrayFromImage(ReadImage(study_SS_mask_file)))
 
     ### appy final skullmask if skullstripping
     if skullstrip:
@@ -670,7 +563,7 @@ def preprocess_study(
             nifti = ReadImage(preprocessed_file)
             array = GetArrayFromImage(nifti)
 
-            array = array * main_SS_mask_array
+            array = array * study_SS_mask_array
 
             output_nifti = GetImageFromArray(array)
             output_nifti.CopyInformation(nifti)
@@ -691,7 +584,7 @@ def preprocess_study(
                 nifti = ReadImage(preprocessed_seg)
                 array = GetArrayFromImage(nifti)
 
-                array = array * main_SS_mask_array
+                array = array * study_SS_mask_array
 
                 output_nifti = GetImageFromArray(array).CopyInformation(nifti)
                 WriteImage(output_nifti, output_seg)
@@ -727,7 +620,7 @@ def preprocess_study(
 
         nifti = ReadImage(preprocessed_file)
         array = GetArrayFromImage(nifti)
-        masked_input_array = np.ma.masked_where(main_SS_mask_array == 0, array)
+        masked_input_array = np.ma.masked_where(study_SS_mask_array == 0, array)
         mean = np.ma.mean(masked_input_array)
         std = np.ma.std(masked_input_array)
         array = (array - mean) / (std + 1e-6)
@@ -738,7 +631,7 @@ def preprocess_study(
 
         ### set background back to 0 for easy foreground cropping
         if skullstrip:
-            array = array * main_SS_mask_array
+            array = array * study_SS_mask_array
 
         else:
             initial_foreground = (array > 0).astype(int)
@@ -788,7 +681,7 @@ def preprocess_study(
 
             idx = (
                 binary_dilation(
-                    main_SS_mask_array, structure=struct_3d, iterations=5
+                    study_SS_mask_array, structure=struct_3d, iterations=5
                 ).astype(int)
                 == 1
             )
@@ -944,7 +837,7 @@ def preprocess_patient(
     registration_target: str | None
         The location of the file that will be used as the fixed image for the purposes of registration.
     orientation: str
-        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
+        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
     spacing: str
         A comma delimited list indicating the desired spacing of preprocessed data. Measurements
         are in mm. Defaults to '1,1,1'.
@@ -1160,7 +1053,7 @@ def preprocess_from_csv(
     registration_target: str | None
         The location of the file that will be used as the fixed image for the purposes of registration.
     orientation: str
-        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
+        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
     spacing: str
         A comma delimited list indicating the desired spacing of preprocessed data. Measurements
         are in mm. Defaults to '1,1,1'.
@@ -1294,7 +1187,7 @@ def debug_from_csv(
     registration_target: str | None
         The location of the file that will be used as the fixed image for the purposes of registration.
     orientation: str
-        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
+        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
     spacing: str
         A comma delimited list indicating the desired spacing of preprocessed data. Measurements
         are in mm. Defaults to '1,1,1'.

@@ -344,9 +344,9 @@ brain_preprocessing.add_argument(
 brain_preprocessing.add_argument(
     "--orientation",
     type=str,
-    default="RAI",
+    default="RAS",
     help=(
-        "The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
+        "The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
     ),
 )
 
@@ -478,9 +478,9 @@ debug_preprocessing.add_argument(
 debug_preprocessing.add_argument(
     "--orientation",
     type=str,
-    default="RAI",
+    default="RAS",
     help=(
-        "The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
+        "The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
     ),
 )
 
