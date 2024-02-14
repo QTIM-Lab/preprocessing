@@ -18,7 +18,7 @@ dicom2nifti = "^2.4.9"
 mr-series-selection = {git = "git@github.com:QTIM-Lab/mr-series-selection.git"}
 surfa = {git = "https://github.com/freesurfer/surfa.git", branch = "master"} # rev = "026cabec14bb03d9dfbc6b5bdf14baec7bd51c7f"}
 voxelmorph = {git = "https://github.com/voxelmorph/voxelmorph.git", branch = "dev"} # rev = "ca3d47a2c254aae9a0c0e1b30c24c324c211ebc8"}
-# neurite = {git = "https://github.com/adalca/neurite.git", rev = "d931ac70b12914a80f7e95c486d716d510c1be2c"}
+neurite = {git = "https://github.com/adalca/neurite.git", branch = "dev"} #rev = "95b2b568b124cbc654467177ddcdb2cb3526788c"}
 pycrumbs = "^0.2.0"
 simpleitk = "^2.3.1"
 connected-components-3d = "^3.12.4"
