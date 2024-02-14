@@ -413,7 +413,7 @@ def synthmorph_registration(
     for accompanying_image in accompanying_images:
         moving = accompanying_image["moving"]
         out_moving = accompanying_image["out_moving"]
-        interp_method = getattr(accompanying_image, "interp_method", "linear")
+        interp_method = accompanying_image.get("interp_method", "linear")
         mov = sf.load_volume(moving)
 
         if arg.header_only:
