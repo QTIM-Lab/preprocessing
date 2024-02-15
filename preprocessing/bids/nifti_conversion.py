@@ -26,12 +26,15 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
 
     dcms = sort_slices(dcms)
 
-    # orientation unit vectors
-    orientation = dcms[0].ImageOrientationPatient
+    # orientaation is an orthonormal basis
+    orientation = np.array(dcms[0].ImageOrientationPatient)
 
     if not np.allclose(norm(orientation[:3]), 1, atol=eps) or not np.allclose(
         norm(orientation[3:]), 1, atol=eps
     ):
+        return False
+
+    if not np.isclose(orientation[:3].dot(orientation[3:]), 0, atol=eps):
         return False
 
     # required metadata is present and consistent
@@ -282,7 +285,7 @@ def convert_batch_to_nifti(
 
     source_external_software()
 
-    df = pd.read_csv(csv)
+    df = pd.read_csv(csv, dtype=str)
 
     if check_columns:
         required_columns = [

@@ -1066,9 +1066,8 @@ def preprocess_from_csv(
         Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
     gpu: bool
         Whether to use a gpu for Synthmorph registration. Defaults to False.
-
     verbose: bool
-        Whether to print additional information related like commands and their arguments are printed. 
+        Whether to print additional information such as individual commands and their arguments. Defaults to False.
 
     Returns
     _______
@@ -1082,7 +1081,7 @@ def preprocess_from_csv(
 
     check_gpu_usage(gpu, cpus > 0)
 
-    df = pd.read_csv(csv)
+    df = pd.read_csv(csv, dtype=str)
 
     if pipeline_key in df.keys():
         df = df.drop(columns=pipeline_key)
@@ -1207,8 +1206,8 @@ def debug_from_csv(
     gpu: bool
         Whether to use a gpu for Synthmorph registration. Defaults to False.
     verbose: bool
-        Whether to print additional information related like commands and their arguments are printed. 
-    
+        Whether to print additional information such as individual commands and their arguments. Defaults to False.
+
     Returns
     _______
     pd.DataFrame:
@@ -1221,7 +1220,7 @@ def debug_from_csv(
 
     check_gpu_usage(gpu, cpus > 0)
 
-    df = pd.read_csv(csv)
+    df = pd.read_csv(csv, dtype=str)
 
     if pipeline_key in df.keys():
         df = df.drop(columns=pipeline_key)
