@@ -384,6 +384,13 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-g",
+    "--gpu",
+    action="store_true",
+    help=("Whether to use a gpu for Synthmorph registration. Defaults to False."),
+)
+
+brain_preprocessing.add_argument(
     "-v",
     "--verbose",
     action="store_true",
@@ -518,6 +525,14 @@ debug_preprocessing.add_argument(
 )
 
 debug_preprocessing.add_argument(
+    "-g",
+    "--gpu",
+    action="store_true",
+    help=("Whether to use a gpu for Synthmorph registration. Defaults to False."),
+)
+
+
+debug_preprocessing.add_argument(
     "-v",
     "--verbose",
     action="store_true",
@@ -583,6 +598,7 @@ def main():
             "spacing": args.spacing,
             "skullstrip": not args.no_skullstrip,
             "cpus": args.cpus,
+            "gpu": args.gpu,
             "verbose": args.verbose,
         }
         tracked_command(
@@ -604,6 +620,7 @@ def main():
             "spacing": args.spacing,
             "skullstrip": not args.no_skullstrip,
             "cpus": args.cpus,
+            "gpu": args.gpu,
             "verbose": args.verbose,
         }
         tracked_command(debug_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir)

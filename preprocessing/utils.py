@@ -1,6 +1,8 @@
 import os
 import pandas as pd
 import SimpleITK as sitk
+import tensorflow as tf
+import warnings
 from pathlib import Path
 from shutil import which
 from typing import Sequence
@@ -161,3 +163,48 @@ def check_required_columns(
 def sitk_check(file: Path | str):
     sitk_image = sitk.ReadImage(file)
     sitk.WriteImage(sitk_image, file)
+
+
+class GPUWarning(UserWarning):
+    pass
+
+
+def check_gpu_usage(use_gpu: bool = False, use_multiprocessing: bool = False):
+    """Check and issue warnings related to GPU usage for synthmorph registration."""
+    if use_gpu:
+        if "/device:GPU" not in str(tf.config.list_logical_devices()):
+            warnings.warn(
+                (
+                    "Synthmorph is running on the CPU. Define the 'CUDA_VISIBLE_DEVICES' "
+                    "environment variable to select a GPU."
+                ),
+                GPUWarning,
+            )
+        elif use_multiprocessing:
+            if "/device:GPU" in str(tf.config.list_logical_devices()):
+                raise Exception(
+                    "Preprocessing does not support multiprocessing and GPU usage simultaneously yet "
+                    "Synthmorph has selected a GPU for its device."
+                )
+
+            else:
+                warnings.warn(
+                    (
+                        "Preprocessing does not support multiprocessing and GPU usage simultaneously. "
+                        "Your preference for using GPU has been overwritten"
+                    ),
+                    GPUWarning,
+                )
+    else:
+        if "/device:GPU" in str(tf.config.list_logical_devices()):
+            if not eval(os.environ.get("SILENCE_PREPROCESSING_WARNINGS", "False")):
+                warnings.warn(
+                    (
+                        "This GPU and multiprocessing configuration should not be possible while "
+                        "using the Preprocessing CLI. If using the Preprocessing library through "
+                        "pure python, be mindful of VRAM consumption while using both GPU and "
+                        "multiprocessing. To silence this message define the "
+                        "'SILENCE_PREPROCESSING_WARNINGS' environment variable to be 'True'."
+                    ),
+                    GPUWarning,
+                )

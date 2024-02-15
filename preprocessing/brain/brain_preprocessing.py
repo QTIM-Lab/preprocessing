@@ -15,6 +15,7 @@ from preprocessing.utils import (
     source_external_software,
     check_required_columns,
     sitk_check,
+    check_gpu_usage,
 )
 from preprocessing.synthmorph import synthmorph_registration
 from typing import Sequence
@@ -995,6 +996,7 @@ def preprocess_patient(
             extra_files = (
                 list(patient_dir.glob("**/*SS.nii.gz"))
                 + list(patient_dir.glob("**/*mask.nii.gz"))
+                + list(patient_dir.glob("**/*longreg.nii.gz"))
                 + list(patient_dir.glob("**/*.mgz"))
                 + list(patient_dir.glob("**/*.m3z"))
                 + list(patient_dir.glob("**/*.txt"))
@@ -1028,6 +1030,7 @@ def preprocess_from_csv(
     spacing: str = "1,1,1",
     skullstrip: bool = True,
     cpus: int = 0,
+    gpu: bool = False,
     verbose: bool = False,
 ) -> pd.DataFrame:
     """
@@ -1059,13 +1062,13 @@ def preprocess_from_csv(
         are in mm. Defaults to '1,1,1'.
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    cpus: int
+        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
+    gpu: bool
+        Whether to use a gpu for Synthmorph registration. Defaults to False.
+
     verbose: bool
-        Whether to print additional information related like commands and their arguments are printed.
-    source_software: bool
-        Whether to call `source_external_software` to add software required for preprocessing. Defaults
-        to True.
-    check_columns: bool
-        Whether to check `study_df` for required columns. Defaults to True.
+        Whether to print additional information related like commands and their arguments are printed. 
 
     Returns
     _______
@@ -1076,6 +1079,8 @@ def preprocess_from_csv(
     """
 
     source_external_software()
+
+    check_gpu_usage(gpu, cpus > 0)
 
     df = pd.read_csv(csv)
 
@@ -1162,6 +1167,7 @@ def debug_from_csv(
     spacing: str = "1,1,1",
     skullstrip: bool = True,
     cpus: int = 0,
+    gpu: bool = False,
     verbose: bool = False,
 ) -> pd.DataFrame:
     """
@@ -1174,6 +1180,9 @@ def debug_from_csv(
         'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
     preprocessed_dir: Path
         The directory that will contain the preprocessed NIfTI files.
+    patients: Sequece[str] | None
+        A sequence of patients to select from the 'Anon_PatientID' column of the CSV. If 'None' is provided,
+        all patients will be preprocessed.
     pipeline_key: str
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
         Defaults to 'debug'.
@@ -1193,14 +1202,13 @@ def debug_from_csv(
         are in mm. Defaults to '1,1,1'.
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    cpus: int
+        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
+    gpu: bool
+        Whether to use a gpu for Synthmorph registration. Defaults to False.
     verbose: bool
-        Whether to print additional information related like commands and their arguments are printed.
-    source_software: bool
-        Whether to call `source_external_software` to add software required for preprocessing. Defaults
-        to True.
-    check_columns: bool
-        Whether to check `study_df` for required columns. Defaults to True.
-
+        Whether to print additional information related like commands and their arguments are printed. 
+    
     Returns
     _______
     pd.DataFrame:
@@ -1210,6 +1218,8 @@ def debug_from_csv(
     """
 
     source_external_software()
+
+    check_gpu_usage(gpu, cpus > 0)
 
     df = pd.read_csv(csv)
 
@@ -1236,7 +1246,6 @@ def debug_from_csv(
         patients = filtered_df["Anon_PatientID"].unique()
 
     if cpus == 0:
-        os.environ["USE_GPU_FOR_SYNTHMORPH"] = "TRUE"
         outputs = [
             preprocess_patient(
                 filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
