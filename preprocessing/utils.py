@@ -61,10 +61,12 @@ def source_external_software():
             "/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/:"
             "/usr/pubsw/packages/ANTS/2.3.5/bin:"
             "/usr/pubsw/packages/CUDA/11.8/bin:"
-        ) + os.environ["PATH"]
+        ) + os.environ.get("PATH", "/usr/bin/")
 
-        os.environ["LD_LIBRARY_PATH"] = (
-            "/usr/pubsw/packages/CUDA/11.8/lib64:" + os.environ["LD_LIBRARY_PATH"]
+        os.environ[
+            "LD_LIBRARY_PATH"
+        ] = "/usr/pubsw/packages/CUDA/11.8/lib64:" + os.environ.get(
+            "LD_LIBRARY_PATH", "/usr/lib/"
         )
 
         os.environ["ANTSPATH"] = "/usr/pubsw/packages/ANTS/2.3.5/bin"
@@ -76,7 +78,7 @@ def source_external_software():
         os.system(f"source {os.environ['FREESURFER_HOME']}/SetUpFreeSurfer.sh")
 
     else:
-        required_software = ["dcm2niix", "Slicer", "ANTS"]
+        required_software = ["dcm2niix", "Slicer", "ANTS", "mri_synthmorph"]
         for software in required_software:
             if which(software) is None:
                 raise MissingSoftwareError(software, required_software)
