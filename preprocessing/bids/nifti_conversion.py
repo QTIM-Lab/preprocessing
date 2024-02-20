@@ -11,7 +11,7 @@ from preprocessing.dcm_tools import sort_slices, calc_slice_distance
 from dicom2nifti import convert_directory
 from pydicom import dcmread
 from numpy.linalg import norm
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
@@ -311,7 +311,7 @@ def convert_batch_to_nifti(
 
     with tqdm(
         total=len(kwargs_list), desc="Converting to NIfTI"
-    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+    ) as pbar, ThreadPoolExecutor(cpus if cpus >= 1 else 1) as executor:
         futures = [executor.submit(convert_study, **kwargs) for kwargs in kwargs_list]
         for future in as_completed(futures):
             nifti_df = future.result()

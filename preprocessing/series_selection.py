@@ -5,7 +5,7 @@ from pydicom import dcmread
 from tqdm import tqdm
 from mr_series_selection.series_selection import get_series_classification
 from preprocessing.utils import check_required_columns
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 default_key = {
     "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
@@ -207,7 +207,7 @@ def series_from_csv(
 
     with tqdm(
         total=len(kwargs_list), desc="Predicting on studies"
-    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+    ) as pbar, ThreadPoolExecutor(cpus if cpus >= 1 else 1) as executor:
         futures = [executor.submit(series_in_study, **kwargs) for kwargs in kwargs_list]
         for future in as_completed(futures):
             prediction_df = future.result()

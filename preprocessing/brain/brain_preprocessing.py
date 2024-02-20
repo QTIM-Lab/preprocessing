@@ -5,8 +5,20 @@ import pandas as pd
 import numpy as np
 import json
 
-from SimpleITK import ReadImage, WriteImage, GetArrayFromImage, GetImageFromArray
-from nipype.interfaces.ants import N4BiasFieldCorrection
+from SimpleITK import (
+    ReadImage,
+    WriteImage,
+    GetArrayFromImage,
+    GetImageFromArray,
+    N4BiasFieldCorrectionImageFilter,
+    RescaleIntensity,
+    LiThreshold,
+    sitkFloat32,
+    sitkUInt8,
+    Cast,
+)
+
+# from nipype.interfaces.ants import N4BiasFieldCorrection
 from pathlib import Path
 from subprocess import run
 from tqdm import tqdm
@@ -26,7 +38,7 @@ from scipy.ndimage import (
     generate_binary_structure,
 )
 from cc3d import connected_components
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def copy_metadata(row: dict, preprocessing_args: dict) -> None:
@@ -549,46 +561,36 @@ def preprocess_study(
         study_SS_mask_file = study_SS_mask_file.replace(".nii.gz", "_longreg.nii.gz")
     study_SS_mask_array = np.round(GetArrayFromImage(ReadImage(study_SS_mask_file)))
 
-    # ### Bias correction
-    # for i in range(n):
-    #     preprocessed_file = rows[i][pipeline_key]
-    #
-    #     if debug:
-    #         output_file = preprocessed_file.replace(".nii.gz", "_N4.nii.gz")
-    #         rows[i][pipeline_key] = output_file
-    #
-    #     else:
-    #         output_file = preprocessed_file
-    #
-    #     # n4 = N4BiasFieldCorrection()
-    #     # n4.inputs.input_image = preprocessed_file
-    #     # n4.inputs.n_iterations = [100, 100, 100, 100]
-    #     # n4.inputs.weight_image = study_SS_mask_file
-    #     # n4.inputs.output_image = output_file
-    #     # n4.run()
-    #     # sitk_check(output_file)
-    #
-    #     command = (
-    #         f"N4BiasFieldCorrection -d {len(study_SS_mask_array.shape)} -i {preprocessed_file} "
-    #         f"-c [100x100x100x100,0.0000000001] -o {output_file}{f' -w {study_SS_mask_file}' if skullstrip else ''}"
-    #     )
-    #
-    #     if verbose:
-    #         print(command)
-    #
-    #     result = run(command.split(" "), capture_output=True)
-    #
-    #     try:
-    #         result.check_returncode()
-    #         sitk_check(output_file)
-    #
-    #     except Exception:
-    #         error = result.stderr
-    #         print(error)
-    #         e = open(f"{preprocessed_dir}/errors.txt", "a")
-    #         e.write(f"{error}\n")
-    #         setattr(study_df, "failed_preprocessing", True)
-    #         return study_df
+    ### Bias correction
+    for i in range(n):
+        preprocessed_file = rows[i][pipeline_key]
+
+        if debug:
+            output_file = preprocessed_file.replace(".nii.gz", "_N4.nii.gz")
+            rows[i][pipeline_key] = output_file
+
+        else:
+            output_file = preprocessed_file
+
+        raw_input = ReadImage(preprocessed_file, sitkFloat32)
+        array = GetArrayFromImage(raw_input)
+        array[array < 0] = 0.1
+        n4_input = GetImageFromArray(array)
+        n4_input.CopyInformation(raw_input)
+
+        if skullstrip:
+            n4_mask = ReadImage(study_SS_mask_file, sitkUInt8)
+
+        else:
+            n4_mask = RescaleIntensity(n4_input, 0, 255)
+            n4_mask = LiThreshold(n4_mask, 0, 1)
+
+        n4_mask = Cast(n4_mask, sitkUInt8)
+
+        bias_corrector = N4BiasFieldCorrectionImageFilter()
+        n4_corrected = bias_corrector.Execute(n4_input, n4_mask)
+
+        WriteImage(n4_corrected, output_file)
 
     ### appy final skullmask if skullstripping
     if skullstrip:
@@ -630,50 +632,10 @@ def preprocess_study(
 
                 array = array * study_SS_mask_array
 
-                output_nifti = GetImageFromArray(array).CopyInformation(nifti)
+                output_nifti = GetImageFromArray(array)
+                output_nifti.CopyInformation(nifti)
                 WriteImage(output_nifti, output_seg)
-
-    ### Bias correction
-    for i in range(n):
-        preprocessed_file = rows[i][pipeline_key]
-
-        if debug:
-            output_file = preprocessed_file.replace(".nii.gz", "_N4.nii.gz")
-            rows[i][pipeline_key] = output_file
-
-        else:
-            output_file = preprocessed_file
-
-        # n4 = N4BiasFieldCorrection()
-        # n4.inputs.input_image = preprocessed_file
-        # n4.inputs.n_iterations = [100, 100, 100, 100]
-        # n4.inputs.weight_image = study_SS_mask_file
-        # n4.inputs.output_image = output_file
-        # n4.run()
-        # sitk_check(output_file)
-
-        command = (
-            f"N4BiasFieldCorrection -d {len(study_SS_mask_array.shape)} -i {preprocessed_file} "
-            f"-c [100x100x100x100,0.0000000001] -o {output_file}{f' -w {study_SS_mask_file}' if skullstrip else ''}"
-        )
-
-        if verbose:
-            print(command)
-
-        result = run(command.split(" "), capture_output=True)
-
-        try:
-            result.check_returncode()
-            sitk_check(output_file)
-
-        except Exception:
-            error = result.stderr
-            print(error)
-            e = open(f"{preprocessed_dir}/errors.txt", "a")
-            e.write(f"{error}\n")
-            setattr(study_df, "failed_preprocessing", True)
-            return study_df
-
+ 
     ### Normalization
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
@@ -1179,7 +1141,7 @@ def preprocess_from_csv(
 
     with tqdm(
         total=len(kwargs_list), desc="Preprocessing patients"
-    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+    ) as pbar, ThreadPoolExecutor(cpus if cpus >= 1 else 1) as executor:
         futures = [
             executor.submit(preprocess_patient, **kwargs) for kwargs in kwargs_list
         ]
@@ -1306,7 +1268,7 @@ def debug_from_csv(
 
     with tqdm(
         total=len(kwargs_list), desc="Preprocessing patients"
-    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+    ) as pbar, ThreadPoolExecutor(cpus if cpus >= 1 else 1) as executor:
         futures = [
             executor.submit(preprocess_patient, **kwargs) for kwargs in kwargs_list
         ]
