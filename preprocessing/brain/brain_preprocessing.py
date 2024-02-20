@@ -549,6 +549,47 @@ def preprocess_study(
         study_SS_mask_file = study_SS_mask_file.replace(".nii.gz", "_longreg.nii.gz")
     study_SS_mask_array = np.round(GetArrayFromImage(ReadImage(study_SS_mask_file)))
 
+    # ### Bias correction
+    # for i in range(n):
+    #     preprocessed_file = rows[i][pipeline_key]
+    #
+    #     if debug:
+    #         output_file = preprocessed_file.replace(".nii.gz", "_N4.nii.gz")
+    #         rows[i][pipeline_key] = output_file
+    #
+    #     else:
+    #         output_file = preprocessed_file
+    #
+    #     # n4 = N4BiasFieldCorrection()
+    #     # n4.inputs.input_image = preprocessed_file
+    #     # n4.inputs.n_iterations = [100, 100, 100, 100]
+    #     # n4.inputs.weight_image = study_SS_mask_file
+    #     # n4.inputs.output_image = output_file
+    #     # n4.run()
+    #     # sitk_check(output_file)
+    #
+    #     command = (
+    #         f"N4BiasFieldCorrection -d {len(study_SS_mask_array.shape)} -i {preprocessed_file} "
+    #         f"-c [100x100x100x100,0.0000000001] -o {output_file}{f' -w {study_SS_mask_file}' if skullstrip else ''}"
+    #     )
+    #
+    #     if verbose:
+    #         print(command)
+    #
+    #     result = run(command.split(" "), capture_output=True)
+    #
+    #     try:
+    #         result.check_returncode()
+    #         sitk_check(output_file)
+    #
+    #     except Exception:
+    #         error = result.stderr
+    #         print(error)
+    #         e = open(f"{preprocessed_dir}/errors.txt", "a")
+    #         e.write(f"{error}\n")
+    #         setattr(study_df, "failed_preprocessing", True)
+    #         return study_df
+
     ### appy final skullmask if skullstripping
     if skullstrip:
         for i in range(n):
@@ -603,12 +644,35 @@ def preprocess_study(
         else:
             output_file = preprocessed_file
 
-        n4 = N4BiasFieldCorrection()
-        n4.inputs.input_image = preprocessed_file
-        n4.inputs.n_iterations = [20, 20, 10, 5]
-        n4.inputs.output_image = output_file
-        n4.run()
-        sitk_check(output_file)
+        # n4 = N4BiasFieldCorrection()
+        # n4.inputs.input_image = preprocessed_file
+        # n4.inputs.n_iterations = [100, 100, 100, 100]
+        # n4.inputs.weight_image = study_SS_mask_file
+        # n4.inputs.output_image = output_file
+        # n4.run()
+        # sitk_check(output_file)
+
+        command = (
+            f"N4BiasFieldCorrection -d {len(study_SS_mask_array.shape)} -i {preprocessed_file} "
+            f"-c [100x100x100x100,0.0000000001] -o {output_file}{f' -w {study_SS_mask_file}' if skullstrip else ''}"
+        )
+
+        if verbose:
+            print(command)
+
+        result = run(command.split(" "), capture_output=True)
+
+        try:
+            result.check_returncode()
+            sitk_check(output_file)
+
+        except Exception:
+            error = result.stderr
+            print(error)
+            e = open(f"{preprocessed_dir}/errors.txt", "a")
+            e.write(f"{error}\n")
+            setattr(study_df, "failed_preprocessing", True)
+            return study_df
 
     ### Normalization
     for i in range(n):
@@ -1099,7 +1163,7 @@ def preprocess_from_csv(
     kwargs_list = [
         {
             "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
-            "preprocessed": preprocessed_dir,
+            "preprocessed_dir": preprocessed_dir,
             "pipeline_key": pipeline_key,
             "registration_key": registration_key,
             "longitudinal_registration": longitudinal_registration,
@@ -1117,7 +1181,7 @@ def preprocess_from_csv(
         total=len(kwargs_list), desc="Preprocessing patients"
     ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
         futures = [
-            executor.submit(preprocess_study, **kwargs) for kwargs in kwargs_list
+            executor.submit(preprocess_patient, **kwargs) for kwargs in kwargs_list
         ]
         for future in as_completed(futures):
             preprocessed_df = future.result()
@@ -1225,7 +1289,7 @@ def debug_from_csv(
     kwargs_list = [
         {
             "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
-            "preprocessed": preprocessed_dir,
+            "preprocessed_dir": preprocessed_dir,
             "pipeline_key": pipeline_key,
             "registration_key": registration_key,
             "longitudinal_registration": longitudinal_registration,
@@ -1244,7 +1308,7 @@ def debug_from_csv(
         total=len(kwargs_list), desc="Preprocessing patients"
     ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
         futures = [
-            executor.submit(preprocess_study, **kwargs) for kwargs in kwargs_list
+            executor.submit(preprocess_patient, **kwargs) for kwargs in kwargs_list
         ]
         for future in as_completed(futures):
             preprocessed_df = future.result()

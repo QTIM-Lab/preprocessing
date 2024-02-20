@@ -32,11 +32,14 @@ poetry add git+ssh://git@github.com/QTIM-Lab/preprocessing.git
 ```
 
 ### External Software
-Aside from python dependencies, this repo also requires external software to run some of the commands. On Martinos Machines, everything will be sourced automatically and will require no additional work on your part. If you want to use `preprocessing` on your own machine, you will have to install ANTS, Slicer, and dcm2niix (easily available through fsl) and source them within your shell. For user-specific or otherwise non-system installations, it is recommended to add analogous lines to the following directly to your .bashrc, .zshrc, etc.:
+Aside from python dependencies, this repo also requires external software to run some of the commands. On Martinos Machines, everything will be sourced automatically and will require no additional work on your part. If you want to use `preprocessing` on your own machine, you will have to install ANTS (>= 2.3.5), Slicer (>= 5.2.2), fsl (>= 6.0.6), freesurfer (dev), and CUDA 11.8 and source them within your shell. For user-specific or otherwise non-system installations, it is recommended to add analogous lines to the following directly to your .bashrc, .zshrc, etc.:
 ```bash
 export PATH=/usr/pubsw/packages/fsl/6.0.6/bin:${PATH}
 export PATH=/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/:${PATH}
 export PATH=/usr/pubsw/packages/ANTS/2.3.5/bin:${PATH}
+export PATH=/usr/pubsw/packages/CUDA/11.8/bin:${PATH}
+
+export LD_LIBRARY_PATH=/usr/pubsw/packages/CUDA/11.8/lib64:{LD_LIBRARY_PATH}
 
 export ANTSPATH=/usr/pubsw/packages/ANTS/2.3.5/bin
 export FSLDIR=/usr/pubsw/packages/fsl/6.0.6/
@@ -64,14 +67,14 @@ This command reorganizes DICOMs to follow the BIDS convention. Any DICOMs found 
 ### dataset-to-nifti Command
 ```bash
 preprocessing dataset-to-nifti <nifti-dir> <csv> [--overwrite=False] \
-        [-c | --cpus=0] [-h | --help]
+        [-c | --cpus=1] [-h | --help]
 ```
 This command converts DICOMs to NIfTI file format. A csv is required to map a DICOM series to the resulting .nii.gz file and to provide the context for filenames. The outputs will comply with the BIDS conventions.
 
 ### predict-series Command
 ```bash
 preprocessing predict-series <csv> [--ruleset="brain"] \
-        [--description-key=default_key] [-c | --cpus=0] \
+        [--description-key=default_key] [-c | --cpus=1] \
         [-h | --help]
 ```
 This command predicts the sequence type for every series in your dataset. A csv is required to indicate the location of the corresponding DICOMs. Predictions are made using the mr-series-selection repo's analysis of the DICOM header. A json can be provided to combine multiple NormalizedDescriptions into a single category.
@@ -87,7 +90,17 @@ default_key = {\
 preprocessing brain-preprocessing <preprocessed-dir> <csv> \
         [--pipeline-key="preprocessed"] [--registration-key="T1Post"] \
         [--longitudinal-registration=False] [--orientation="RAI"] \
-        [--spacing="1,1,1"] [--no-skullstrip=False] [-c | --cpus=0] \
-        [-v | --verbose=False] [-h | --help]
+        [--spacing="1,1,1"] [--no-skullstrip=False] [-c | --cpus=1] \
+        [-g | --gpu=False] [-v | --verbose=False] [-h | --help]
 ```
 This command preprocesses NIfTI files for deep learning. A csv is required to indicate the location of source files and to procide the context for filenames. The outputs will comply with BIDS conventions.
+
+### debug-preprocessing Command
+```bash
+preprocessing deug-preprocessing <preprocessed-dir> <csv> \
+        [--patients=None] [--pipeline-key="debug"] \
+        [--registration-key="T1Post"] [--longitudinal-registration=False] \
+        [--orientation="RAI"] [--spacing="1,1,1"] [--no-skullstrip=False] \
+        [-c | --cpus=1] [-g | --gpu=False] [-v | --verbose=False] [-h | --help]
+```
+This command has the same functionality as the `brain-preprocessing` command, with the exception of saving intermediate results under different filenames. It is recommended to indicate the specific patients that want to be analyzed.
