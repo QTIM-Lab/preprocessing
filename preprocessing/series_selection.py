@@ -1,11 +1,11 @@
 import pandas as pd
-import multiprocessing
 
 from pathlib import Path
 from pydicom import dcmread
 from tqdm import tqdm
 from mr_series_selection.series_selection import get_series_classification
 from preprocessing.utils import check_required_columns
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 default_key = {
     "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
@@ -141,24 +141,14 @@ def series_in_study(
     filtered_df["NormalizedSeriesDescription"] = normalized_descriptions
     filtered_df["SeriesType"] = series_types
 
-    # print(normalized_descriptions)
-    # print(list(filtered_df["SeriesDescription"]))
     return filtered_df
-
-
-def series_in_study_star(args):
-    """
-    Helper function intended for use only in 'series_from_csv'. Provides an imap
-    compatible version of 'series_in_study'.
-    """
-    return series_in_study(*args)
 
 
 def series_from_csv(
     csv: Path | str,
     ruleset: str = "brain",
     description_key: dict = default_key,
-    cpus: int = 0,
+    cpus: int = 1,
     check_columns: bool = True,
 ) -> pd.DataFrame:
     """
@@ -203,41 +193,33 @@ def series_from_csv(
     filtered_df = df.copy().dropna(subset="StudyInstanceUID")
     study_uids = filtered_df["StudyInstanceUID"].unique()
 
-    if cpus == 0:
-        outputs = [
-            series_in_study(
-                filtered_df[filtered_df["StudyInstanceUID"] == study_uid].copy(),
-                ruleset,
-                description_key,
-                False,
+    kwargs_list = [
+        {
+            "study_df": filtered_df[
+                filtered_df["StudyInstanceUID"] == study_uid
+            ].copy(),
+            "ruleset": ruleset,
+            "description_key": description_key,
+            "check_columns": False,
+        }
+        for study_uid in study_uids
+    ]
+
+    with tqdm(
+        total=len(kwargs_list), desc="Predicting on studies"
+    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+        futures = [executor.submit(series_in_study, **kwargs) for kwargs in kwargs_list]
+        for future in as_completed(futures):
+            prediction_df = future.result()
+            df = pd.read_csv(csv, dtype=str)
+            df = pd.merge(df, prediction_df, how="outer")
+            df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(
+                drop=True
             )
-            for study_uid in tqdm(study_uids, "Predicting on studies")
-        ]
+            df.to_csv(csv, index=False)
+            pbar.update(1)
 
-    else:
-        inputs = [
-            [
-                filtered_df[filtered_df["StudyInstanceUID"] == study_uid].copy(),
-                ruleset,
-                description_key,
-                False,
-            ]
-            for study_uid in study_uids
-        ]
-
-        with multiprocessing.Pool(cpus) as pool:
-            outputs = list(
-                tqdm(
-                    pool.imap(series_in_study_star, inputs),
-                    total=len(study_uids),
-                    desc="Predicting on studies",
-                )
-            )
-
-    series_df = pd.concat(outputs)
-    df = pd.merge(df, series_df, how="outer")
-    df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(drop=True)
-    df.to_csv(csv, index=False)
+    df = pd.read_csv(csv, dtype=str)
     return df
 
 

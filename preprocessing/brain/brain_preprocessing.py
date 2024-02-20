@@ -3,7 +3,6 @@ import os
 import shutil
 import pandas as pd
 import numpy as np
-import multiprocessing
 import json
 
 from SimpleITK import ReadImage, WriteImage, GetArrayFromImage, GetImageFromArray
@@ -27,6 +26,7 @@ from scipy.ndimage import (
     generate_binary_structure,
 )
 from cc3d import connected_components
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 def copy_metadata(row: dict, preprocessing_args: dict) -> None:
@@ -337,10 +337,11 @@ def preprocess_study(
             sitk_check(preprocessed_file)
         else:
             os.makedirs(output_dir, exist_ok=True)
-            shutil.copy(input_file, preprocessed_file)
-            if os.path.exists(preprocessed_file):
-                rows[i][pipeline_key] = str(preprocessed_file)
-            else:
+
+            try:
+                shutil.copy(input_file, preprocessed_file)
+
+            except Exception:
                 error = f"Could not create {preprocessed_file}"
                 print(error)
                 e = open(f"{preprocessed_dir}/errors.txt", "a")
@@ -358,10 +359,11 @@ def preprocess_study(
                 sitk_check(preprocessed_seg)
             else:
                 os.makedirs(output_dir, exist_ok=True)
-                shutil.copy(input_file, preprocessed_seg)
-                if os.path.exists(preprocessed_file):
-                    rows[i][f"{pipeline_key}_seg"] = str(preprocessed_file)
-                else:
+
+                try:
+                    shutil.copy(input_file, preprocessed_seg)
+
+                except Exception:
                     error = f"Could not create {preprocessed_seg}"
                     print(error)
                     e = open(f"{preprocessed_dir}/errors.txt", "a")
@@ -1011,15 +1013,6 @@ def preprocess_patient(
         return out_df
 
 
-def preprocess_patient_star(args):
-    """
-    Helper function intended for use only in 'preprocess_from_csv'. Provides an imap
-    compatible version of 'preprocess_patient'.
-    """
-
-    return preprocess_patient(*args)
-
-
 def preprocess_from_csv(
     csv: Path | str,
     preprocessed_dir: Path | str,
@@ -1063,7 +1056,7 @@ def preprocess_from_csv(
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
     cpus: int
-        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
+        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
     gpu: bool
         Whether to use a gpu for Synthmorph registration. Defaults to False.
     verbose: bool
@@ -1079,7 +1072,7 @@ def preprocess_from_csv(
 
     source_external_software()
 
-    check_gpu_usage(gpu, cpus > 0)
+    check_gpu_usage(gpu, cpus > 1)
 
     df = pd.read_csv(csv, dtype=str)
 
@@ -1103,55 +1096,40 @@ def preprocess_from_csv(
     filtered_df = df.copy().dropna(subset="nifti")
     patients = filtered_df["Anon_PatientID"].unique()
 
-    if cpus == 0:
-        outputs = [
-            preprocess_patient(
-                filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
-                preprocessed_dir,
-                pipeline_key,
-                registration_key,
-                longitudinal_registration,
-                orientation,
-                spacing,
-                skullstrip,
-                verbose,
-                False,
-                False,
-            )
-            for patient in tqdm(patients, desc="Preprocessing patients")
+    kwargs_list = [
+        {
+            "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
+            "preprocessed": preprocessed_dir,
+            "pipeline_key": pipeline_key,
+            "registration_key": registration_key,
+            "longitudinal_registration": longitudinal_registration,
+            "orientation": orientation,
+            "spacing": spacing,
+            "skullstrip": skullstrip,
+            "verbose": verbose,
+            "source_software": False,
+            "check_columns": False,
+        }
+        for patient in patients
+    ]
+
+    with tqdm(
+        total=len(kwargs_list), desc="Preprocessing patients"
+    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+        futures = [
+            executor.submit(preprocess_study, **kwargs) for kwargs in kwargs_list
         ]
-
-    else:
-        inputs = [
-            [
-                filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
-                preprocessed_dir,
-                pipeline_key,
-                registration_key,
-                longitudinal_registration,
-                orientation,
-                spacing,
-                skullstrip,
-                verbose,
-                False,
-                False,
-            ]
-            for patient in patients
-        ]
-
-        with multiprocessing.Pool(cpus) as pool:
-            outputs = list(
-                tqdm(
-                    pool.imap(preprocess_patient_star, inputs),
-                    total=len(patients),
-                    desc="Preprocessing patients",
-                )
+        for future in as_completed(futures):
+            preprocessed_df = future.result()
+            df = pd.read_csv(csv, dtype=str)
+            df = pd.merge(df, preprocessed_df, how="outer")
+            df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(
+                drop=True
             )
+            df.to_csv(csv, index=False)
+            pbar.update(1)
 
-    preprocessed_df = pd.concat(outputs)
-    df = pd.merge(df, preprocessed_df, how="outer")
-    df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(drop=True)
-    df.to_csv(csv, index=False)
+    df = pd.read_csv(csv, dtype=str)
     return df
 
 
@@ -1165,7 +1143,7 @@ def debug_from_csv(
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
-    cpus: int = 0,
+    cpus: int = 1,
     gpu: bool = False,
     verbose: bool = False,
 ) -> pd.DataFrame:
@@ -1202,7 +1180,7 @@ def debug_from_csv(
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
     cpus: int
-        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
+        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
     gpu: bool
         Whether to use a gpu for Synthmorph registration. Defaults to False.
     verbose: bool
@@ -1218,7 +1196,7 @@ def debug_from_csv(
 
     source_external_software()
 
-    check_gpu_usage(gpu, cpus > 0)
+    check_gpu_usage(gpu, cpus > 1)
 
     df = pd.read_csv(csv, dtype=str)
 
@@ -1244,56 +1222,39 @@ def debug_from_csv(
     if patients is None:
         patients = filtered_df["Anon_PatientID"].unique()
 
-    if cpus == 0:
-        outputs = [
-            preprocess_patient(
-                filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
-                preprocessed_dir,
-                pipeline_key,
-                registration_key,
-                longitudinal_registration,
-                orientation,
-                spacing,
-                skullstrip,
-                verbose,
-                False,
-                False,
-                True,
-            )
-            for patient in tqdm(patients, desc="Preprocessing patients")
+    kwargs_list = [
+        {
+            "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
+            "preprocessed": preprocessed_dir,
+            "pipeline_key": pipeline_key,
+            "registration_key": registration_key,
+            "longitudinal_registration": longitudinal_registration,
+            "orientation": orientation,
+            "spacing": spacing,
+            "skullstrip": skullstrip,
+            "verbose": verbose,
+            "source_software": False,
+            "check_columns": False,
+            "debug": True,
+        }
+        for patient in patients
+    ]
+
+    with tqdm(
+        total=len(kwargs_list), desc="Preprocessing patients"
+    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+        futures = [
+            executor.submit(preprocess_study, **kwargs) for kwargs in kwargs_list
         ]
-
-    else:
-        inputs = [
-            [
-                filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
-                preprocessed_dir,
-                pipeline_key,
-                registration_key,
-                longitudinal_registration,
-                orientation,
-                spacing,
-                skullstrip,
-                verbose,
-                False,
-                False,
-                True,
-            ]
-            for patient in patients
-        ]
-
-        with multiprocessing.Pool(cpus) as pool:
-            outputs = list(
-                tqdm(
-                    pool.imap(preprocess_patient_star, inputs),
-                    total=len(patients),
-                    desc="Preprocessing patients",
-                )
+        for future in as_completed(futures):
+            preprocessed_df = future.result()
+            df = pd.read_csv(csv, dtype=str)
+            df = pd.merge(df, preprocessed_df, how="outer")
+            df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(
+                drop=True
             )
+            df.to_csv(csv, index=False)
+            pbar.update(1)
 
-    preprocessed_df = pd.concat(outputs)
-    preprocessed_df = preprocessed_df.sort_values(
-        ["Anon_PatientID", "Anon_StudyID"]
-    ).reset_index(drop=True)
-    preprocessed_df.to_csv(preprocessed_dir / "debug.csv", index=False)
-    return preprocessed_df
+    df = pd.read_csv(csv, dtype=str)
+    return df

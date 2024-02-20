@@ -1,4 +1,3 @@
-import multiprocessing
 import os
 import pandas as pd
 import numpy as np
@@ -12,6 +11,7 @@ from preprocessing.dcm_tools import sort_slices, calc_slice_distance
 from dicom2nifti import convert_directory
 from pydicom import dcmread
 from numpy.linalg import norm
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
@@ -26,17 +26,6 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
 
     dcms = sort_slices(dcms)
 
-    # orientaation is an orthonormal basis
-    orientation = np.array(dcms[0].ImageOrientationPatient)
-
-    if not np.allclose(norm(orientation[:3]), 1, atol=eps) or not np.allclose(
-        norm(orientation[3:]), 1, atol=eps
-    ):
-        return False
-
-    if not np.isclose(orientation[:3].dot(orientation[3:]), 0, atol=eps):
-        return False
-
     # required metadata is present and consistent
     required_metadata = ["ImageOrientationPatient", "SliceThickness", "PixelSpacing"]
 
@@ -47,6 +36,17 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
                 if not np.allclose(meta_0, getattr(dcm, meta), atol=eps):
                     return False
     except Exception:
+        return False
+
+    # orientaation is an orthonormal basis
+    orientation = np.array(dcms[0].ImageOrientationPatient)
+
+    if not np.allclose(norm(orientation[:3]), 1, atol=eps) or not np.allclose(
+        norm(orientation[3:]), 1, atol=eps
+    ):
+        return False
+
+    if not np.isclose(orientation[:3].dot(orientation[3:]), 0, atol=eps):
         return False
 
     # consistent distance
@@ -238,19 +238,11 @@ def convert_study(
     return df
 
 
-def convert_study_star(args):
-    """
-    Helper function intended for use only in 'convert_batch_to_nifti'. Provides an imap
-    compatible version of 'convert_study'.
-    """
-    return convert_study(*args)
-
-
 def convert_batch_to_nifti(
     nifti_dir: Path | str,
     csv: Path | str,
     overwrite_nifti: bool = False,
-    cpus: int = 0,
+    cpus: int = 1,
     check_columns: bool = True,
 ) -> pd.DataFrame:
     """
@@ -272,7 +264,7 @@ def convert_batch_to_nifti(
         Whether to call `source_external_software` to add software required for conversion. Defaults
         to True.
     cpus: int
-        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
+        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
     check_columns: bool
         Whether to check the CSV for the required columns. Defaults to True.
 
@@ -304,41 +296,33 @@ def convert_batch_to_nifti(
 
     study_uids = filtered_df["StudyInstanceUID"].unique()
 
-    if cpus == 0:
-        outputs = [
-            convert_study(
-                filtered_df[filtered_df["StudyInstanceUID"] == study_uid].copy(),
-                nifti_dir,
-                overwrite_nifti,
-                False,
-                False,
+    kwargs_list = [
+        {
+            "study_df": filtered_df[
+                filtered_df["StudyInstanceUID"] == study_uid
+            ].copy(),
+            "nifti_dir": nifti_dir,
+            "overwrite_nifti": overwrite_nifti,
+            "source_software": False,
+            "check_columns": False,
+        }
+        for study_uid in study_uids
+    ]
+
+    with tqdm(
+        total=len(kwargs_list), desc="Converting to NIfTI"
+    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+        futures = [executor.submit(convert_study, **kwargs) for kwargs in kwargs_list]
+        for future in as_completed(futures):
+            nifti_df = future.result()
+            df = pd.read_csv(csv, dtype=str)
+            df = pd.merge(df, nifti_df, how="outer")
+            df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(
+                drop=True
             )
-            for study_uid in tqdm(study_uids, desc="Converting to NIfTI")
-        ]
+            df.to_csv(csv, index=False)
+            pbar.update(1)
 
-    else:
-        inputs = [
-            [
-                filtered_df[filtered_df["StudyInstanceUID"] == study_uid].copy(),
-                nifti_dir,
-                overwrite_nifti,
-                False,
-                False,
-            ]
-            for study_uid in study_uids
-        ]
+    df = pd.read_csv(csv, dtype=str)
 
-        with multiprocessing.Pool(cpus) as pool:
-            outputs = list(
-                tqdm(
-                    pool.imap(convert_study_star, inputs),
-                    total=len(study_uids),
-                    desc="Converting to NIfTI",
-                )
-            )
-
-    nifti_df = pd.concat(outputs)
-    df = pd.merge(df, nifti_df, how="outer")
-    df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(drop=True)
-    df.to_csv(csv, index=False)
     return df

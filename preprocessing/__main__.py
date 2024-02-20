@@ -144,9 +144,9 @@ reorganize.add_argument(
     "-c",
     "--cpus",
     type=int,
-    default=0,
+    default=1,
     help=(
-        "Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
     ),
 )
 
@@ -204,9 +204,9 @@ dataset_to_nifti.add_argument(
     "-c",
     "--cpus",
     type=int,
-    default=0,
+    default=1,
     help=(
-        "Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
     ),
 )
 
@@ -268,9 +268,9 @@ predict_series.add_argument(
     "-c",
     "--cpus",
     type=int,
-    default=0,
+    default=1,
     help=(
-        "Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
     ),
 )
 
@@ -377,9 +377,9 @@ brain_preprocessing.add_argument(
     "-c",
     "--cpus",
     type=int,
-    default=0,
+    default=1,
     help=(
-        "Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
     ),
 )
 
@@ -518,9 +518,9 @@ debug_preprocessing.add_argument(
     "-c",
     "--cpus",
     type=int,
-    default=0,
+    default=1,
     help=(
-        "Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing)."
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
     ),
 )
 
