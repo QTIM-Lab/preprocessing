@@ -238,6 +238,52 @@ def long_reg(
     return rows
 
 
+def fill_foreground_mask(initial_foreground: np.ndarray, SS_mask_array: np.ndarray):
+    foreground_cc = connected_components(initial_foreground)
+    ccs, counts = np.unique(foreground_cc, return_counts=True)
+
+    sorted_ccs = sorted(
+        [(cc, count) if cc != 0 else (0, 0) for cc, count in zip(ccs, counts)],
+        key=lambda x: x[1],
+    )
+
+    largest_cc = sorted_ccs[-1][0]
+
+    foreground = (foreground_cc == largest_cc).astype(int)
+
+    struct_2d = generate_binary_structure(2, 2)
+
+    for z in range(foreground.shape[0]):
+        foreground_slice = foreground[z, ...]
+        if 1 not in np.unique(foreground_slice):
+            continue
+        border_mask = np.ones_like(foreground_slice)
+        border_mask[0, :] = border_mask[-1, :] = border_mask[:, 0] = border_mask[
+            :, -1
+        ] = 0
+        distance = distance_transform_edt(border_mask)
+
+        iterations = int(distance[foreground_slice == 1].min())
+
+        foreground[z, ...] = binary_fill_holes(
+            binary_closing(
+                foreground_slice, structure=struct_2d, iterations=iterations
+            ),
+            structure=struct_2d,
+        )
+
+    struct_3d = generate_binary_structure(3, 3)
+
+    idx = (
+        binary_dilation(SS_mask_array, structure=struct_3d, iterations=5).astype(int)
+        == 1
+    )
+
+    foreground[idx] = 1
+
+    return foreground
+
+
 def preprocess_study(
     study_df: pd.DataFrame,
     preprocessed_dir: Path | str,
@@ -562,6 +608,21 @@ def preprocess_study(
     study_SS_mask_array = np.round(GetArrayFromImage(ReadImage(study_SS_mask_file)))
 
     ### Bias correction
+    if not skullstrip:
+        li_foreground_file = rows[0][pipeline_key].replace(
+            ".nii.gz", "_Liforeground_mask.nii.gz"
+        )
+        preprocessed_file = ReadImage(rows[0][pipeline_key])
+        li_foreground = RescaleIntensity(preprocessed_file, 0, 255)
+        li_foreground = LiThreshold(li_foreground, 0, 1)
+
+        array = GetArrayFromImage(li_foreground)
+        array = fill_foreground_mask(array, study_SS_mask_array)
+
+        li_foreground = GetImageFromArray(array)
+        li_foreground.CopyInformation(preprocessed_file)
+        WriteImage(li_foreground, li_foreground_file)
+
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
 
@@ -582,8 +643,7 @@ def preprocess_study(
             n4_mask = ReadImage(study_SS_mask_file, sitkUInt8)
 
         else:
-            n4_mask = RescaleIntensity(n4_input, 0, 255)
-            n4_mask = LiThreshold(n4_mask, 0, 1)
+            n4_mask = li_foreground
 
         n4_mask = Cast(n4_mask, sitkUInt8)
 
@@ -635,7 +695,7 @@ def preprocess_study(
                 output_nifti = GetImageFromArray(array)
                 output_nifti.CopyInformation(nifti)
                 WriteImage(output_nifti, output_seg)
- 
+
     ### Normalization
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
@@ -663,69 +723,30 @@ def preprocess_study(
             array = array * study_SS_mask_array
 
         else:
-            initial_foreground = (array > 0).astype(int)
+            if i == 0:
+                initial_foreground = (array > 0).astype(int)
 
-            initial_foreground_output_file = preprocessed_file.replace(
-                ".nii.gz", "_initial_foreground_mask.nii.gz"
-            )
-
-            output_nifti = GetImageFromArray(initial_foreground)
-            output_nifti.CopyInformation(nifti)
-            WriteImage(output_nifti, initial_foreground_output_file)
-
-            foreground_cc = connected_components(initial_foreground)
-            ccs, counts = np.unique(foreground_cc, return_counts=True)
-
-            sorted_ccs = sorted(
-                [(cc, count) if cc != 0 else (0, 0) for cc, count in zip(ccs, counts)],
-                key=lambda x: x[1],
-            )
-
-            largest_cc = sorted_ccs[-1][0]
-
-            foreground = (foreground_cc == largest_cc).astype(int)
-
-            struct_2d = generate_binary_structure(2, 2)
-
-            for z in range(foreground.shape[0]):
-                foreground_slice = foreground[z, ...]
-                if 1 not in np.unique(foreground_slice):
-                    continue
-                border_mask = np.ones_like(foreground_slice)
-                border_mask[0, :] = border_mask[-1, :] = border_mask[
-                    :, 0
-                ] = border_mask[:, -1] = 0
-                distance = distance_transform_edt(border_mask)
-
-                iterations = int(distance[foreground_slice == 1].min())
-
-                foreground[z, ...] = binary_fill_holes(
-                    binary_closing(
-                        foreground_slice, structure=struct_2d, iterations=iterations
-                    ),
-                    structure=struct_2d,
+                initial_foreground_output_file = preprocessed_file.replace(
+                    ".nii.gz", "_initial_foreground_mask.nii.gz"
                 )
 
-            struct_3d = generate_binary_structure(3, 3)
+                output_nifti = GetImageFromArray(initial_foreground)
+                output_nifti.CopyInformation(nifti)
+                WriteImage(output_nifti, initial_foreground_output_file)
 
-            idx = (
-                binary_dilation(
-                    study_SS_mask_array, structure=struct_3d, iterations=5
-                ).astype(int)
-                == 1
-            )
+                study_foreground_array = fill_foreground_mask(
+                    initial_foreground, study_SS_mask_array
+                )
 
-            foreground[idx] = 1
+                foreground_output_file = preprocessed_file.replace(
+                    ".nii.gz", "_foreground_mask.nii.gz"
+                )
 
-            foreground_output_file = preprocessed_file.replace(
-                ".nii.gz", "_foreground_mask.nii.gz"
-            )
+                output_nifti = GetImageFromArray(study_foreground_array)
+                output_nifti.CopyInformation(nifti)
+                WriteImage(output_nifti, foreground_output_file)
 
-            output_nifti = GetImageFromArray(foreground)
-            output_nifti.CopyInformation(nifti)
-            WriteImage(output_nifti, foreground_output_file)
-
-            array = array * foreground
+            array = array * study_foreground_array
 
         preprocessed_file = rows[i][pipeline_key]
 
