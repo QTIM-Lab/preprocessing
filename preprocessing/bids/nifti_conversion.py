@@ -285,6 +285,7 @@ def convert_batch_to_nifti(
             "Anon_PatientID",
             "Anon_StudyID",
             "StudyInstanceUID",
+            "SeriesInstanceUID",
             "Manufacturer",
             "NormalizedSeriesDescription",
             "SeriesType",
@@ -317,9 +318,12 @@ def convert_batch_to_nifti(
             nifti_df = future.result()
             df = pd.read_csv(csv, dtype=str)
             df = pd.merge(df, nifti_df, how="outer")
-            df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(
-                drop=True
+            df = (
+                df.drop_duplicates(subset="SeriesInstanceUID")
+                .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                .reset_index(drop=True)
             )
+            df.to_csv(csv, index=False)
             df.to_csv(csv, index=False)
             pbar.update(1)
 

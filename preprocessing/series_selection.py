@@ -213,8 +213,10 @@ def series_from_csv(
             prediction_df = future.result()
             df = pd.read_csv(csv, dtype=str)
             df = pd.merge(df, prediction_df, how="outer")
-            df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(
-                drop=True
+            df = (
+                df.drop_duplicates(subset="SeriesInstanceUID")
+                .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                .reset_index(drop=True)
             )
             df.to_csv(csv, index=False)
             pbar.update(1)

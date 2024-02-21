@@ -6,7 +6,11 @@ import numpy as np
 import json
 
 from SimpleITK import (
+    AffineTransform,
+    sitkLinear,
+    sitkNearestNeighbor,
     ReadImage,
+    ResampleImageFilter,
     WriteImage,
     GetArrayFromImage,
     GetImageFromArray,
@@ -120,6 +124,50 @@ def copy_metadata(row: dict, preprocessing_args: dict) -> None:
             e.write(f"{error}\n")
 
 
+def verify_reg(
+    fixed_image_path, moving_image_path, interp_method="linear", verbose=False
+):
+    def get_affine(image):
+        affine = np.eye(4)
+        affine[:3, :3] = np.reshape(image.GetDirection(), (3, 3))
+        affine[:3, 3] = image.GetOrigin()
+        return affine
+
+    fixed_image = ReadImage(fixed_image_path)
+    moving_image = ReadImage(moving_image_path)
+    same_shape = fixed_image.GetSize() == moving_image.GetSize()
+
+    fixed_affine = get_affine(fixed_image)
+    moving_affine = get_affine(moving_image)
+    close_affines = np.allclose(fixed_affine, moving_affine, atol=1e-3)
+
+    if not same_shape or not close_affines:
+        if verbose:
+            if not same_shape:
+                print(
+                    f"shapes do not match: {fixed_image.GetSize()} {moving_image.GetSize()}"
+                )
+            if not close_affines:
+                print(f"affines:\n{fixed_affine} \n{moving_affine}")
+        resampler = ResampleImageFilter()
+        resampler.SetReferenceImage(fixed_image)
+        if interp_method == "linear":
+            resampler.SetInterpolator(sitkLinear)
+        elif interp_method == "nearest":
+            resampler.SetInterpolator(sitkNearestNeighbor)
+
+        resampler.SetTransform(AffineTransform(fixed_image.GetDimension()))
+
+        resampled_image = resampler.Execute(moving_image)
+
+        WriteImage(resampled_image, moving_image_path)
+
+        return False
+
+    else:
+        return True
+
+
 def local_reg(
     row, pipeline_key, fixed_image_path, model="affine", verbose=False, debug=False
 ):
@@ -163,6 +211,29 @@ def local_reg(
         print(
             f"Registered files generated to {[d['out_moving'] for d in accompanying_images]}"
         )
+
+    redo_registrations = not verify_reg(fixed_image_path, output_file, verbose=verbose)
+
+    if redo_registrations:
+        if verbose:
+            print(
+                "Registered images do not share the same affine or shape and require resampling."
+            )
+
+        if len(accompanying_images) > 1:
+            for accompanying_image in accompanying_images:
+                moving_image_path = accompanying_image["out_moving"]
+                interp_method = accompanying_image.get("interp_method", "linear")
+
+                verify_reg(
+                    fixed_image_path,
+                    moving_image_path,
+                    interp_method=interp_method,
+                    verbose=verbose,
+                )
+
+            if verbose:
+                print("Resampling completed.")
 
     return row
 
@@ -234,6 +305,23 @@ def long_reg(
         print(
             f"Registered files generated to {[d['out_moving'] for d in accompanying_images]}"
         )
+
+    redo_registrations = not verify_reg(fixed_image_path, moving_image_path)
+
+    if redo_registrations:
+        if verbose:
+            print(
+                "Registered images do not share the same affine or shape and require resampling."
+            )
+
+        for accompanying_image in accompanying_images:
+            moving_image_path = accompanying_image["out_moving"]
+            interp_method = accompanying_image.get("interp_method", "linear")
+
+            verify_reg(fixed_image_path, moving_image_path, interp_method)
+
+        if verbose:
+            print("Resampling completed.")
 
     return rows
 
@@ -1297,11 +1385,18 @@ def debug_from_csv(
             preprocessed_df = future.result()
             df = pd.read_csv(csv, dtype=str)
             df = pd.merge(df, preprocessed_df, how="outer")
-            df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(
-                drop=True
+            df = (
+                df.drop_duplicates(subset="SeriesInstanceUID")
+                .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                .reset_index(drop=True)
             )
             df.to_csv(csv, index=False)
             pbar.update(1)
 
-    df = pd.read_csv(csv, dtype=str)
+    df = (
+        pd.read_csv(csv, dtype=str)
+        .drop_duplicates(subset="SeriesInstanceUID")
+        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .reset_index(drop=True)
+    )
     return df
