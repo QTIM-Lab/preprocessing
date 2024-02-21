@@ -29,6 +29,7 @@ tensorflow = "2.14"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.2"
+ipywidgets = "^8.1.2"
 
 [build-system]
 requires = ["poetry-core"]
