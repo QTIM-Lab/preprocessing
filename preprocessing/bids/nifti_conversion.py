@@ -316,7 +316,11 @@ def convert_batch_to_nifti(
         futures = [executor.submit(convert_study, **kwargs) for kwargs in kwargs_list]
         for future in as_completed(futures):
             nifti_df = future.result()
-            df = pd.read_csv(csv, dtype=str)
+            df = (
+                pd.read_csv(csv, dtype=str)
+                .drop_duplicates(subset="SeriesInstanceUID")
+                .reset_index(drop=True)
+            )
             df = pd.merge(df, nifti_df, how="outer")
             df = (
                 df.drop_duplicates(subset="SeriesInstanceUID")
@@ -324,9 +328,13 @@ def convert_batch_to_nifti(
                 .reset_index(drop=True)
             )
             df.to_csv(csv, index=False)
-            df.to_csv(csv, index=False)
             pbar.update(1)
 
-    df = pd.read_csv(csv, dtype=str)
-
+    df = (
+        pd.read_csv(csv, dtype=str)
+        .drop_duplicates(subset="SeriesInstanceUID")
+        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .reset_index(drop=True)
+    )
+    df.to_csv(csv, index=False)
     return df

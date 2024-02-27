@@ -3,12 +3,12 @@ import pandas as pd
 import glob
 import os
 import shutil
-import multiprocessing
 
 from preprocessing.constants import META_KEYS
 from pydicom import dcmread
 from pathlib import Path
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFrame:
@@ -181,19 +181,11 @@ def copy_dicoms(
     return df
 
 
-def copy_dicoms_star(args) -> pd.DataFrame:
-    """
-    Helper function intended for use only in 'reorganize_dicoms'. Provides an imap
-    compatible version of 'copy_dicoms'.
-    """
-    return copy_dicoms(*args)
-
-
 def reorganize_dicoms(
     original_dicom_dir: Path | str,
     new_dicom_dir: Path | str,
     anon_csv: Path | str | pd.DataFrame | None,
-    cpus: int = 0,
+    cpus: int = 1,
 ) -> pd.DataFrame:
     """
     Copies all of the dicoms present within a dataset's root directory to
@@ -210,7 +202,7 @@ def reorganize_dicoms(
         Visit_ID to the StudyInstanceUID of the DICOMs. If None is provided, the
         anonymization will be completed automatically based on the DICOM headers.
     cpus: int
-        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
+        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
 
     Returns
     _______
@@ -218,54 +210,8 @@ def reorganize_dicoms(
         A DataFrame containing the location and metadata of the DICOM data at the
         series level.
     """
-    original_dicom_dir = Path(original_dicom_dir)
-    new_dicom_dir = Path(new_dicom_dir)
 
-    if isinstance(anon_csv, (Path, str)):
-        anon_df = pd.read_csv(anon_csv)
-
-    elif isinstance(anon_csv, pd.DataFrame):
-        anon_df = anon_csv
-
-    else:
-        anon_df = None
-
-    sub_dirs = list(original_dicom_dir.glob("*/"))
-
-    if cpus == 0:
-        outputs = [
-            copy_dicoms(sub_dir, new_dicom_dir, anon_df)
-            for sub_dir in tqdm(sub_dirs, desc="Copying DICOMs")
-        ]
-
-    else:
-        inputs = [[sub_dir, new_dicom_dir, anon_df] for sub_dir in sub_dirs]
-
-        with multiprocessing.Pool(cpus) as pool:
-            outputs = list(
-                tqdm(
-                    pool.imap(copy_dicoms_star, inputs),
-                    total=len(sub_dirs),
-                    desc="Copying DICOMs",
-                )
-            )
-
-    if anon_df is not None:
-        df = (
-            pd.concat(outputs, ignore_index=True)
-            .drop_duplicates(subset=["SeriesInstanceUID"])
-            .sort_values(["Anon_PatientID", "Anon_StudyID"])
-            .reset_index(drop=True)
-        )
-
-    else:
-        df = (
-            pd.concat(outputs, ignore_index=True)
-            .drop_duplicates(subset=["SeriesInstanceUID"])
-            .sort_values(["StudyDate"])
-            .reset_index(drop=True)
-        )
-
+    def anonymize_df(df: pd.DataFrame):
         anon_patient_dict = {}
         patients = df["PatientID"].dropna().unique()
         for i, patient in enumerate(patients):
@@ -287,8 +233,80 @@ def reorganize_dicoms(
                 study_df["Anon_StudyID"] = [f"ses-{i+1:02d}"] * study_df.shape[0]
                 df.update(study_df)
 
-        df = df.sort_values(["Anon_PatientID", "Anon_StudyID"])
+        df = (
+            df.drop_duplicates(subset="SeriesInstanceUID")
+            .sort_values(["Anon_PatientID", "Anon_StudyID"])
+            .reset_index(drop=True)
+        )
+        return df
 
-    df.to_csv((new_dicom_dir / "dataset.csv"), index=False)
+    original_dicom_dir = Path(original_dicom_dir)
+    new_dicom_dir = Path(new_dicom_dir)
+    dataset_csv = new_dicom_dir / "dataset.csv"
+
+    if isinstance(anon_csv, (Path, str)):
+        anon_df = pd.read_csv(anon_csv, dtype=str)
+
+    elif isinstance(anon_csv, pd.DataFrame):
+        anon_df = anon_csv
+
+    else:
+        anon_df = None
+
+    sub_dirs = list(original_dicom_dir.glob("*/"))
+
+    kwargs_list = [
+        {
+            "sub_dir": sub_dir,
+            "new_dicom_dir": new_dicom_dir,
+            "anon_df": anon_df,
+        }
+        for sub_dir in sub_dirs
+    ]
+
+    with tqdm(
+        total=len(kwargs_list), desc="Copying DICOMs"
+    ) as pbar, ThreadPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+        futures = [executor.submit(copy_dicoms, **kwargs) for kwargs in kwargs_list]
+        for future in as_completed(futures):
+            dicom_df = future.result()
+
+            if dataset_csv.exists():
+                df = pd.read_csv(dataset_csv, dtype=str)
+                df = pd.merge(df, dicom_df, "outer")
+
+            else:
+                df = dicom_df
+
+            if anon_df is not None:
+                df = (
+                    df.drop_duplicates(subset=["SeriesInstanceUID"])
+                    .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                    .reset_index(drop=True)
+                )
+
+                df.to_csv(dataset_csv, index=False)
+
+            else:
+                df = (
+                    df.drop_duplicates(subset=["SeriesInstanceUID"])
+                    # .sort_values(["StudyDate"])
+                    .reset_index(drop=True)
+                )
+                df = anonymize_df(df)
+                df.to_csv(dataset_csv, index=False)
+
+            pbar.update(1)
+
+    df = (
+        pd.read_csv(dataset_csv, dtype=str)
+        .drop_duplicates(subset=["SeriesInstanceUID"])
+        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .reset_index(drop=True)
+    )
+    print("Anonymizing CSV:")
+
+    df = anonymize_df(df)
+    df.to_csv(dataset_csv, index=False)
 
     return df

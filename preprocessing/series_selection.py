@@ -211,7 +211,11 @@ def series_from_csv(
         futures = [executor.submit(series_in_study, **kwargs) for kwargs in kwargs_list]
         for future in as_completed(futures):
             prediction_df = future.result()
-            df = pd.read_csv(csv, dtype=str)
+            df = (
+                pd.read_csv(csv, dtype=str)
+                .drop_duplicates(subset="SeriesInstanceUID")
+                .reset_index(drop=True)
+            )
             df = pd.merge(df, prediction_df, how="outer")
             df = (
                 df.drop_duplicates(subset="SeriesInstanceUID")
@@ -221,7 +225,13 @@ def series_from_csv(
             df.to_csv(csv, index=False)
             pbar.update(1)
 
-    df = pd.read_csv(csv, dtype=str)
+    df = (
+        pd.read_csv(csv, dtype=str)
+        .drop_duplicates(subset="SeriesInstanceUID")
+        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .reset_index(drop=True)
+    )
+    df.to_csv(csv, index=False)
     return df
 
 

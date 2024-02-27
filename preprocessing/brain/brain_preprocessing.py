@@ -306,7 +306,7 @@ def long_reg(
             f"Registered files generated to {[d['out_moving'] for d in accompanying_images]}"
         )
 
-    redo_registrations = not verify_reg(fixed_image_path, moving_image_path)
+    redo_registrations = not verify_reg(fixed_image_path, moved_image_path, verbose=verbose)
 
     if redo_registrations:
         if verbose:
@@ -314,14 +314,20 @@ def long_reg(
                 "Registered images do not share the same affine or shape and require resampling."
             )
 
-        for accompanying_image in accompanying_images:
-            moving_image_path = accompanying_image["out_moving"]
-            interp_method = accompanying_image.get("interp_method", "linear")
+        if len(accompanying_images) > 1:
+            for accompanying_image in accompanying_images:
+                moving_image_path = accompanying_image["out_moving"]
+                interp_method = accompanying_image.get("interp_method", "linear")
 
-            verify_reg(fixed_image_path, moving_image_path, interp_method)
+                verify_reg(
+                    fixed_image_path,
+                    moving_image_path,
+                    interp_method=interp_method,
+                    verbose=verbose,
+                )
 
-        if verbose:
-            print("Resampling completed.")
+            if verbose:
+                print("Resampling completed.")
 
     return rows
 
@@ -1044,8 +1050,15 @@ def preprocess_patient(
         )
     )
 
-    ### TODO add recursive call in case of failure on the first study for a patient
     if getattr(preprocessed_dfs[0], "failed_preprocessing", False):
+        # remove failed preprocessed studies
+        anon_patientID = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
+        anon_studyID = study_df.loc[study_df.index[0], "Anon_StudyID"]
+        study_dir = preprocessed_dir / anon_patientID  / anon_studyID
+
+        if study_dir.exists():
+            shutil.rmtree(study_dir)
+
         if patient_df.shape[0] > 1:
             patient_df = patient_df.loc[1:, :]
             preprocess_patient(
@@ -1333,7 +1346,11 @@ def debug_from_csv(
 
     check_gpu_usage(gpu, cpus > 1)
 
-    df = pd.read_csv(csv, dtype=str)
+    df = pd.read_csv(
+        csv,
+        dtype=str
+    ).drop_duplicates(subset="SeriesInstanceUID").reset_index(drop=True)
+
 
     if pipeline_key in df.keys():
         df = df.drop(columns=pipeline_key)
@@ -1383,7 +1400,10 @@ def debug_from_csv(
         ]
         for future in as_completed(futures):
             preprocessed_df = future.result()
-            df = pd.read_csv(csv, dtype=str)
+            df = pd.read_csv(
+                csv,
+                dtype=str
+            ).drop_duplicates(subset="SeriesInstanceUID").reset_index(drop=True)
             df = pd.merge(df, preprocessed_df, how="outer")
             df = (
                 df.drop_duplicates(subset="SeriesInstanceUID")
@@ -1399,4 +1419,5 @@ def debug_from_csv(
         .sort_values(["Anon_PatientID", "Anon_StudyID"])
         .reset_index(drop=True)
     )
+    df.to_csv(csv, index=False)
     return df
