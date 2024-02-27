@@ -132,10 +132,16 @@ def verify_reg(
         affine[:3, :3] = np.reshape(image.GetDirection(), (3, 3))
         affine[:3, 3] = image.GetOrigin()
         return affine
+    
+    if verbose:
+        print(f"{moving_image_path} is being checked against {fixed_image_path}")
 
     fixed_image = ReadImage(fixed_image_path)
     moving_image = ReadImage(moving_image_path)
     same_shape = fixed_image.GetSize() == moving_image.GetSize()
+    
+    if verbose:
+        print(f"moving: {moving_image.GetSize()}, fixed; {fixed_image.GetSize()}, {same_shape}")
 
     fixed_affine = get_affine(fixed_image)
     moving_affine = get_affine(moving_image)
@@ -1087,14 +1093,18 @@ def preprocess_patient(
     else:
         if len(study_uids) > 1:
             if longitudinal_registration:
-                if debug:
-                    print(preprocessed_dfs)
-                    output_dir = os.path.dirname(preprocessed_dfs[0][pipeline_key][0])
-                    base_name = os.path.basename(preprocessed_dfs[0]["nifti"][0])
+                reg_sorted = preprocessed_dfs[0].sort_values(
+                    ["NormalizedSeriesDescription"],
+                    key=lambda x: (x != registration_key).astype(int),
+                ).reset_index(drop=True)
+
+                if debug: 
+                    output_dir = os.path.dirname(reg_sorted[pipeline_key][0])
+                    base_name = os.path.basename(reg_sorted["nifti"][0])
                     registration_target = f"{output_dir}/{base_name}"
 
                 else:
-                    registration_target = preprocessed_dfs[0][pipeline_key][0]
+                    registration_target = reg_sorted[pipeline_key][0]
 
                 for study_uid in study_uids[1:]:
                     study_df = patient_df[
