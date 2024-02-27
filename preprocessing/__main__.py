@@ -5,10 +5,12 @@ from pathlib import Path
 from pycrumbs import tracked
 from typing import Callable, Dict, Any
 
-from preprocessing.bids import convert_batch_to_nifti
-from preprocessing.bids import find_anon_keys
-from preprocessing.bids import reorganize_dicoms
-from preprocessing.bids import validate
+from preprocessing.bids import (
+    convert_batch_to_nifti,
+    find_anon_keys,
+    reorganize_dicoms,
+    # validate
+)
 from preprocessing.brain import preprocess_from_csv, debug_from_csv
 from preprocessing.series_selection import series_from_csv, default_key
 
@@ -192,7 +194,7 @@ dataset_to_nifti.add_argument(
         """
         A csv containing dicom location and information required for the nifti file
         names. It must contain the columns: ['dicoms', 'Anon_PatientID', 
-        'Anon_StudyID', 'StudyInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription',
+        'Anon_StudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription',
         'SeriesType'].
         """
     ),
@@ -233,7 +235,7 @@ predict_series.add_argument(
     help=(
         """
         The path to a CSV containing an entire dataset. It must contain the following
-        columns: ['StudyInstanceUID', 'SeriesDescription', 'dicoms'].
+        columns: ['StudyInstanceUID', 'SeriesInstanceUID', 'SeriesDescription', 'dicoms'].
         """
     ),
 )
@@ -303,7 +305,7 @@ brain_preprocessing.add_argument(
         """
         A csv containing nifti location and information required for the output file names.
         It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID', 
-        'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+        'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
         """
     ),
 )
@@ -444,7 +446,7 @@ debug_preprocessing.add_argument(
         """
         A csv containing nifti location and information required for the output file names.
         It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID', 
-        'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+        'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
         """
     ),
 )
@@ -647,7 +649,7 @@ def main():
             "pipeline_key": args.pipeline_key,
             "registration_key": args.registration_key,
             "longitudinal_registration": args.longitudinal_registration,
-            "registration_model": args.registration_model,
+            "registration_model": args.model,
             "orientation": args.orientation,
             "spacing": args.spacing,
             "skullstrip": not args.no_skullstrip,

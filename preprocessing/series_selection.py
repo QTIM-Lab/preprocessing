@@ -159,7 +159,7 @@ def series_from_csv(
     __________
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following
-        columns: ['StudyInstanceUID', 'SeriesDescription', 'dicoms'].
+        columns: ['StudyInstanceUID', 'SeriesInstanceUID', 'SeriesDescription', 'dicoms'].
     ruleset: str
         Ruleset used within mr_series_selection to predict the NormalizedDescription of
         each series. Options include 'brain', 'lumbar', and 'prostate'. Defaults to 'brain'.
@@ -186,7 +186,12 @@ def series_from_csv(
     df = pd.read_csv(csv, dtype=str)
 
     if check_columns:
-        required_columns = ["StudyInstanceUID", "SeriesDescription", "dicoms"]
+        required_columns = [
+            "StudyInstanceUID",
+            "SeriesInstanceUID",
+            "SeriesDescription",
+            "dicoms",
+        ]
 
         check_required_columns(df, required_columns)
 

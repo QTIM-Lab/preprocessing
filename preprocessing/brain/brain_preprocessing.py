@@ -402,7 +402,7 @@ def preprocess_study(
     study_df: pd.DataFrame
         A DataFrame containing nifti location and information required for the output file names
         for a single study. It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID',
-        'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+        'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
     preprocessed_dir: Path
         The directory that will contain the preprocessed NIfTI files.
     pipeline_key: str
@@ -448,6 +448,7 @@ def preprocess_study(
             "Anon_PatientID",
             "Anon_StudyID",
             "StudyInstanceUID",
+            "SeriesInstanceUID",
             "NormalizedSeriesDescription",
             "SeriesType",
         ]
@@ -968,7 +969,7 @@ def preprocess_patient(
     patient_df: pd.DataFrame
         A DataFrame containing nifti location and information required for the output file names
         for a single patient. It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID',
-        'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+        'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
     preprocessed_dir: Path
         The directory that will contain the preprocessed NIfTI files.
     pipeline_key: str
@@ -1018,6 +1019,7 @@ def preprocess_patient(
             "Anon_PatientID",
             "Anon_StudyID",
             "StudyInstanceUID",
+            "SeriesInstanceUID",
             "NormalizedSeriesDescription",
             "SeriesType",
         ]
@@ -1185,7 +1187,8 @@ def preprocess_from_csv(
     __________
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following columns:  'nifti',
-        'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+        'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription',
+        and 'SeriesType'.
     preprocessed_dir: Path
         The directory that will contain the preprocessed NIfTI files.
     pipeline_key: str
@@ -1237,6 +1240,7 @@ def preprocess_from_csv(
         "Anon_PatientID",
         "Anon_StudyID",
         "StudyInstanceUID",
+        "SeriesInstanceUID",
         "NormalizedSeriesDescription",
         "SeriesType",
     ]
@@ -1247,6 +1251,11 @@ def preprocess_from_csv(
     preprocessed_dir = Path(preprocessed_dir)
 
     os.environ["PREPROCESSING_REGISTRATION_MODEL"] = registration_model
+
+    df = (
+        df.drop_duplicates(subset="SeriesInstanceUID")
+        .reset_index(drop=True)
+    )
 
     filtered_df = df.copy().dropna(subset="nifti")
     patients = filtered_df["Anon_PatientID"].unique()
@@ -1278,8 +1287,10 @@ def preprocess_from_csv(
             preprocessed_df = future.result()
             df = pd.read_csv(csv, dtype=str)
             df = pd.merge(df, preprocessed_df, how="outer")
-            df = df.sort_values(["Anon_PatientID", "Anon_StudyID"]).reset_index(
-                drop=True
+            df = (
+                df.drop_duplicates(subset="SeriesInstanceUID")
+                .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                .reset_index(drop=True)
             )
             df.to_csv(csv, index=False)
             pbar.update(1)
@@ -1310,7 +1321,8 @@ def debug_from_csv(
     __________
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following columns:  'nifti',
-        'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+        'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription',
+        and 'SeriesType'.
     preprocessed_dir: Path
         The directory that will contain the preprocessed NIfTI files.
     patients: Sequece[str] | None
@@ -1355,12 +1367,8 @@ def debug_from_csv(
 
     check_gpu_usage(gpu, cpus > 1)
 
-    df = (
-        pd.read_csv(csv, dtype=str)
-        .drop_duplicates(subset="SeriesInstanceUID")
-        .reset_index(drop=True)
-    )
-
+    df = pd.read_csv(csv, dtype=str)
+        
     if pipeline_key in df.keys():
         df = df.drop(columns=pipeline_key)
 
@@ -1369,6 +1377,7 @@ def debug_from_csv(
         "Anon_PatientID",
         "Anon_StudyID",
         "StudyInstanceUID",
+        "SeriesInstanceUID",
         "NormalizedSeriesDescription",
         "SeriesType",
     ]
@@ -1379,6 +1388,12 @@ def debug_from_csv(
     preprocessed_dir = Path(preprocessed_dir)
 
     os.environ["PREPROCESSING_REGISTRATION_MODEL"] = registration_model
+
+    df = (
+        df.drop_duplicates(subset="SeriesInstanceUID")
+        .reset_index(drop=True)
+    )
+
 
     filtered_df = df.copy().dropna(subset="nifti")
 

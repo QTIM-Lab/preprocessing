@@ -5,6 +5,7 @@ import os
 import shutil
 
 from preprocessing.constants import META_KEYS
+from preprocessing.utils import check_required_columns
 from pydicom import dcmread
 from pathlib import Path
 from tqdm import tqdm
@@ -181,6 +182,68 @@ def copy_dicoms(
     return df
 
 
+def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
+    """
+    Apply automated anonymization to a DatFrame. This function assumes
+    that the 'PatientID' and 'StudyID' tags are consistent and correct
+    to derive Anon_PatientID = 'sub_{i:02d}' and Anon_StudyID = 'ses_{i:02d}'.
+
+    Parameters
+    __________
+    df: pd.DataFrame
+        A DataFrame for which you wish to provide anonymized patient and study
+        identifiers. It must contain the columns: 'PatientID' and 'StudyDate'.
+    check_columns: bool
+        Whether to check `df` for required columns. Defaults to True.
+
+    Returns
+    _______
+    pd.DataFrame
+        `df` with added or corrected columns 'Anon_PatientID' and
+        'Anon_StudyID'.
+    """
+
+    if check_columns:
+        required_columns = [
+            "PatientID",
+            "StudyDate",
+            "SeriesInstanceUID",
+        ]
+
+        check_required_columns(df, required_columns)
+
+    anon_patient_dict = {}
+    anon_study_dict = {}
+    patients = df["PatientID"].dropna().unique()
+    for i, patient in enumerate(patients):
+        anon_patient_dict[patient] = f"sub-{i+1:02d}"
+
+        patient_df = df[df["PatientID"] == patient].copy()
+        study_dates = sorted(patient_df["StudyDate"].unique())
+        for j, study_date in enumerate(study_dates):
+            anon_study_dict[(patient, study_date)] = f"ses-{j+1:02d}"
+
+    df["Anon_PatientID"] = df["PatientID"].apply(
+        lambda x: anon_patient_dict[x] if not pd.isna(x) else x
+    )
+
+    df["Anon_StudyID"] = df.apply(
+        (
+            lambda x: anon_study_dict[(x["PatientID"], x["StudyDate"])]
+            if not (pd.isna(x["PatientID"]) or pd.isna(x["StudyDate"]))
+            else None
+        ),
+        axis=1,
+    )
+
+    df = (
+        df.drop_duplicates(subset="SeriesInstanceUID")
+        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .reset_index(drop=True)
+    )
+    return df
+
+
 def reorganize_dicoms(
     original_dicom_dir: Path | str,
     new_dicom_dir: Path | str,
@@ -210,36 +273,6 @@ def reorganize_dicoms(
         A DataFrame containing the location and metadata of the DICOM data at the
         series level.
     """
-
-    def anonymize_df(df: pd.DataFrame):
-        anon_patient_dict = {}
-        patients = df["PatientID"].dropna().unique()
-        for i, patient in enumerate(patients):
-            anon_patient_dict[patient] = f"sub-{i+1:02d}"
-
-        def anonymize_patient(x):
-            if isinstance(x, str):
-                x = anon_patient_dict[x]
-            return x
-
-        df["Anon_PatientID"] = df["PatientID"].apply(anonymize_patient)
-
-        for patient in patients:
-            patient_df = df[df["PatientID"] == patient].copy()
-
-            studies = sorted(patient_df["StudyDate"].unique())
-            for i, study in enumerate(studies):
-                study_df = patient_df[patient_df["StudyDate"] == study].copy()
-                study_df["Anon_StudyID"] = [f"ses-{i+1:02d}"] * study_df.shape[0]
-                df.update(study_df)
-
-        df = (
-            df.drop_duplicates(subset="SeriesInstanceUID")
-            .sort_values(["Anon_PatientID", "Anon_StudyID"])
-            .reset_index(drop=True)
-        )
-        return df
-
     original_dicom_dir = Path(original_dicom_dir)
     new_dicom_dir = Path(new_dicom_dir)
     dataset_csv = new_dicom_dir / "dataset.csv"
@@ -290,10 +323,9 @@ def reorganize_dicoms(
             else:
                 df = (
                     df.drop_duplicates(subset=["SeriesInstanceUID"])
-                    # .sort_values(["StudyDate"])
                     .reset_index(drop=True)
                 )
-                df = anonymize_df(df)
+                df = anonymize_df(df, False)
                 df.to_csv(dataset_csv, index=False)
 
             pbar.update(1)

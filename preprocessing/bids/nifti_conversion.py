@@ -15,9 +15,28 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
+    """
+    Check the integrity of a DICOM series. This includes verification of consistent
+    values for the 'ImageOrientationPatient', 'SliceThickness', and 'PixelSpacing'
+    tags. 'ImageOrientationPatient' must also form an orthonormal basis.
+
+    Parameters
+    __________
+    series_dir: Path | str
+        The path to a directory containing a DICOM series. All of the DICOM instances
+        are assumed to have the .dcm file extension.
+    eps: float
+        The absolute error tolerance allowed to pass the integrity checks. Defaults to 1e-3.
+
+    Returns
+    _______
+    bool
+        The success or failure of the integrity checks are represented as True or False
+        respectively.
+    """
     series_dir = Path(series_dir)
 
-    files = list(series_dir.glob("**/*"))
+    files = list(series_dir.glob("**/*.dcm"))
 
     dcms = []
 
@@ -256,7 +275,7 @@ def convert_batch_to_nifti(
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following
         columns: ['dicoms', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID',
-        'Manufacturer', 'NormalizedSeriesDescription', 'SeriesType'].
+        'SeriesInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription', 'SeriesType'].
     overwrite: bool
         Whether to overwrite the NIfTI file if there is already one with the same output name.
         Defaults to False.

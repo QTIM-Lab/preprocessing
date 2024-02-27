@@ -34,6 +34,7 @@ poetry add git+ssh://git@github.com/QTIM-Lab/preprocessing.git
 ### External Software
 Aside from python dependencies, this repo also requires external software to run some of the commands. On Martinos Machines, everything will be sourced automatically and will require no additional work on your part. If you want to use `preprocessing` on your own machine, you will have to install ANTS (>= 2.3.5), Slicer (>= 5.2.2), fsl (>= 6.0.6), freesurfer (dev), and CUDA 11.8 and source them within your shell. For user-specific or otherwise non-system installations, it is recommended to add analogous lines to the following directly to your .bashrc, .zshrc, etc.:
 ```bash
+export PATH=/usr/local/freesurfer/dev/bin:${PATH}
 export PATH=/usr/pubsw/packages/fsl/6.0.6/bin:${PATH}
 export PATH=/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/:${PATH}
 export PATH=/usr/pubsw/packages/ANTS/2.3.5/bin:${PATH}
@@ -41,7 +42,11 @@ export PATH=/usr/pubsw/packages/CUDA/11.8/bin:${PATH}
 
 export LD_LIBRARY_PATH=/usr/pubsw/packages/CUDA/11.8/lib64:{LD_LIBRARY_PATH}
 
+export FREESURFER_HOME=/usr/local/freesurfer/dev
+source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
+
 export ANTSPATH=/usr/pubsw/packages/ANTS/2.3.5/bin
+
 export FSLDIR=/usr/pubsw/packages/fsl/6.0.6/
 source ${FSLDIR}/etc/fslconf/fsl.sh
 ```
@@ -60,7 +65,7 @@ This command creates anonymization keys for anonymous PatientID and StudyID from
 ### reorganize-dicoms Command
 ```bash
 preprocessing reorganize-dicoms <original-dicom-dir> <new-dicom-dir> \
-        [--anon-csv=None] [-c | --cpus=0]
+        [--anon-csv=None] [-c | --cpus=1]
 ```
 This command reorganizes DICOMs to follow the BIDS convention. Any DICOMs found recursively within this directory will be reorganized (at least one level of subdirectories is assumed). Anonomyzation keys for PatientIDs and StudyIDs are provided within a csv.
 
@@ -89,9 +94,9 @@ default_key = {\
 ```bash
 preprocessing brain-preprocessing <preprocessed-dir> <csv> \
         [--pipeline-key="preprocessed"] [--registration-key="T1Post"] \
-        [--longitudinal-registration=False] [--orientation="RAI"] \
-        [--spacing="1,1,1"] [--no-skullstrip=False] [-c | --cpus=1] \
-        [-g | --gpu=False] [-v | --verbose=False] [-h | --help]
+        [--longitudinal-registration=False] [-m | --model="affine"] \
+        [--orientation="RAS"] [--spacing="1,1,1"] [--no-skullstrip=False] \
+        [-c | --cpus=1] [-g | --gpu=False] [-v | --verbose=False] [-h | --help]
 ```
 This command preprocesses NIfTI files for deep learning. A csv is required to indicate the location of source files and to procide the context for filenames. The outputs will comply with BIDS conventions.
 
@@ -100,7 +105,8 @@ This command preprocesses NIfTI files for deep learning. A csv is required to in
 preprocessing deug-preprocessing <preprocessed-dir> <csv> \
         [--patients=None] [--pipeline-key="debug"] \
         [--registration-key="T1Post"] [--longitudinal-registration=False] \
-        [--orientation="RAI"] [--spacing="1,1,1"] [--no-skullstrip=False] \
-        [-c | --cpus=1] [-g | --gpu=False] [-v | --verbose=False] [-h | --help]
+        [-m | --model="affine"] [--orientation="RAS"] [--spacing="1,1,1"] \
+        [--no-skullstrip=False] [-c | --cpus=1] [-g | --gpu=False] \
+        [-v | --verbose=False] [-h | --help]
 ```
 This command has the same functionality as the `brain-preprocessing` command, with the exception of saving intermediate results under different filenames. It is recommended to indicate the specific patients that want to be analyzed.
