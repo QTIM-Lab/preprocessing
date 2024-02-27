@@ -223,48 +223,29 @@ def synthmorph_registration(
     w=[],
     d=None,
 ):
-    class ArgParseEmulator:
-        pass
+    in_shape = (e,) * 3
+    is_mat = m in ("affine", "rigid")
 
-    arg = ArgParseEmulator()
-    arg.model = m
-    arg.out_moving = o
-    arg.out_fixed = O
-    arg.header_only = H
-    arg.trans = t
-    arg.inverse = T
-    arg.init = i
-    arg.threads = j
-    arg.gpu = g
-    arg.hyper = r
-    arg.steps = n
-    arg.extent = e
-    arg.weights = w
-    arg.out_dir = d
-
-    in_shape = (arg.extent,) * 3
-    is_mat = arg.model in ("affine", "rigid")
-
-    if arg.header_only and not is_mat:
+    if H and not is_mat:
         print("Error: -H is not compatible with deformable registration")
         exit(1)
 
-    if not 0 < arg.hyper < 1:
+    if not 0 < r < 1:
         print("Error: regularization strength not in open interval (0, 1)")
         exit(1)
 
-    if arg.steps < limits["steps"]:
+    if n < limits["steps"]:
         print("Error: too few integration steps")
         exit(1)
 
     # Setup.
     gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0")
-    os.environ["CUDA_VISIBLE_DEVICES"] = gpu if arg.gpu else ""
+    os.environ["CUDA_VISIBLE_DEVICES"] = gpu if g else ""
     # os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0" if arg_verbose else "3"
 
-    if arg.threads:
-        tf.config.threading.set_inter_op_parallelism_threads(arg.threads)
-        tf.config.threading.set_intra_op_parallelism_threads(arg.threads)
+    if j:
+        tf.config.threading.set_inter_op_parallelism_threads(j)
+        tf.config.threading.set_intra_op_parallelism_threads(j)
 
     mov = sf.load_volume(moving)
     fix = sf.load_volume(fixed)
@@ -277,7 +258,7 @@ def synthmorph_registration(
     # this assumes prior affine registration, so we center the moving network space
     # on the fixed image, to take into account affine transforms applied by
     # resampling, updating the header, or passed on the command line alike.
-    center = fix if arg.model == "deform" else None
+    center = fix if m == "deform" else None
     net_to_mov, mov_to_net = network_space(mov, shape=in_shape, center=center)
     net_to_fix, fix_to_net = network_space(fix, shape=in_shape)
 
@@ -290,8 +271,8 @@ def synthmorph_registration(
     # Incorporate an initial matrix transform. It maps from fixed to moving world
     # coordinates, so we start with fixed network space on the right. FreeSurfer
     # LTAs store the inverse of the transform.
-    if arg.init:
-        init = sf.load_affine(arg.init).convert(space="world")
+    if i:
+        init = sf.load_affine(i).convert(space="world")
         if (
             init.ndim != 3
             or not sf.transform.image_geometry_equal(mov.geom, init.source, tol=1e-4)
@@ -324,10 +305,10 @@ def synthmorph_registration(
             batch=True,
         ),
     )
-    if arg.out_dir:
-        os.makedirs(arg.out_dir, exist_ok=True)
-        inp_1 = os.path.join(arg.out_dir, "inp_1.mgz")
-        inp_2 = os.path.join(arg.out_dir, "inp_2.mgz")
+    if d:
+        os.makedirs(d, exist_ok=True)
+        inp_1 = os.path.join(d, "inp_1.mgz")
+        inp_2 = os.path.join(d, "inp_2.mgz")
         geom_1 = sf.ImageGeometry(in_shape, vox2world=mov_to_ras @ net_to_mov)
         geom_2 = sf.ImageGeometry(in_shape, vox2world=fix_to_ras @ net_to_fix)
         sf.Volume(inputs[0][0], geom_1).save(inp_1)
@@ -336,24 +317,22 @@ def synthmorph_registration(
     # Network.
     prop = dict(in_shape=in_shape, bidir=True)
     if is_mat:
-        prop.update(make_dense=False, rigid=arg.model == "rigid")
+        prop.update(make_dense=False, rigid=m == "rigid")
         model = vxm.networks.VxmAffineFeatureDetector(**prop)
 
     else:
-        prop.update(
-            mid_space=True, int_steps=arg.steps, skip_affine=arg.model == "deform"
-        )
+        prop.update(mid_space=True, int_steps=n, skip_affine=m == "deform")
         model = vxm.networks.HyperVxmJoint(**prop)
-        inputs = (np.asarray([arg.hyper]), *inputs)
+        inputs = (np.asarray([r]), *inputs)
 
     # Weights.
-    if not arg.weights:
+    if not w:
         fs = os.environ.get("FREESURFER_HOME")
         if not fs:
             sf.system.fatal("set environment variable FREESURFER_HOME or weights")
-        arg.weights = [os.path.join(fs, "models", f) for f in weights[arg.model]]
+        w = [os.path.join(fs, "models", f) for f in weights[m]]
 
-    for f in arg.weights:
+    for f in w:
         load_weights(model, weights=f)
 
     # Inference. The first transform maps from the moving to the fixed image, or
@@ -371,24 +350,24 @@ def synthmorph_registration(
     ras_2 = convert_to_ras(vox_2, source=fix, target=mov)
 
     # Save transform from moving to fixed image. FreeSurfer LTAs store the inverse.
-    if arg.trans:
+    if t:
         if is_mat:
             out = sf.Affine(ras_2, source=mov, target=fix, space="world")
         else:
             out = fix.new(ras_1)
-        out.save(arg.trans)
+        out.save(t)
 
     # Save transform from fixed to moving image. FreeSurfer LTAs store the inverse.
-    if arg.inverse:
+    if T:
         if is_mat:
             out = sf.Affine(ras_1, source=fix, target=mov, space="world")
         else:
             out = mov.new(ras_2)
-        out.save(arg.inverse)
+        out.save(T)
 
     # Save moving image registered to fixed image.
-    if arg.out_moving:
-        if arg.header_only:
+    if o:
+        if H:
             out = mov.copy()
             out.geom.update(vox2world=ras_2 @ mov.geom.vox2world)
         else:
@@ -396,17 +375,17 @@ def synthmorph_registration(
                 mov, interp_method=interp_method, trans=vox_1, shape=fix.shape
             )
             out = fix.new(out)
-        out.save(arg.out_moving)
+        out.save(o)
 
     # Save fixed image registered to moving image.
-    if arg.out_fixed:
-        if arg.header_only:
+    if O:
+        if H:
             out = fix.copy()
             out.geom.update(vox2world=ras_1 @ fix.geom.vox2world)
         else:
             out = transform(fix, trans=vox_2, shape=mov.shape)
             out = mov.new(out)
-        out.save(arg.out_fixed)
+        out.save(O)
 
     for accompanying_image in accompanying_images:
         moving = accompanying_image["moving"]
@@ -414,7 +393,7 @@ def synthmorph_registration(
         interp_method = accompanying_image.get("interp_method", "linear")
         mov = sf.load_volume(moving)
 
-        if arg.header_only:
+        if H:
             out = mov.copy()
             out.geom.update(vox2world=ras_2 @ mov.geom.vox2world)
         else:

@@ -51,6 +51,10 @@ The following commands are available:
                                 indicate the location of source files and to procide the context
                                 for filenames. The outputs will comply with BIDS conventions.
 
+    debug-preprocessing         A debugging counterpart to `brain-preprocessing`, in which each
+                                step is differentiated by a suffix added to the file names.
+                                Debugging can also be performed on specific patients.
+
 Run `preprocessing <command> --help` for more details about how to use each individual command.
 
 """
@@ -342,6 +346,19 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-m",
+    "--model",
+    choices=["rigid", "affine", "joint", "deform"],
+    default="affine",
+    help=(
+        """
+        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        and 'deform'. Defaults to 'affine'.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
     "--orientation",
     type=str,
     default="RAS",
@@ -483,6 +500,19 @@ debug_preprocessing.add_argument(
 )
 
 debug_preprocessing.add_argument(
+    "-m",
+    "--model",
+    choices=["rigid", "affine", "joint", "deform"],
+    default="affine",
+    help=(
+        """
+        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        and 'deform'. Defaults to 'affine'.
+        """
+    ),
+)
+
+debug_preprocessing.add_argument(
     "--orientation",
     type=str,
     default="RAS",
@@ -594,6 +624,7 @@ def main():
             "pipeline_key": args.pipeline_key,
             "registration_key": args.registration_key,
             "longitudinal_registration": args.longitudinal_registration,
+            "registration_model": args.model,
             "orientation": args.orientation,
             "spacing": args.spacing,
             "skullstrip": not args.no_skullstrip,
@@ -616,6 +647,7 @@ def main():
             "pipeline_key": args.pipeline_key,
             "registration_key": args.registration_key,
             "longitudinal_registration": args.longitudinal_registration,
+            "registration_model": args.registration_model,
             "orientation": args.orientation,
             "spacing": args.spacing,
             "skullstrip": not args.no_skullstrip,

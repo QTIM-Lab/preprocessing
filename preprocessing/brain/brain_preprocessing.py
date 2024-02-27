@@ -33,7 +33,7 @@ from preprocessing.utils import (
     check_gpu_usage,
 )
 from preprocessing.synthmorph import synthmorph_registration
-from typing import Sequence
+from typing import Sequence, Literal
 from scipy.ndimage import (
     binary_fill_holes,
     binary_closing,
@@ -306,7 +306,9 @@ def long_reg(
             f"Registered files generated to {[d['out_moving'] for d in accompanying_images]}"
         )
 
-    redo_registrations = not verify_reg(fixed_image_path, moved_image_path, verbose=verbose)
+    redo_registrations = not verify_reg(
+        fixed_image_path, moved_image_path, verbose=verbose
+    )
 
     if redo_registrations:
         if verbose:
@@ -927,6 +929,7 @@ def preprocess_study(
         "preprocessed_dir": str(preprocessed_dir),
         "pipeline_key": pipeline_key,
         "registration_target": registration_target,
+        "registration_model": os.environ.get("PREPROCESSING_REGISTRATION_MODEL", "affine"),
         "orientation": orientation,
         "spacing": spacing,
         "skullstrip": skullstrip,
@@ -1054,7 +1057,7 @@ def preprocess_patient(
         # remove failed preprocessed studies
         anon_patientID = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
         anon_studyID = study_df.loc[study_df.index[0], "Anon_StudyID"]
-        study_dir = preprocessed_dir / anon_patientID  / anon_studyID
+        study_dir = preprocessed_dir / anon_patientID / anon_studyID
 
         if study_dir.exists():
             shutil.rmtree(study_dir)
@@ -1167,6 +1170,7 @@ def preprocess_from_csv(
     pipeline_key: str = "preprocessed",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
+    registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
@@ -1194,8 +1198,9 @@ def preprocess_from_csv(
     longitudinal_registration: bool
         Whether to register all of the subsequent studies for a patient to the first study. Defaults to
         False.
-    registration_target: str | None
-        The location of the file that will be used as the fixed image for the purposes of registration.
+    registration_model: str
+        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        and 'deform'. Defaults to 'affine'.
     orientation: str
         The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
     spacing: str
@@ -1240,6 +1245,8 @@ def preprocess_from_csv(
     check_required_columns(df, required_columns, optional_columns)
 
     preprocessed_dir = Path(preprocessed_dir)
+
+    os.environ["PREPROCESSING_REGISTRATION_MODEL"] = registration_model
 
     filtered_df = df.copy().dropna(subset="nifti")
     patients = filtered_df["Anon_PatientID"].unique()
@@ -1288,6 +1295,7 @@ def debug_from_csv(
     pipeline_key: str = "debug",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
+    registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
@@ -1318,8 +1326,9 @@ def debug_from_csv(
     longitudinal_registration: bool
         Whether to register all of the subsequent studies for a patient to the first study. Defaults to
         False.
-    registration_target: str | None
-        The location of the file that will be used as the fixed image for the purposes of registration.
+    registration_model: str
+        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        and 'deform'. Defaults to 'affine'.
     orientation: str
         The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
     spacing: str
@@ -1346,11 +1355,11 @@ def debug_from_csv(
 
     check_gpu_usage(gpu, cpus > 1)
 
-    df = pd.read_csv(
-        csv,
-        dtype=str
-    ).drop_duplicates(subset="SeriesInstanceUID").reset_index(drop=True)
-
+    df = (
+        pd.read_csv(csv, dtype=str)
+        .drop_duplicates(subset="SeriesInstanceUID")
+        .reset_index(drop=True)
+    )
 
     if pipeline_key in df.keys():
         df = df.drop(columns=pipeline_key)
@@ -1368,6 +1377,8 @@ def debug_from_csv(
     check_required_columns(df, required_columns, optional_columns)
 
     preprocessed_dir = Path(preprocessed_dir)
+
+    os.environ["PREPROCESSING_REGISTRATION_MODEL"] = registration_model
 
     filtered_df = df.copy().dropna(subset="nifti")
 
@@ -1400,10 +1411,11 @@ def debug_from_csv(
         ]
         for future in as_completed(futures):
             preprocessed_df = future.result()
-            df = pd.read_csv(
-                csv,
-                dtype=str
-            ).drop_duplicates(subset="SeriesInstanceUID").reset_index(drop=True)
+            df = (
+                pd.read_csv(csv, dtype=str)
+                .drop_duplicates(subset="SeriesInstanceUID")
+                .reset_index(drop=True)
+            )
             df = pd.merge(df, preprocessed_df, how="outer")
             df = (
                 df.drop_duplicates(subset="SeriesInstanceUID")
