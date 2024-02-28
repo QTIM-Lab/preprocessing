@@ -7,6 +7,7 @@ import shutil
 from preprocessing.constants import META_KEYS
 from preprocessing.utils import check_required_columns
 from pydicom import dcmread
+from pydicom.uid import generate_uid
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -321,9 +322,8 @@ def reorganize_dicoms(
                 df.to_csv(dataset_csv, index=False)
 
             else:
-                df = (
-                    df.drop_duplicates(subset=["SeriesInstanceUID"])
-                    .reset_index(drop=True)
+                df = df.drop_duplicates(subset=["SeriesInstanceUID"]).reset_index(
+                    drop=True
                 )
                 df = anonymize_df(df, False)
                 df.to_csv(dataset_csv, index=False)
@@ -339,6 +339,170 @@ def reorganize_dicoms(
     print("Anonymizing CSV:")
 
     df = anonymize_df(df)
+    df.to_csv(dataset_csv, index=False)
+
+    return df
+
+
+def nifti_anon_csv(
+    nifti_dir: Path | str, output_dir: Path | str, normalized_descriptions: bool = False
+):
+    nifti_dir = Path(nifti_dir)
+    output_dir = Path(output_dir)
+
+    rows = []
+
+    study_uid_dict = {}
+
+    for nifti in nifti_dir.glob("**/*.nii.gz"):
+        if nifti.name.startswith("."):
+            continue
+
+        name_components = nifti.name.replace(".nii.gz", "").split("-")
+
+        try:
+            patient_id = name_components[-3]
+            study_date = name_components[-2]
+            series_description = name_components[-1]
+
+        except Exception:
+            error = (
+                f"{nifti} does not follow the expected convention for this command. "
+                "Rename the files to follow a `<PatientIdentifier>-<StudyDate | StudyIdentifier>-<SeriesDescription>.nii.gz` "
+                "naming convention. Names that include a leading component separated with '-' should also "
+                "be compatible.\n"
+            )
+
+            print(error)
+            with open(output_dir / "nifti_anon_errors.txt", "a") as e:
+                e.write(error)
+            continue
+
+        if (patient_id, study_date) not in study_uid_dict:
+            study_uid = generate_uid()
+            study_uid_dict[(patient_id, study_date)] = study_uid
+
+        else:
+            study_uid = study_uid_dict[(patient_id, study_date)]
+
+        row = {
+            "PatientID": patient_id,
+            "StudyDate": study_date,
+            "SeriesInstanceUID": generate_uid(),
+            "StudyInstanceUID": study_uid,
+            "SeriesDescription": series_description,
+            "original_nifti": nifti,
+        }
+
+        if normalized_descriptions:
+            row["NormalizedSeriesDescription"] = series_description
+
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    df = anonymize_df(df)
+
+    df.to_csv(output_dir / "nifti_anon.csv", index=False)
+    return df
+
+
+def reorganize_niftis(
+    nifti_dir: Path | str,
+    anon_csv: Path | str | pd.DataFrame,
+    cpus: int = 1,
+) -> pd.DataFrame:
+    if isinstance(anon_csv, (Path, str)):
+        anon_df = pd.read_csv(anon_csv, dtype=str)
+
+    elif isinstance(anon_csv, pd.DataFrame):
+        anon_df = anon_csv
+
+    required_columns = [
+        "Anon_PatientID",
+        "Anon_StudyID",
+        "PatientID",
+        "StudyDate",
+        "SeriesInstanceUID",
+        "StudyInstanceUID",
+        "SeriesDescription",
+        "original_nifti",
+        "NormalizedSeriesDescription",
+    ]
+
+    optional_columns = ["SeriesType"]
+
+    check_required_columns(anon_df, required_columns, optional_columns)
+
+    nifti_dir = Path(nifti_dir)
+    dataset_csv = nifti_dir / "dataset.csv"
+
+    def copy_nifti(anon_row: dict) -> pd.DataFrame:
+        out_row = {
+            "Anon_PatientID": anon_row["Anon_PatientID"],
+            "Anon_StudyID": anon_row["Anon_StudyID"],
+        }
+
+        for key in META_KEYS + ["NormalizedSeriesDescription"]:
+            out_row[key] = anon_row.get(key, None)
+
+        out_row["SeriesType"] = anon_row.get("SeriesType", "anat")
+
+        anon_patient_id = out_row["Anon_PatientID"]
+        anon_study_id = out_row["Anon_StudyID"]
+        series_type = out_row["SeriesType"]
+        normalized_description = out_row["NormalizedSeriesDescription"]
+
+        output_dir = nifti_dir / anon_patient_id / anon_study_id / series_type
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        nifti_basename = (
+            f"{anon_patient_id}_{anon_study_id}_{normalized_description}.nii.gz"
+        )
+
+        out_row["nifti"] = output_dir / nifti_basename
+
+        shutil.copy(anon_row["original_nifti"], out_row["nifti"])
+
+        return pd.DataFrame([out_row])
+
+    kwargs_list = [
+        {
+            "anon_row": row,
+        }
+        for row in anon_df.to_dict("records")
+    ]
+
+    with tqdm(
+        total=len(kwargs_list), desc="Copying NIfTIs"
+    ) as pbar, ThreadPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+        futures = [executor.submit(copy_nifti, **kwargs) for kwargs in kwargs_list]
+        for future in as_completed(futures):
+            nifti_df = future.result()
+
+            if dataset_csv.exists():
+                df = pd.read_csv(dataset_csv, dtype=str)
+                df = pd.merge(df, nifti_df, "outer")
+
+            else:
+                df = nifti_df
+
+            df = (
+                df.drop_duplicates(subset=["SeriesInstanceUID"])
+                .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                .reset_index(drop=True)
+            )
+
+            df.to_csv(dataset_csv, index=False)
+
+            pbar.update(1)
+
+    df = (
+        pd.read_csv(dataset_csv, dtype=str)
+        .drop_duplicates(subset=["SeriesInstanceUID"])
+        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .reset_index(drop=True)
+    )
+
     df.to_csv(dataset_csv, index=False)
 
     return df

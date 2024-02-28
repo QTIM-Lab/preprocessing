@@ -2,23 +2,36 @@ import argparse
 import json
 
 from pathlib import Path
-from pycrumbs import tracked
+from pycrumbs import tracked, get_git_info
 from typing import Callable, Dict, Any
 
 from preprocessing.bids import (
     convert_batch_to_nifti,
     find_anon_keys,
     reorganize_dicoms,
+    nifti_anon_csv,
+    reorganize_niftis,
     # validate
 )
 from preprocessing.brain import preprocess_from_csv, debug_from_csv
 from preprocessing.series_selection import series_from_csv, default_key
+
+# from git import Repo, InvalidGitRepositoryError
+#
+# try:
+#     repo = Repo(Path(__file__).resolve(), search_parent_directories=True)
+#     disable_git_tracking = False
+#
+# except InvalidGitRepositoryError:
+#     disable_git_tracking = True
+#
 
 
 @tracked(
     directory_parameter="record_dir",
     record_filename="preprocessing_cli_record.json",
     chain_records=True,
+    # disable_git_tracking=disable_git_tracking,
 )
 def tracked_command(func: Callable, kwargs: Dict[str, Any], record_dir: Path | str):
     return func(**kwargs)
@@ -33,10 +46,19 @@ The following commands are available:
                                 with data following a following <Patient_ID>/<Study_ID> directory
                                 hierarchy.
 
+    nifti-dataset-anon-keys     Create anonymization keys for a dataset that starts within NIfTI
+                                format. If the 'SeriesDescription's are not normalized,
+                                'NormalizedSeriesDescription's must be obtained externally before
+                                the NIfTI dataset can be reorganized.
+
     reorganize-dicoms           Reorganize DICOMs to follow the BIDS convention. Any DICOMs found
                                 recursively within this directory will be reorganized (at least
                                 one level of subdirectories is assumed). Anonomyzation keys for
                                 PatientIDs and StudyIDs are provided within a csv.
+
+    reorganize-niftis           Reorganize a NIfTI dataset to follow BIDS convention. As NIfTI files
+                                lack metadata, anonymization keys must be provided in the form of a
+                                CSV, such as one obtained with `nifti-dataset-anon-keys`.
 
     dataset-to-nifti            Convert DICOMs to NIfTI file format. A csv is required to map a
                                 DICOM series to the resulting .nii.gz file and to provide
@@ -103,7 +125,43 @@ old_project_anon_keys.add_argument(
     ),
 )
 
-reorganize = subparsers.add_parser(
+nifti_dataset_anon_keys = subparsers.add_parser(
+    "nifti-dataset-anon-keys",
+    description=(
+        """
+        Create anonymization keys for a dataset that starts within NIfTI
+        format. If the 'SeriesDescription's are not normalized,
+        'NormalizedSeriesDescription's must be obtained externally before
+        the NIfTI dataset can be reorganized.
+        """
+    ),
+)
+
+nifti_dataset_anon_keys.add_argument(
+    "nifti_dir",
+    metavar="nifti-dir",
+    type=Path,
+    help=("The directory containing all of the NIfTI files you wish to anonymize."),
+)
+
+nifti_dataset_anon_keys.add_argument(
+    "output_dir",
+    metavar="output-dir",
+    type=Path,
+    help=(
+        "The directory that will contain the output csv and potentially an error file."
+    ),
+)
+
+nifti_dataset_anon_keys.add_argument(
+    "--normalized-descriptions",
+    action="store_true",
+    help=(
+        "Whether the 'SeriesDescription' in the NIfTI file name is already normalized."
+    ),
+)
+
+reorganize_d = subparsers.add_parser(
     "reorganize-dicoms",
     description=(
         """
@@ -115,14 +173,14 @@ reorganize = subparsers.add_parser(
     ),
 )
 
-reorganize.add_argument(
+reorganize_d.add_argument(
     "original_dicom_dir",
     metavar="original-dicom-dir",
     type=Path,
     help=("The directory containing all of the DICOM files you wish to reorganize."),
 )
 
-reorganize.add_argument(
+reorganize_d.add_argument(
     "new_dicom_dir",
     metavar="new-dicom-dir",
     type=Path,
@@ -134,7 +192,7 @@ reorganize.add_argument(
     ),
 )
 
-reorganize.add_argument(
+reorganize_d.add_argument(
     "--anon-csv",
     type=Path,
     default=None,
@@ -146,7 +204,51 @@ reorganize.add_argument(
     ),
 )
 
-reorganize.add_argument(
+reorganize_d.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
+reorganize_n = subparsers.add_parser(
+    "reorganize-niftis",
+    description=(
+        """
+        Reorganize a NIfTI dataset to follow BIDS convention. As NIfTI files
+        lack metadata, anonymization keys must be provided in the form of a
+        CSV, such as one obtained with `nifti-dataset-anon-keys`.
+        """
+    ),
+)
+
+reorganize_n.add_argument(
+    "nifti_dir",
+    metavar="nifti-dir",
+    type=Path,
+    help=("The directory in which the reorganized NIfTIs will be stored."),
+)
+
+reorganize_n.add_argument(
+    "anon_csv",
+    metavar="anon-csv",
+    type=Path,
+    help=(
+        """
+        A CSV containing the original location of NIfTI files and metadata
+        required for preprocessing commands. It must contain the columns: 
+        'Anon_PatientID', 'Anon_StudyID', 'PatientID', 'StudyDate',
+        'SeriesInstanceUID', 'StudyInstanceUID', 'SeriesDescription',
+        'original_nifti', and 'NormalizedSeriesDescription'. 'SeriesType'
+        can also be provided, otherwise "anat" will be assumed.
+        """
+    ),
+)
+
+reorganize_n.add_argument(
     "-c",
     "--cpus",
     type=int,
@@ -585,6 +687,15 @@ def main():
 
         tracked_command(find_anon_keys, kwargs=kwargs, record_dir=args.output_dir)
 
+    elif args.command == "nifti-dataset-anon-keys":
+        kwargs = {
+            "nifti_dir": args.nifti_dir,
+            "output_dir": args.output_dir,
+            "normalized-descriptions": args.normalized_descriptions,
+        }
+
+        tracked_command(nifti_anon_csv, kwargs=kwargs, record_dir=args.output_dir)
+
     elif args.command == "reorganize-dicoms":
         kwargs = {
             "original_dicom_dir": args.original_dicom_dir,
@@ -592,7 +703,17 @@ def main():
             "anon_csv": args.anon_csv,
             "cpus": args.cpus,
         }
+
         tracked_command(reorganize_dicoms, kwargs=kwargs, record_dir=args.new_dicom_dir)
+
+    elif args.command == "reorganize-niftis":
+        kwargs = {
+            "nifti_dir": args.nifti_dir,
+            "anon_csv": args.anon_csv,
+            "cpus": args.cpus,
+        }
+
+        tracked_command(reorganize_niftis, kwargs=kwargs, record_dir=args.nifti_dir)
 
     elif args.command == "dataset-to-nifti":
         kwargs = {
@@ -600,6 +721,7 @@ def main():
             "csv": args.csv,
             "overwrite_nifti": args.overwrite,
         }
+
         tracked_command(
             convert_batch_to_nifti, kwargs=kwargs, record_dir=args.nifti_dir
         )
@@ -617,6 +739,7 @@ def main():
             "description_key": description_key,
             "cpus": args.cpus,
         }
+
         tracked_command(series_from_csv, kwargs=kwargs, record_dir=args.csv.parent)
 
     elif args.command == "brain-preprocessing":
@@ -634,6 +757,7 @@ def main():
             "gpu": args.gpu,
             "verbose": args.verbose,
         }
+
         tracked_command(
             preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir
         )
@@ -657,4 +781,5 @@ def main():
             "gpu": args.gpu,
             "verbose": args.verbose,
         }
+
         tracked_command(debug_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir)
