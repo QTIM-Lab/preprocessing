@@ -16,22 +16,21 @@ from preprocessing.bids import (
 from preprocessing.brain import preprocess_from_csv, debug_from_csv
 from preprocessing.series_selection import series_from_csv, default_key
 
-# from git import Repo, InvalidGitRepositoryError
-#
-# try:
-#     repo = Repo(Path(__file__).resolve(), search_parent_directories=True)
-#     disable_git_tracking = False
-#
-# except InvalidGitRepositoryError:
-#     disable_git_tracking = True
-#
+from git import Repo, InvalidGitRepositoryError
+
+try:
+    repo = Repo(__file__, search_parent_directories=True)
+    disable_git_tracking = False
+
+except InvalidGitRepositoryError:
+    disable_git_tracking = True
 
 
 @tracked(
     directory_parameter="record_dir",
     record_filename="preprocessing_cli_record.json",
     chain_records=True,
-    # disable_git_tracking=disable_git_tracking,
+    disable_git_tracking=disable_git_tracking,
 )
 def tracked_command(func: Callable, kwargs: Dict[str, Any], record_dir: Path | str):
     return func(**kwargs)
@@ -691,7 +690,7 @@ def main():
         kwargs = {
             "nifti_dir": args.nifti_dir,
             "output_dir": args.output_dir,
-            "normalized-descriptions": args.normalized_descriptions,
+            "normalized_descriptions": args.normalized_descriptions,
         }
 
         tracked_command(nifti_anon_csv, kwargs=kwargs, record_dir=args.output_dir)

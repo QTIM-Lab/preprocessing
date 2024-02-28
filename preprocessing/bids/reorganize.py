@@ -3,6 +3,7 @@ import pandas as pd
 import glob
 import os
 import shutil
+import numpy as np
 
 from preprocessing.constants import META_KEYS
 from preprocessing.utils import check_required_columns
@@ -358,6 +359,10 @@ def nifti_anon_csv(
         if nifti.name.startswith("."):
             continue
 
+        seg_identifiers = ["label", "seg"]
+        if np.any([i in nifti.name.lower() for i in seg_identifiers]):
+            continue
+
         name_components = nifti.name.replace(".nii.gz", "").split("-")
 
         try:
@@ -429,7 +434,7 @@ def reorganize_niftis(
         "NormalizedSeriesDescription",
     ]
 
-    optional_columns = ["SeriesType"]
+    optional_columns = ["SeriesType", "seg"]
 
     check_required_columns(anon_df, required_columns, optional_columns)
 
@@ -462,6 +467,13 @@ def reorganize_niftis(
         out_row["nifti"] = output_dir / nifti_basename
 
         shutil.copy(anon_row["original_nifti"], out_row["nifti"])
+
+        if "seg" in anon_row:
+            seg_basename = f"{anon_patient_id}_{anon_study_id}_seg.nii.gz"
+
+            out_row["seg"] = output_dir / seg_basename
+
+            shutil.copy(anon_row["seg"], out_row["seg"])
 
         return pd.DataFrame([out_row])
 
