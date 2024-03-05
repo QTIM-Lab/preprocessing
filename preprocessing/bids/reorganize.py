@@ -468,7 +468,7 @@ def reorganize_niftis(
 
         shutil.copy(anon_row["original_nifti"], out_row["nifti"])
 
-        if "seg" in anon_row:
+        if "seg" in anon_row and not pd.isna(anon_row["seg"]):
             seg_basename = f"{anon_patient_id}_{anon_study_id}_seg.nii.gz"
 
             out_row["seg"] = output_dir / seg_basename
