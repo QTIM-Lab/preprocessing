@@ -22,7 +22,6 @@ from SimpleITK import (
     Cast,
 )
 
-# from nipype.interfaces.ants import N4BiasFieldCorrection
 from pathlib import Path
 from subprocess import run
 from tqdm import tqdm
@@ -410,6 +409,7 @@ def preprocess_study(
     pipeline_key: str,
     registration_key: str = "T1Post",
     registration_target: str | None = None,
+    registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
@@ -745,13 +745,12 @@ def preprocess_study(
     study_SS_mask_file = rows[0][pipeline_key].replace(".nii.gz", "_SS_mask.nii.gz")
 
     ### Register based on loose skullstrip
-    model = os.environ.get("PREPROCESSING_REGISTRATION_MODEL", "affine")
     for i in range(1, n):
-        rows[i] = local_reg(rows[i], pipeline_key, study_SS_file, model, verbose, debug)
+        rows[i] = local_reg(rows[i], pipeline_key, study_SS_file, registration_model, verbose, debug)
 
     if registration_target is not None:
         rows = long_reg(
-            rows, pipeline_key, main_SS_file, study_SS_mask_file, model, verbose, debug
+            rows, pipeline_key, main_SS_file, study_SS_mask_file, registration_model, verbose, debug
         )
         study_SS_mask_file = study_SS_mask_file.replace(".nii.gz", "_longreg.nii.gz")
     study_SS_mask_array = np.round(GetArrayFromImage(ReadImage(study_SS_mask_file)))
@@ -982,10 +981,11 @@ def preprocess_study(
         "preprocessed_dir": str(preprocessed_dir),
         "pipeline_key": pipeline_key,
         "registration_target": registration_target,
-        "registration_model": os.environ.get("PREPROCESSING_REGISTRATION_MODEL", "affine"),
+        "registration_model": registration_model,
         "orientation": orientation,
         "spacing": spacing,
         "skullstrip": skullstrip,
+        "binarize_seg": binarize_seg,
     }
 
     for row in rows:
@@ -1005,6 +1005,7 @@ def preprocess_patient(
     pipeline_key: str = "preprocessed",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
+    registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
@@ -1035,8 +1036,9 @@ def preprocess_patient(
     longitudinal_registration: bool
         Whether to register all of the subsequent studies for a patient to the first study. Defaults to
         False.
-    registration_target: str | None
-        The location of the file that will be used as the fixed image for the purposes of registration.
+    registration_model: str
+        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        and 'deform'. Defaults to 'affine'.
     orientation: str
         The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
     spacing: str
@@ -1101,6 +1103,7 @@ def preprocess_patient(
             pipeline_key=pipeline_key,
             registration_key=registration_key,
             registration_target=None,
+            registration_model=registration_model,
             orientation=orientation,
             spacing=spacing,
             skullstrip=skullstrip,
@@ -1129,6 +1132,7 @@ def preprocess_patient(
                 pipeline_key=pipeline_key,
                 registration_key=registration_key,
                 longitudinal_registration=longitudinal_registration,
+                registration_model=registration_model,
                 orientation=orientation,
                 spacing=spacing,
                 skullstrip=skullstrip,
@@ -1170,6 +1174,7 @@ def preprocess_patient(
                             pipeline_key=pipeline_key,
                             registration_key=registration_key,
                             registration_target=registration_target,
+                            registration_model=registration_model,
                             orientation=orientation,
                             spacing=spacing,
                             skullstrip=skullstrip,
@@ -1194,6 +1199,7 @@ def preprocess_patient(
                             pipeline_key=pipeline_key,
                             registration_key=registration_key,
                             registration_target=None,
+                            registration_model=registration_model,
                             orientation=orientation,
                             spacing=spacing,
                             skullstrip=skullstrip,
@@ -1317,8 +1323,6 @@ def preprocess_from_csv(
 
     preprocessed_dir = Path(preprocessed_dir)
 
-    os.environ["PREPROCESSING_REGISTRATION_MODEL"] = registration_model
-
     df = (
         df.drop_duplicates(subset="SeriesInstanceUID")
         .reset_index(drop=True)
@@ -1334,6 +1338,7 @@ def preprocess_from_csv(
             "pipeline_key": pipeline_key,
             "registration_key": registration_key,
             "longitudinal_registration": longitudinal_registration,
+            "registration_model": registration_model,
             "orientation": orientation,
             "spacing": spacing,
             "skullstrip": skullstrip,
@@ -1459,8 +1464,6 @@ def debug_from_csv(
 
     preprocessed_dir = Path(preprocessed_dir)
 
-    os.environ["PREPROCESSING_REGISTRATION_MODEL"] = registration_model
-
     df = (
         df.drop_duplicates(subset="SeriesInstanceUID")
         .reset_index(drop=True)
@@ -1479,6 +1482,7 @@ def debug_from_csv(
             "pipeline_key": pipeline_key,
             "registration_key": registration_key,
             "longitudinal_registration": longitudinal_registration,
+            "registration_model": registration_model,
             "orientation": orientation,
             "spacing": spacing,
             "skullstrip": skullstrip,
