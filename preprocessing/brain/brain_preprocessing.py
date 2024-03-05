@@ -86,12 +86,20 @@ def copy_metadata(row: dict, preprocessing_args: dict) -> None:
                 meta_dict, json_file, sort_keys=True, indent=2, separators=(",", ": ")
             )
     else:
-        error = f"{original_metafile} does not exist. New metafile will not be created"
-        print(error)
-        e = open(f"{preprocessing_args['preprocessed_dir']}/errors.txt", "a")
-        e.write(f"{error}\n")
+        meta_dict = {
+            "source_file": row["nifti"],
+            "original_metafile": None,
+            "preprocessing_args": preprocessing_args,
+        }
+        preprocessed_metafile = row[preprocessing_args["pipeline_key"]].replace(
+            ".nii.gz", ".json"
+        )
+        with open(preprocessed_metafile, "w") as json_file:
+            json.dump(
+                meta_dict, json_file, sort_keys=True, indent=2, separators=(",", ": ")
+            )
 
-    if "seg" in row:
+    if "seg" in row and not pd.isna(row["seg"]):
         original_metafile = row["seg"].replace(".nii.gz", ".json")
         if Path(original_metafile).exists():
             try:
@@ -116,12 +124,22 @@ def copy_metadata(row: dict, preprocessing_args: dict) -> None:
                     separators=(",", ": "),
                 )
         else:
-            error = (
-                f"{original_metafile} does not exist. New metafile will not be created"
-            )
-            print(error)
-            e = open(f"{preprocessing_args['preprocessed_dir']}/errors.txt", "a")
-            e.write(f"{error}\n")
+            meta_dict = {
+                "source_file": row["nifti"],
+                "original_metafile": None,
+                "preprocessing_args": preprocessing_args,
+            }
+            preprocessed_metafile = row[
+                f"{preprocessing_args['pipeline_key']}_seg"
+            ].replace(".nii.gz", ".json")
+            with open(preprocessed_metafile, "w") as json_file:
+                json.dump(
+                    meta_dict,
+                    json_file,
+                    sort_keys=True,
+                    indent=2,
+                    separators=(",", ": "),
+                )
 
 
 def verify_reg(
@@ -190,7 +208,7 @@ def local_reg(
 
     accompanying_images = [{"moving": preprocessed_file, "out_moving": output_file}]
 
-    if "seg" in row:
+    if "seg" in row and not pd.isna(row["seg"]):
         preprocessed_seg = row[f"{pipeline_key}_seg"]
         if debug:
             output_seg = preprocessed_seg.replace(".nii.gz", "_localreg.nii.gz")
@@ -282,7 +300,7 @@ def long_reg(
             {"moving": preprocessed_file, "out_moving": output_file}
         )
 
-        if "seg" in row:
+        if "seg" in row and not pd.isna(row["seg"]):
             preprocessed_seg = row[f"{pipeline_key}_seg"]
             if debug:
                 output_seg = preprocessed_seg.replace(".nii.gz", "_longreg.nii.gz")
@@ -395,6 +413,7 @@ def preprocess_study(
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
+    binarize_seg: bool = False,
     verbose: bool = False,
     source_software: bool = True,
     check_columns: bool = True,
@@ -427,6 +446,9 @@ def preprocess_study(
         are in mm. Defaults to '1,1,1'.
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    binarize_seg: bool
+        Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
+        applied by default.
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed.
     source_software: bool
@@ -510,7 +532,7 @@ def preprocess_study(
                 setattr(study_df, "failed_preprocessing", True)
                 return study_df
 
-        if "seg" in rows[i]:
+        if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
             input_file = rows[i]["seg"]
             preprocessed_seg = output_dir / os.path.basename(input_file)
             shutil.copy(input_file, preprocessed_seg)
@@ -531,6 +553,30 @@ def preprocess_study(
                     e.write(f"{error}\n")
                     setattr(study_df, "failed_preprocessing", True)
                     return study_df
+
+    ### Optionally enforce binary segmentations
+    if binarize_seg:
+        for i in range(n):
+            if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
+                preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+
+                if debug:
+                    output_seg = preprocessed_seg.replace(".nii.gz", "_binary.nii.gz")
+                    rows[i][f"{pipeline_key}_seg"] = output_seg
+
+                else:
+                    output_seg = preprocessed_seg
+
+
+                nifti = ReadImage(preprocessed_seg)
+                array = GetArrayFromImage(nifti)
+
+                array = (array >= 1).astype(int)
+
+                output_nifti = GetImageFromArray(array)
+                output_nifti.CopyInformation(nifti)
+                WriteImage(output_nifti, output_seg)
+
 
     ### RAS
     for i in range(n):
@@ -564,7 +610,7 @@ def preprocess_study(
             setattr(study_df, "failed_preprocessing", True)
             return study_df
 
-        if "seg" in rows[i]:
+        if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
             preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
 
             if debug:
@@ -626,7 +672,7 @@ def preprocess_study(
             setattr(study_df, "failed_preprocessing", True)
             return study_df
 
-        if "seg" in rows[i]:
+        if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
             preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
 
             if debug:
@@ -778,7 +824,7 @@ def preprocess_study(
             output_nifti.CopyInformation(nifti)
             WriteImage(output_nifti, output_file)
 
-            if "seg" in rows[i]:
+            if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
                 preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
 
                 if debug:
@@ -899,7 +945,7 @@ def preprocess_study(
                 setattr(study_df, "failed_preprocessing", True)
                 return study_df
 
-            if "seg" in rows[i]:
+            if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
                 preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
 
                 if debug:
@@ -962,6 +1008,7 @@ def preprocess_patient(
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
+    binarize_seg: bool = False,
     verbose: bool = False,
     source_software: bool = True,
     check_columns: bool = True,
@@ -997,6 +1044,9 @@ def preprocess_patient(
         are in mm. Defaults to '1,1,1'.
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    binarize_seg: bool
+        Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
+        applied by default.
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed.
     source_software: bool
@@ -1054,6 +1104,7 @@ def preprocess_patient(
             orientation=orientation,
             spacing=spacing,
             skullstrip=skullstrip,
+            binarize_seg=binarize_seg,
             verbose=verbose,
             source_software=False,
             check_columns=False,
@@ -1081,6 +1132,7 @@ def preprocess_patient(
                 orientation=orientation,
                 spacing=spacing,
                 skullstrip=skullstrip,
+                binarize_seg=binarize_seg,
                 verbose=verbose,
                 source_software=source_software,
                 check_columns=check_columns,
@@ -1121,6 +1173,7 @@ def preprocess_patient(
                             orientation=orientation,
                             spacing=spacing,
                             skullstrip=skullstrip,
+                            binarize_seg=binarize_seg,
                             verbose=verbose,
                             source_software=False,
                             check_columns=False,
@@ -1186,6 +1239,7 @@ def preprocess_from_csv(
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
+    binarize_seg: bool = False,
     cpus: int = 0,
     gpu: bool = False,
     verbose: bool = False,
@@ -1221,6 +1275,9 @@ def preprocess_from_csv(
         are in mm. Defaults to '1,1,1'.
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    binarize_seg: bool
+        Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
+        applied by default.
     cpus: int
         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
     gpu: bool
@@ -1280,6 +1337,7 @@ def preprocess_from_csv(
             "orientation": orientation,
             "spacing": spacing,
             "skullstrip": skullstrip,
+            "binarize_seg": binarize_seg,
             "verbose": verbose,
             "source_software": False,
             "check_columns": False,
@@ -1320,6 +1378,7 @@ def debug_from_csv(
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
+    binarize_seg: bool = False,
     cpus: int = 1,
     gpu: bool = False,
     verbose: bool = False,
@@ -1358,6 +1417,9 @@ def debug_from_csv(
         are in mm. Defaults to '1,1,1'.
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    binarize_seg: bool
+        Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
+        applied by default.
     cpus: int
         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
     gpu: bool
@@ -1420,6 +1482,7 @@ def debug_from_csv(
             "orientation": orientation,
             "spacing": spacing,
             "skullstrip": skullstrip,
+            "binarize_seg": binarize_seg,
             "verbose": verbose,
             "source_software": False,
             "check_columns": False,

@@ -488,7 +488,18 @@ brain_preprocessing.add_argument(
     help=(
         """
         Whether to not apply skullstripping to preprocessed data. Skullstripping will be
-        applied if not specified."
+        applied if not specified.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "--binarize-seg",
+    action="store_true",
+    help=(
+        """
+        Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
+        applied by default.
         """
     ),
 )
@@ -642,7 +653,18 @@ debug_preprocessing.add_argument(
     help=(
         """
         Whether to not apply skullstripping to preprocessed data. Skullstripping will be
-        applied if not specified."
+        applied if not specified.
+        """
+    ),
+)
+
+debug_preprocessing.add_argument(
+    "--binarize-seg",
+    action="store_true",
+    help=(
+        """
+        Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
+        applied by default.
         """
     ),
 )
@@ -752,6 +774,7 @@ def main():
             "orientation": args.orientation,
             "spacing": args.spacing,
             "skullstrip": not args.no_skullstrip,
+            "binarize_seg": args.binarize_seg,
             "cpus": args.cpus,
             "gpu": args.gpu,
             "verbose": args.verbose,
@@ -776,6 +799,7 @@ def main():
             "orientation": args.orientation,
             "spacing": args.spacing,
             "skullstrip": not args.no_skullstrip,
+            "binarize_seg": args.binarize_seg,
             "cpus": args.cpus,
             "gpu": args.gpu,
             "verbose": args.verbose,
