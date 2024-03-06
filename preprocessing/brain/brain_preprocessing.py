@@ -16,7 +16,6 @@ from SimpleITK import (
     GetImageFromArray,
     N4BiasFieldCorrectionImageFilter,
     RescaleIntensity,
-    LiThreshold,
     sitkFloat32,
     sitkUInt8,
     Cast,
@@ -36,7 +35,6 @@ from typing import Sequence, Literal
 from scipy.ndimage import (
     binary_fill_holes,
     binary_closing,
-    binary_dilation,
     distance_transform_edt,
     generate_binary_structure,
 )
@@ -357,7 +355,7 @@ def long_reg(
     return rows
 
 
-def fill_foreground_mask(initial_foreground: np.ndarray, SS_mask_array: np.ndarray):
+def fill_foreground_mask(initial_foreground: np.ndarray, fill_3d: bool = False):
     foreground_cc = connected_components(initial_foreground)
     ccs, counts = np.unique(foreground_cc, return_counts=True)
 
@@ -370,37 +368,33 @@ def fill_foreground_mask(initial_foreground: np.ndarray, SS_mask_array: np.ndarr
 
     foreground = (foreground_cc == largest_cc).astype(int)
 
-    struct_2d = generate_binary_structure(2, 2)
+    if fill_3d:
+        struct_3d = generate_binary_structure(3, 3)
+        foreground = binary_fill_holes(foreground, structure=struct_3d)
 
-    for z in range(foreground.shape[0]):
-        foreground_slice = foreground[z, ...]
-        if 1 not in np.unique(foreground_slice):
-            continue
-        border_mask = np.ones_like(foreground_slice)
-        border_mask[0, :] = border_mask[-1, :] = border_mask[:, 0] = border_mask[
-            :, -1
-        ] = 0
-        distance = distance_transform_edt(border_mask)
+    else:
+        struct_2d = generate_binary_structure(2, 2)
 
-        iterations = int(distance[foreground_slice == 1].min())
+        for z in range(foreground.shape[0]):
+            foreground_slice = foreground[z, ...]
+            if 1 not in np.unique(foreground_slice):
+                continue
+            border_mask = np.ones_like(foreground_slice)
+            border_mask[0, :] = border_mask[-1, :] = border_mask[:, 0] = border_mask[
+                :, -1
+            ] = 0
+            distance = distance_transform_edt(border_mask)
 
-        foreground[z, ...] = binary_fill_holes(
-            binary_closing(
-                foreground_slice, structure=struct_2d, iterations=iterations
-            ),
-            structure=struct_2d,
-        )
+            iterations = int(distance[foreground_slice == 1].min())
 
-    struct_3d = generate_binary_structure(3, 3)
-
-    idx = (
-        binary_dilation(SS_mask_array, structure=struct_3d, iterations=5).astype(int)
-        == 1
-    )
-
-    foreground[idx] = 1
-
-    return foreground
+            foreground[z, ...] = binary_fill_holes(
+                binary_closing(
+                    foreground_slice, structure=struct_2d, iterations=iterations
+                ),
+                structure=struct_2d,
+            )
+ 
+    return foreground.astype(int)
 
 
 def preprocess_study(
@@ -413,6 +407,7 @@ def preprocess_study(
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
+    pre_skullstripped: bool = False,
     binarize_seg: bool = False,
     verbose: bool = False,
     source_software: bool = True,
@@ -446,6 +441,8 @@ def preprocess_study(
         are in mm. Defaults to '1,1,1'.
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    pre_skullstripped: bool
+        Whether the input data is already skullstripped. Skullstripping will not be applied if specified.
     binarize_seg: bool
         Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
         applied by default.
@@ -757,19 +754,26 @@ def preprocess_study(
 
     ### Bias correction
     if not skullstrip:
-        li_foreground_file = rows[0][pipeline_key].replace(
-            ".nii.gz", "_Liforeground_mask.nii.gz"
+        foreground_file = rows[0][pipeline_key].replace(
+            ".nii.gz", "_foreground_mask.nii.gz"
         )
         preprocessed_file = ReadImage(rows[0][pipeline_key])
-        li_foreground = RescaleIntensity(preprocessed_file, 0, 255)
-        li_foreground = LiThreshold(li_foreground, 0, 1)
+        foreground = RescaleIntensity(preprocessed_file, 0, 100)
 
-        array = GetArrayFromImage(li_foreground)
-        array = fill_foreground_mask(array, study_SS_mask_array)
+        if pre_skullstripped:
+            fill_3d = True
+            foreground_array = (GetArrayFromImage(foreground) > 1).astype(int)
 
-        li_foreground = GetImageFromArray(array)
-        li_foreground.CopyInformation(preprocessed_file)
-        WriteImage(li_foreground, li_foreground_file)
+        else:
+            fill_3d = False
+            foreground_array = (GetArrayFromImage(foreground) > 15).astype(int)
+
+
+        foreground_array = fill_foreground_mask(foreground_array, fill_3d)
+
+        foreground = GetImageFromArray(foreground_array)
+        foreground.CopyInformation(preprocessed_file)
+        WriteImage(foreground, foreground_file)
 
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
@@ -791,7 +795,7 @@ def preprocess_study(
             n4_mask = ReadImage(study_SS_mask_file, sitkUInt8)
 
         else:
-            n4_mask = li_foreground
+            n4_mask = foreground
 
         n4_mask = Cast(n4_mask, sitkUInt8)
 
@@ -870,31 +874,8 @@ def preprocess_study(
         if skullstrip:
             array = array * study_SS_mask_array
 
-        else:
-            if i == 0:
-                initial_foreground = (array > 0).astype(int)
-
-                initial_foreground_output_file = preprocessed_file.replace(
-                    ".nii.gz", "_initial_foreground_mask.nii.gz"
-                )
-
-                output_nifti = GetImageFromArray(initial_foreground)
-                output_nifti.CopyInformation(nifti)
-                WriteImage(output_nifti, initial_foreground_output_file)
-
-                study_foreground_array = fill_foreground_mask(
-                    initial_foreground, study_SS_mask_array
-                )
-
-                foreground_output_file = preprocessed_file.replace(
-                    ".nii.gz", "_foreground_mask.nii.gz"
-                )
-
-                output_nifti = GetImageFromArray(study_foreground_array)
-                output_nifti.CopyInformation(nifti)
-                WriteImage(output_nifti, foreground_output_file)
-
-            array = array * study_foreground_array
+        else: 
+            array = array * foreground_array
 
         preprocessed_file = rows[i][pipeline_key]
 
@@ -985,6 +966,7 @@ def preprocess_study(
         "orientation": orientation,
         "spacing": spacing,
         "skullstrip": skullstrip,
+        "pre_skullstripped": pre_skullstripped,
         "binarize_seg": binarize_seg,
     }
 
@@ -1009,6 +991,7 @@ def preprocess_patient(
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
+    pre_skullstripped: bool = False,
     binarize_seg: bool = False,
     verbose: bool = False,
     source_software: bool = True,
@@ -1046,6 +1029,8 @@ def preprocess_patient(
         are in mm. Defaults to '1,1,1'.
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    pre_skullstripped: bool
+        Whether the input data is already skullstripped. Skullstripping will not be applied if specified.
     binarize_seg: bool
         Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
         applied by default.
@@ -1096,6 +1081,9 @@ def preprocess_patient(
 
     study_df = patient_df[patient_df["StudyInstanceUID"] == study_uids[0]].copy()
 
+    if pre_skullstripped:
+        skullstrip = False
+
     preprocessed_dfs.append(
         preprocess_study(
             study_df=study_df,
@@ -1107,6 +1095,7 @@ def preprocess_patient(
             orientation=orientation,
             spacing=spacing,
             skullstrip=skullstrip,
+            pre_skullstripped=pre_skullstripped,
             binarize_seg=binarize_seg,
             verbose=verbose,
             source_software=False,
@@ -1136,6 +1125,7 @@ def preprocess_patient(
                 orientation=orientation,
                 spacing=spacing,
                 skullstrip=skullstrip,
+                pre_skullstripped=pre_skullstripped,
                 binarize_seg=binarize_seg,
                 verbose=verbose,
                 source_software=source_software,
@@ -1178,6 +1168,7 @@ def preprocess_patient(
                             orientation=orientation,
                             spacing=spacing,
                             skullstrip=skullstrip,
+                            pre_skullstripped=pre_skullstripped,
                             binarize_seg=binarize_seg,
                             verbose=verbose,
                             source_software=False,
@@ -1203,6 +1194,7 @@ def preprocess_patient(
                             orientation=orientation,
                             spacing=spacing,
                             skullstrip=skullstrip,
+                            pre_skullstripped=pre_skullstripped,
                             verbose=verbose,
                             source_software=False,
                             check_columns=False,
@@ -1245,6 +1237,7 @@ def preprocess_from_csv(
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
+    pre_skullstripped: bool = False,
     binarize_seg: bool = False,
     cpus: int = 0,
     gpu: bool = False,
@@ -1281,6 +1274,8 @@ def preprocess_from_csv(
         are in mm. Defaults to '1,1,1'.
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    pre_skullstripped: bool
+        Whether the input data is already skullstripped. Skullstripping will not be applied if specified.
     binarize_seg: bool
         Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
         applied by default.
@@ -1307,6 +1302,10 @@ def preprocess_from_csv(
 
     if pipeline_key in df.keys():
         df = df.drop(columns=pipeline_key)
+        if f"{pipeline_key}_seg" in df.keys():
+            df = df.drop(columns=f"{pipeline_key}_seg")
+
+    df.to_csv(csv, index=False)
 
     required_columns = [
         "nifti",
@@ -1331,6 +1330,9 @@ def preprocess_from_csv(
     filtered_df = df.copy().dropna(subset="nifti")
     patients = filtered_df["Anon_PatientID"].unique()
 
+    if pre_skullstripped:
+        skullstrip = False
+
     kwargs_list = [
         {
             "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
@@ -1342,6 +1344,7 @@ def preprocess_from_csv(
             "orientation": orientation,
             "spacing": spacing,
             "skullstrip": skullstrip,
+            "pre_skullstripped": pre_skullstripped,
             "binarize_seg": binarize_seg,
             "verbose": verbose,
             "source_software": False,
@@ -1383,6 +1386,7 @@ def debug_from_csv(
     orientation: str = "RAS",
     spacing: str = "1,1,1",
     skullstrip: bool = True,
+    pre_skullstripped: bool = False,
     binarize_seg: bool = False,
     cpus: int = 1,
     gpu: bool = False,
@@ -1422,6 +1426,8 @@ def debug_from_csv(
         are in mm. Defaults to '1,1,1'.
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+    pre_skullstripped: bool
+        Whether the input data is already skullstripped. Skullstripping will not be applied if specified.
     binarize_seg: bool
         Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
         applied by default.
@@ -1448,6 +1454,10 @@ def debug_from_csv(
         
     if pipeline_key in df.keys():
         df = df.drop(columns=pipeline_key)
+        if f"{pipeline_key}_seg" in df.keys():
+            df = df.drop(columns=f"{pipeline_key}_seg")
+    
+    df.to_csv(csv, index=False)
 
     required_columns = [
         "nifti",
@@ -1469,11 +1479,13 @@ def debug_from_csv(
         .reset_index(drop=True)
     )
 
-
     filtered_df = df.copy().dropna(subset="nifti")
 
     if patients is None:
         patients = filtered_df["Anon_PatientID"].unique()
+
+    if pre_skullstripped:
+        skullstrip = False
 
     kwargs_list = [
         {
@@ -1486,6 +1498,7 @@ def debug_from_csv(
             "orientation": orientation,
             "spacing": spacing,
             "skullstrip": skullstrip,
+            "pre_skullstripped": pre_skullstripped,
             "binarize_seg": binarize_seg,
             "verbose": verbose,
             "source_software": False,

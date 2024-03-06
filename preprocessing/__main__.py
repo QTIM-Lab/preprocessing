@@ -494,6 +494,18 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "--pre-skullstripped",
+    action="store_true",
+    help=(
+        """
+        Whether the input data is already skullstripped. Skullstripping will not be applied
+        if specified.
+        """
+    ),
+)
+
+
+brain_preprocessing.add_argument(
     "--binarize-seg",
     action="store_true",
     help=(
@@ -659,6 +671,17 @@ debug_preprocessing.add_argument(
 )
 
 debug_preprocessing.add_argument(
+    "--pre-skullstripped",
+    action="store_true",
+    help=(
+        """
+        Whether the input data is already skullstripped. Skullstripping will not be applied
+        if specified.
+        """
+    ),
+)
+
+debug_preprocessing.add_argument(
     "--binarize-seg",
     action="store_true",
     help=(
@@ -774,6 +797,7 @@ def main():
             "orientation": args.orientation,
             "spacing": args.spacing,
             "skullstrip": not args.no_skullstrip,
+            "pre_skullstripped": args.pre_skullstripped,
             "binarize_seg": args.binarize_seg,
             "cpus": args.cpus,
             "gpu": args.gpu,
@@ -799,6 +823,7 @@ def main():
             "orientation": args.orientation,
             "spacing": args.spacing,
             "skullstrip": not args.no_skullstrip,
+            "pre_skullstripped": args.pre_skullstripped,
             "binarize_seg": args.binarize_seg,
             "cpus": args.cpus,
             "gpu": args.gpu,
