@@ -404,6 +404,18 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "--patients",
+    type=str,
+    default=None,
+    help=(
+        """
+        A comma delimited list of patients to select from the 'Anon_PatientID' column
+        of the CSV
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
     "--pipeline-key",
     type=str,
     default="preprocessed",
@@ -516,13 +528,6 @@ brain_preprocessing.add_argument(
     help=(
         "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
     ),
-)
-
-brain_preprocessing.add_argument(
-    "-g",
-    "--gpu",
-    action="store_true",
-    help=("Whether to use a gpu for Synthmorph registration. Defaults to False."),
 )
 
 brain_preprocessing.add_argument(
@@ -695,14 +700,6 @@ debug_preprocessing.add_argument(
 )
 
 debug_preprocessing.add_argument(
-    "-g",
-    "--gpu",
-    action="store_true",
-    help=("Whether to use a gpu for Synthmorph registration. Defaults to False."),
-)
-
-
-debug_preprocessing.add_argument(
     "-v",
     "--verbose",
     action="store_true",
@@ -798,9 +795,13 @@ def main():
     elif args.command == "brain-preprocessing":
         from preprocessing.brain import preprocess_from_csv
 
+        if isinstance(args.patients, str):
+            args.patients = args.patients.split(",")
+
         kwargs = {
             "csv": args.csv,
             "preprocessed_dir": args.preprocessed_dir,
+            "patients": args.patients,
             "pipeline_key": args.pipeline_key,
             "registration_key": args.registration_key,
             "longitudinal_registration": args.longitudinal_registration,
@@ -811,7 +812,6 @@ def main():
             "pre_skullstripped": args.pre_skullstripped,
             "binarize_seg": args.binarize_seg,
             "cpus": args.cpus,
-            "gpu": args.gpu,
             "verbose": args.verbose,
         }
 
@@ -839,7 +839,6 @@ def main():
             "pre_skullstripped": args.pre_skullstripped,
             "binarize_seg": args.binarize_seg,
             "cpus": args.cpus,
-            "gpu": args.gpu,
             "verbose": args.verbose,
         }
 

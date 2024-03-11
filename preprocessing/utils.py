@@ -1,9 +1,6 @@
 import os
 import pandas as pd
-import SimpleITK as sitk
-import warnings
 
-from pathlib import Path
 from shutil import which
 from typing import Sequence
 
@@ -52,16 +49,12 @@ def source_external_software():
     paths = [
         "/usr/local/freesurfer/dev/bin",
         "/usr/pubsw/packages/fsl/6.0.6/bin",
-        "/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/",
-        "/usr/pubsw/packages/ANTS/2.3.5/bin",
         "/usr/pubsw/packages/CUDA/11.8/bin",
     ]
     if all(os.path.exists(path) for path in paths):  # Source on Martinos Machine
         os.environ["PATH"] = (
             "/usr/local/freesurfer/dev/bin:"
             "/usr/pubsw/packages/fsl/6.0.6/bin:"
-            "/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/:"
-            "/usr/pubsw/packages/ANTS/2.3.5/bin:"
             "/usr/pubsw/packages/CUDA/11.8/bin:"
         ) + os.environ.get("PATH", "/usr/bin/")
 
@@ -71,8 +64,6 @@ def source_external_software():
             "LD_LIBRARY_PATH", "/usr/lib/"
         )
 
-        os.environ["ANTSPATH"] = "/usr/pubsw/packages/ANTS/2.3.5/bin"
-
         os.environ["FSLDIR"] = "/usr/pubsw/packages/fsl/6.0.6/"
         os.system(f"source {os.environ['FSLDIR']}/etc/fslconf/fsl.sh")
 
@@ -80,7 +71,7 @@ def source_external_software():
         os.system(f"source {os.environ['FREESURFER_HOME']}/SetUpFreeSurfer.sh")
 
     else:
-        required_software = ["dcm2niix", "Slicer", "ANTS", "mri_synthmorph"]
+        required_software = ["dcm2niix", "mri_synthstrip"]
         for software in required_software:
             if which(software) is None:
                 raise MissingSoftwareError(software, required_software)
@@ -158,55 +149,3 @@ def check_required_columns(
                 required_columns=required_columns,
                 optional_columns=optional_columns,
             )
-
-
-def sitk_check(file: Path | str):
-    sitk_image = sitk.ReadImage(file)
-    sitk.WriteImage(sitk_image, file)
-
-
-class GPUWarning(UserWarning):
-    pass
-
-
-def check_gpu_usage(use_gpu: bool = False, use_multiprocessing: bool = False):
-    """Check and issue warnings related to GPU usage for synthmorph registration."""
-    import tensorflow as tf
-
-    if use_gpu:
-        if "/device:GPU" not in str(tf.config.list_logical_devices()):
-            warnings.warn(
-                (
-                    "Synthmorph is running on the CPU. Define the 'CUDA_VISIBLE_DEVICES' "
-                    "environment variable to select a GPU."
-                ),
-                GPUWarning,
-            )
-        elif use_multiprocessing:
-            if "/device:GPU" in str(tf.config.list_logical_devices()):
-                raise Exception(
-                    "Preprocessing does not support multiprocessing and GPU usage simultaneously yet "
-                    "Synthmorph has selected a GPU for its device."
-                )
-
-            else:
-                warnings.warn(
-                    (
-                        "Preprocessing does not support multiprocessing and GPU usage simultaneously. "
-                        "Your preference for using GPU has been overwritten"
-                    ),
-                    GPUWarning,
-                )
-    else:
-        if "/device:GPU" in str(tf.config.list_logical_devices()):
-            if not eval(os.environ.get("SILENCE_PREPROCESSING_WARNINGS", "False")):
-                warnings.warn(
-                    (
-                        "This GPU and multiprocessing configuration should not be possible while "
-                        "using the Preprocessing CLI. If using the Preprocessing library through "
-                        "pure python, be mindful of VRAM consumption while using both GPU and "
-                        "multiprocessing. To silence this message define the "
-                        "'SILENCE_PREPROCESSING_WARNINGS' environment variable to be 'True'."
-                    ),
-                    GPUWarning,
-                )

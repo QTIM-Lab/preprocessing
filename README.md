@@ -36,16 +36,12 @@ Aside from python dependencies, this repo also requires external software to run
 ```bash
 export PATH=/usr/local/freesurfer/dev/bin:${PATH}
 export PATH=/usr/pubsw/packages/fsl/6.0.6/bin:${PATH}
-export PATH=/usr/pubsw/packages/slicer/Slicer-5.2.2-linux-amd64/:${PATH}
-export PATH=/usr/pubsw/packages/ANTS/2.3.5/bin:${PATH}
 export PATH=/usr/pubsw/packages/CUDA/11.8/bin:${PATH}
 
 export LD_LIBRARY_PATH=/usr/pubsw/packages/CUDA/11.8/lib64:{LD_LIBRARY_PATH}
 
 export FREESURFER_HOME=/usr/local/freesurfer/dev
 source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
-
-export ANTSPATH=/usr/pubsw/packages/ANTS/2.3.5/bin
 
 export FSLDIR=/usr/pubsw/packages/fsl/6.0.6/
 source ${FSLDIR}/etc/fslconf/fsl.sh
