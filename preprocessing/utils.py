@@ -1,8 +1,8 @@
 import os
 import pandas as pd
 import SimpleITK as sitk
-import tensorflow as tf
 import warnings
+
 from pathlib import Path
 from shutil import which
 from typing import Sequence
@@ -171,6 +171,8 @@ class GPUWarning(UserWarning):
 
 def check_gpu_usage(use_gpu: bool = False, use_multiprocessing: bool = False):
     """Check and issue warnings related to GPU usage for synthmorph registration."""
+    import tensorflow as tf
+
     if use_gpu:
         if "/device:GPU" not in str(tf.config.list_logical_devices()):
             warnings.warn(

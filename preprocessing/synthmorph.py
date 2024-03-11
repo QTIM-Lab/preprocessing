@@ -1,9 +1,11 @@
 # freesurfer/mri_synthmorph function extension
 import os
 import numpy as np
-import surfa as sf
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = os.environ.get("TF_CPP_MIN_LOG_LEVEL", "3")
 import tensorflow as tf
 import voxelmorph as vxm
+import surfa as sf
 
 
 # Settings.
@@ -241,7 +243,6 @@ def synthmorph_registration(
     # Setup.
     gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0")
     os.environ["CUDA_VISIBLE_DEVICES"] = gpu if g else ""
-    # os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0" if arg_verbose else "3"
 
     if j:
         tf.config.threading.set_inter_op_parallelism_threads(j)
