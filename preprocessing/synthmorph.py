@@ -7,6 +7,9 @@ import tensorflow as tf
 import voxelmorph as vxm
 import surfa as sf
 
+from SimpleITK import Image
+from preprocessing.utils import sitk_to_surfa, surfa_to_sitk
+
 
 # Settings.
 default = {
@@ -206,10 +209,13 @@ def convert_to_ras(trans, source, target):
 
 
 def synthmorph_registration(
-    moving,
-    fixed,
+    moving: str | Image,
+    fixed: str | Image,
     interp_method="linear",
     accompanying_images=[],
+    sitk_outputs=True,
+    sitk_im_cache={},
+    accompanying_in_cache=False,
     m=default["model"],
     o=None,
     O=None,
@@ -244,8 +250,22 @@ def synthmorph_registration(
             tf.config.threading.set_inter_op_parallelism_threads(j)
             tf.config.threading.set_intra_op_parallelism_threads(j)
 
-        mov = sf.load_volume(moving)
-        fix = sf.load_volume(fixed)
+        if isinstance(moving, Image):
+            # print(f"moving: {moving.GetDirection(), moving.GetSize()}")
+            mov = sitk_to_surfa(moving)
+
+        else:
+            mov = sf.load_volume(moving)
+
+        if isinstance(fixed, Image):
+            # print(f"fixed: {fixed.GetDirection(), fixed.GetSize()}")
+            fix = sitk_to_surfa(fixed)
+
+        else:
+            fix = sf.load_volume(fixed)
+
+        # pdb.set_trace()
+
         if not len(mov.shape) == len(fix.shape) == 3:
             sf.system.fatal("input images are not single-frame volumes")
 
@@ -312,8 +332,14 @@ def synthmorph_registration(
             inp_2 = os.path.join(d, "inp_2.mgz")
             geom_1 = sf.ImageGeometry(in_shape, vox2world=mov_to_ras @ net_to_mov)
             geom_2 = sf.ImageGeometry(in_shape, vox2world=fix_to_ras @ net_to_fix)
-            sf.Volume(inputs[0][0], geom_1).save(inp_1)
-            sf.Volume(inputs[1][0], geom_2).save(inp_2)
+
+            if sitk_outputs:
+                sitk_im_cache[inp_1] = surfa_to_sitk(sf.Volume(inputs[0][0], geom_1))
+                sitk_im_cache[inp_2] = surfa_to_sitk(sf.Volume(inputs[1][0], geom_2))
+
+            else:
+                sf.Volume(inputs[0][0], geom_1).save(inp_1)
+                sf.Volume(inputs[1][0], geom_2).save(inp_2)
 
         # Network.
         prop = dict(in_shape=in_shape, bidir=True)
@@ -376,7 +402,12 @@ def synthmorph_registration(
                     mov, interp_method=interp_method, trans=vox_1, shape=fix.shape
                 )
                 out = fix.new(out)
-            out.save(o)
+
+            if sitk_outputs:
+                sitk_im_cache[o] = surfa_to_sitk(out)
+
+            else:
+                out.save(o)
 
         # Save fixed image registered to moving image.
         if O:
@@ -386,13 +417,22 @@ def synthmorph_registration(
             else:
                 out = transform(fix, trans=vox_2, shape=mov.shape)
                 out = mov.new(out)
-            out.save(O)
+
+            if sitk_outputs:
+                sitk_im_cache[O] = surfa_to_sitk(out)
+
+            else:
+                out.save(O)
 
         for accompanying_image in accompanying_images:
             moving = accompanying_image["moving"]
             out_moving = accompanying_image["out_moving"]
             interp_method = accompanying_image.get("interp_method", "linear")
-            mov = sf.load_volume(moving)
+
+            if accompanying_in_cache:
+                mov = sitk_to_surfa(sitk_im_cache[moving])
+            else:
+                mov = sf.load_volume(moving)
 
             if H:
                 out = mov.copy()
@@ -402,4 +442,11 @@ def synthmorph_registration(
                     mov, interp_method=interp_method, trans=vox_1, shape=fix.shape
                 )
                 out = fix.new(out)
-            out.save(out_moving)
+
+            if sitk_outputs:
+                sitk_im_cache[out_moving] = surfa_to_sitk(out)
+
+            else:
+                out.save(out_moving)
+
+    return sitk_im_cache

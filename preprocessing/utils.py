@@ -1,8 +1,11 @@
 import os
 import pandas as pd
+import tempfile
 
 from shutil import which
 from typing import Sequence
+from SimpleITK import Image, ReadImage, WriteImage
+from surfa import Volume, load_volume
 
 
 class MissingSoftwareError(Exception):
@@ -149,3 +152,22 @@ def check_required_columns(
                 required_columns=required_columns,
                 optional_columns=optional_columns,
             )
+
+
+def sitk_to_surfa(sitk_im: Image) -> Volume:
+    with tempfile.NamedTemporaryFile() as tmpfile:
+        f = tmpfile.name + ".nii.gz"
+
+        WriteImage(sitk_im, f)
+        sf_im = load_volume(f)
+
+    return sf_im
+
+
+def surfa_to_sitk(sf_im: Volume) -> Image:
+    with tempfile.NamedTemporaryFile() as tmpfile:
+        f = tmpfile.name + ".nii.gz"
+        sf_im.save(f)
+        sitk_im = ReadImage(f)
+
+    return sitk_im
