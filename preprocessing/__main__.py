@@ -66,10 +66,6 @@ The following commands are available:
                                 indicate the location of source files and to procide the context
                                 for filenames. The outputs will comply with BIDS conventions.
 
-    debug-preprocessing         A debugging counterpart to `brain-preprocessing`, in which each
-                                step is differentiated by a suffix added to the file names.
-                                Debugging can also be performed on specific patients.
-
 Run `preprocessing <command> --help` for more details about how to use each individual command.
 
 """

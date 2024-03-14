@@ -960,7 +960,7 @@ def preprocess_study(
                 else:
                     output_seg = preprocessed_seg
 
-                nifti = ReadImage(preprocessed_seg)
+                nifti = sitk_im_cache[preprocessed_seg]
                 array = GetArrayFromImage(nifti)
 
                 array = array * study_SS_mask_array
@@ -995,6 +995,9 @@ def preprocess_study(
         output_nifti.CopyInformation(nifti)
 
         sitk_im_cache[output_file] = output_nifti
+
+        if verbose:
+            print(f"{preprocessed_file} intensity normalized")
 
         ### set background back to 0 for easy foreground cropping
         if skullstrip:
