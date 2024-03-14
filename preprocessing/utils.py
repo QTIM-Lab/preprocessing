@@ -1,11 +1,19 @@
 import os
 import pandas as pd
-import tempfile
+import numpy as np
 
 from shutil import which
 from typing import Sequence
-from SimpleITK import Image, ReadImage, WriteImage
-from surfa import Volume, load_volume
+from SimpleITK import (
+    Image,
+    ReadImage,
+    WriteImage,
+    GetImageFromArray,
+    GetArrayFromImage,
+    Cast,
+    sitkFloat32,
+)
+from surfa import Volume, ImageGeometry, load_volume
 
 
 class MissingSoftwareError(Exception):
@@ -154,20 +162,44 @@ def check_required_columns(
             )
 
 
+# assumes 3D images
 def sitk_to_surfa(sitk_im: Image) -> Volume:
-    with tempfile.NamedTemporaryFile() as tmpfile:
-        f = tmpfile.name + ".nii.gz"
+    lps_ras = np.diag([-1, -1, 1])
+    data = GetArrayFromImage(sitk_im).transpose(2, 1, 0)
+    spacing = sitk_im.GetSpacing()
 
-        WriteImage(sitk_im, f)
-        sf_im = load_volume(f)
+    vox2world = np.eye(4)
+    vox2world[:3, :3] = (
+        lps_ras
+        @ np.reshape(sitk_im.GetDirection(), (3, 3))
+        * np.reshape(spacing * 3, (3, 3))
+    )
+    vox2world[:3, 3] = lps_ras @ np.array(sitk_im.GetOrigin())
 
-    return sf_im
+    geom = ImageGeometry(shape=data.shape, voxsize=spacing, vox2world=vox2world)
+
+    return Volume(data, geom)
 
 
 def surfa_to_sitk(sf_im: Volume) -> Image:
-    with tempfile.NamedTemporaryFile() as tmpfile:
-        f = tmpfile.name + ".nii.gz"
-        sf_im.save(f)
-        sitk_im = ReadImage(f)
+    ras_lps = np.diag([-1, -1, 1])
+    data = np.array(sf_im).transpose(2, 1, 0)
+
+    if data.dtype == np.bool_:
+        data = data.astype(int)
+
+    spacing = sf_im.geom.voxsize.tolist()
+
+    sitk_im = GetImageFromArray(data)
+
+    sitk_im.SetSpacing(spacing)
+
+    sitk_im.SetDirection(
+        (
+            ras_lps @ sf_im.geom.vox2world[:3, :3] / np.reshape(spacing * 3, (3, 3))
+        ).flatten()
+    )
+
+    sitk_im.SetOrigin(ras_lps @ sf_im.geom.vox2world[:3, 3])
 
     return sitk_im

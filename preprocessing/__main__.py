@@ -404,6 +404,7 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-p",
     "--patients",
     type=str,
     default=None,
@@ -416,6 +417,7 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-pk",
     "--pipeline-key",
     type=str,
     default="preprocessed",
@@ -428,6 +430,7 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-rk",
     "--registration-key",
     type=str,
     default="T1Post",
@@ -442,6 +445,7 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-l",
     "--longitudinal-registration",
     action="store_true",
     help=(
@@ -466,6 +470,7 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-o",
     "--orientation",
     type=str,
     default="RAS",
@@ -475,6 +480,7 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-s",
     "--spacing",
     type=str,
     default="1,1,1",
@@ -487,6 +493,7 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-ns",
     "--no-skullstrip",
     action="store_true",
     help=(
@@ -498,6 +505,7 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-ps",
     "--pre-skullstripped",
     action="store_true",
     help=(
@@ -510,6 +518,7 @@ brain_preprocessing.add_argument(
 
 
 brain_preprocessing.add_argument(
+    "-b",
     "--binarize-seg",
     action="store_true",
     help=(
@@ -542,173 +551,17 @@ brain_preprocessing.add_argument(
     ),
 )
 
-debug_preprocessing = subparsers.add_parser(
-    "debug-preprocessing",
-    description=(
-        """
-        Preprocess NIfTI files for deep learning. A csv is required to
-        indicate the location of source files and to procide the context
-        for filenames. The outputs will comply with BIDS conventions.
-        """
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "preprocessed_dir",
-    metavar="preprocessed-dir",
-    type=Path,
-    help=("The directory that will contain the preprocessed NIfTI files."),
-)
-
-debug_preprocessing.add_argument(
-    "csv",
-    type=Path,
-    help=(
-        """
-        A csv containing nifti location and information required for the output file names.
-        It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID', 
-        'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
-        """
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "--patients",
-    type=str,
-    default=None,
-    help=(
-        """
-        A comma delimited list of patients to select from the 'Anon_PatientID' column
-        of the CSV
-        """
-    ),
-)
-
-
-debug_preprocessing.add_argument(
-    "--pipeline-key",
-    type=str,
-    default="debug",
-    help=(
-        """
-        The key that will be used in the csv to indicate the new locations of preprocessed 
-        files. Defaults to 'debug'.
-        """
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "--registration-key",
-    type=str,
-    default="T1Post",
-    help=(
-        """
-        The value that will be used to select the fixed image during registration. This 
-        should correspond to a value within the 'NormalizedSeriesDescription' column in
-        the csv. If you have segmentation files in your data. They should correspond to
-        this same series. Defaults to 'T1Post'.
-        """
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "--longitudinal-registration",
+brain_preprocessing.add_argument(
+    "-d",
+    "--debug",
     action="store_true",
     help=(
         """
-        Whether to use longitudinal registration. Additional studies for the same patient
-        will be registered to the first study (chronologically). False if not specified.
+        Whether to run in debug mode. Each intermediate step will be saved using a suffix
+        for differentiation. The input CSV will not be altered. Instead, a new copy will
+        be saved to the output directory.
         """
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "-m",
-    "--model",
-    choices=["rigid", "affine", "joint", "deform"],
-    default="affine",
-    help=(
-        """
-        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
-        and 'deform'. Defaults to 'affine'.
-        """
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "--orientation",
-    type=str,
-    default="RAS",
-    help=(
-        "The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "--spacing",
-    type=str,
-    default="1,1,1",
-    help=(
-        """
-        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
-        are in mm. Defaults to '1,1,1'.
-        """
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "--no-skullstrip",
-    action="store_true",
-    help=(
-        """
-        Whether to not apply skullstripping to preprocessed data. Skullstripping will be
-        applied if not specified.
-        """
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "--pre-skullstripped",
-    action="store_true",
-    help=(
-        """
-        Whether the input data is already skullstripped. Skullstripping will not be applied
-        if specified.
-        """
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "--binarize-seg",
-    action="store_true",
-    help=(
-        """
-        Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
-        applied by default.
-        """
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "-c",
-    "--cpus",
-    type=int,
-    default=1,
-    help=(
-        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
-    ),
-)
-
-debug_preprocessing.add_argument(
-    "-v",
-    "--verbose",
-    action="store_true",
-    help=(
-        """
-        If specified, the commands that are called and their outputs will be printed to
-        the console.
-        """
-    ),
+    )
 )
 
 
@@ -807,39 +660,15 @@ def main():
             "longitudinal_registration": args.longitudinal_registration,
             "registration_model": args.model,
             "orientation": args.orientation,
-            "spacing": args.spacing,
+            "spacing": [float(s) for s in args.spacing.split(",")],
             "skullstrip": not args.no_skullstrip,
             "pre_skullstripped": args.pre_skullstripped,
             "binarize_seg": args.binarize_seg,
             "cpus": args.cpus,
             "verbose": args.verbose,
+            "debug": args.debug,
         }
 
         tracked_command(
             preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir
         )
-
-    elif args.command == "debug-preprocessing":
-        from preprocessing.brain import debug_from_csv
-
-        if isinstance(args.patients, str):
-            args.patients = args.patients.split(",")
-
-        kwargs = {
-            "csv": args.csv,
-            "preprocessed_dir": args.preprocessed_dir,
-            "patients": args.patients,
-            "pipeline_key": args.pipeline_key,
-            "registration_key": args.registration_key,
-            "longitudinal_registration": args.longitudinal_registration,
-            "registration_model": args.model,
-            "orientation": args.orientation,
-            "spacing": args.spacing,
-            "skullstrip": not args.no_skullstrip,
-            "pre_skullstripped": args.pre_skullstripped,
-            "binarize_seg": args.binarize_seg,
-            "cpus": args.cpus,
-            "verbose": args.verbose,
-        }
-
-        tracked_command(debug_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir)

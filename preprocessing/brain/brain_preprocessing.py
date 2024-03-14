@@ -12,6 +12,7 @@ from SimpleITK import (
     ReadImage,
     Resample,
     ResampleImageFilter,
+    Image,
     WriteImage,
     GetArrayFromImage,
     GetImageFromArray,
@@ -30,7 +31,7 @@ from preprocessing.utils import (
 )
 from preprocessing.synthmorph import synthmorph_registration
 from preprocessing.synthstrip import synthstrip_skullstrip
-from typing import Sequence, Literal
+from typing import Sequence, List, Literal, Dict, Any, Tuple
 from scipy.ndimage import (
     binary_fill_holes,
     binary_closing,
@@ -41,7 +42,7 @@ from cc3d import connected_components
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def copy_metadata(row: dict, preprocessing_args: dict) -> None:
+def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> None:
     """
     Copy the metadata file paired with the original nifti file (and optionally the
     corresponding segmentation) and add the preprocessing arguments into a new metafile
@@ -139,18 +140,39 @@ def copy_metadata(row: dict, preprocessing_args: dict) -> None:
 
 
 def verify_reg(
-    fixed_image_path,
-    moving_image_path,
-    sitk_im_cache,
-    interp_method="linear",
-    verbose=False,
-):
-    def get_affine(image):
-        affine = np.eye(4)
-        affine[:3, :3] = np.reshape(image.GetDirection(), (3, 3))
-        affine[:3, 3] = image.GetOrigin()
-        return affine
+    fixed_image_path: str,
+    moving_image_path: str,
+    sitk_im_cache: Dict[str, Image],
+    interp_method: Literal["linear", "nearest"] = "linear",
+    verbose: bool = False,
+) -> Tuple[bool, Dict[str, Image]]:
+    """
+    Verify the quality of registrations by checking for consistency in array shapes and
+    affines. In cases of failure, the moving image will be resampled to the fixed image
+    but alignment is not guaranteed.
 
+    Parameters
+    __________
+    fixed_image_path: str
+        The path to the fixed image, which must be a key within `sitk_im_cache`.
+    moving_image_path: str
+        The path to the moving image, which must be a key within `sitk_im_cache`.
+    sitk_im_cache: Dict[str, Image]
+        The cache used to store intermediate files within the registration pipeline following this
+        format: {path: Image}.
+    interp_method: Literal["linear", "nearest"]
+        The interpolation method to use if the images needs to be resampled. Defaults to "linear".
+    verbose: bool
+        Whether to print additional information related like commands and their arguments are printed.
+
+    Returns
+    _______
+    good_registrations: bool
+        Whether the registration was of good quality and did not required resampling.
+    sitk_im_cache: Dict[str, Image]
+        A potentially updated version of the input `sitk_im_cache`, which contains the resampled images
+        if applicable.
+    """
     if verbose:
         print(f"{moving_image_path} is being checked against {fixed_image_path}")
 
@@ -158,23 +180,20 @@ def verify_reg(
     moving_image = sitk_im_cache[moving_image_path]
     same_shape = fixed_image.GetSize() == moving_image.GetSize()
 
-    if verbose:
-        print(
-                f"moving: {moving_image.GetSize()}, fixed: {fixed_image.GetSize()}, {same_shape}"
-        )
-
-    fixed_affine = get_affine(fixed_image)
-    moving_affine = get_affine(moving_image)
-    close_affines = np.allclose(fixed_affine, moving_affine, atol=1e-3)
+    close_affines = (
+        np.allclose(fixed_image.GetDirection(), moving_image.GetDirection())
+        and np.allclose(fixed_image.GetSpacing(), moving_image.GetSpacing())
+        and np.allclose(fixed_image.GetOrigin(), moving_image.GetOrigin())
+    )
 
     if not same_shape or not close_affines:
-        if verbose:
-            if not same_shape:
-                print(
-                    f"shapes do not match: {fixed_image.GetSize()} {moving_image.GetSize()}"
-                )
-            if not close_affines:
-                print(f"affines:\n{fixed_affine} \n{moving_affine}")
+        if not same_shape:
+            print(
+                f"Shapes do not match: {fixed_image.GetSize()} {moving_image.GetSize()}"
+            )
+        if not close_affines:
+            print("Affines do not match")
+        print(f"Resampling {moving_image_path} to {fixed_image_path}")
         resampler = ResampleImageFilter()
         resampler.SetReferenceImage(fixed_image)
         if interp_method == "linear":
@@ -189,18 +208,53 @@ def verify_reg(
         return False, sitk_im_cache
 
     else:
+        if verbose:
+            print(f"{moving_image_path} does not require resampling")
         return True, sitk_im_cache
 
 
 def local_reg(
-    row,
-    pipeline_key,
-    fixed_image_path,
-    sitk_im_cache,
-    model="affine",
-    verbose=False,
-    debug=False,
-):
+    row: Dict[str, Any],
+    pipeline_key: str,
+    fixed_image_path: str,
+    sitk_im_cache: Dict[str, Image],
+    model: Literal["rigid", "affine", "joint", "deform"] = "affine",
+    verbose: bool = False,
+    debug: bool = False,
+) -> Tuple[Dict[str, Any], Dict[str, Image]]:
+    """
+    Perform registration on a series using synthmorph. Meant for registration of images within the same study.
+
+    Parameters
+    __________
+    row: Dict[str, Any]
+        A dictionary representing a series row from the study DataFrame / CSV.
+    pipeline_key:
+        The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
+        Defaults to 'preprocessed'.
+    fixed_image_path: str
+        The path to the fixed image, which must be a key within `sitk_im_cache`.
+    sitk_im_cache: Dict[str, Image]
+        The cache used to store intermediate files within the registration pipeline following this
+        format: {path: Image}.
+    model: str
+        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        and 'deform'. Defaults to 'affine'.
+    verbose: bool
+        Whether to print additional information related like commands and their arguments are printed. Defaults
+        to False.
+    debug: bool
+        Whether to run in 'debug mode' where each step is saved with an individual name and intermediate
+        files are not deleted. Dafaults to False.
+
+    Returns
+    _______
+    row: Dict[str, Any]
+        An updated version of the input `row`, which contains the updated path for the moved image.
+    sitk_im_cache: Dict[str, Image]
+        An updated version of the input `sitk_im_cache`, which contains the moved image.
+    """
+
     preprocessed_file = row[pipeline_key]
 
     if debug:
@@ -274,19 +328,51 @@ def local_reg(
 
 
 def long_reg(
-    rows,
-    pipeline_key,
-    fixed_image_path,
-    sitk_im_cache,
-    study_SS_mask_file,
-    model="affine",
-    verbose=False,
-    debug=False,
-):
-    moving_image_path = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
+    rows: List[Dict[str, Any]],
+    pipeline_key: str,
+    fixed_image_path: str,
+    study_SS_mask_file: str,
+    sitk_im_cache: Dict[str, Image],
+    model: Literal["rigid", "affine", "joint", "deform"] = "affine",
+    verbose: bool = False,
+    debug: bool = False,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Image]]:
+    """
+    Perform longitudinal registration on a study using synthmorph.
 
-    print(f"moving: {moving_image_path}")
-    print(f"fixed: {fixed_image_path}")
+    Parameters
+    __________
+    row: List[Dict[str, Any]]
+        A list of dictionaries with each representing a series row from the study DataFrame / CSV.
+    pipeline_key:
+        The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
+        Defaults to 'preprocessed'.
+    fixed_image_path: str
+        The path to the fixed image, which must be a key within `sitk_im_cache`.
+    study_SS_mask_file: str
+        The path to the skullstrip mask chosen for the study, which must be a key within `sitk_im_cache`.
+    sitk_im_cache: Dict[str, Image]
+        The cache used to store intermediate files within the registration pipeline following this
+        format: {path: Image}.
+    model: str
+        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        and 'deform'. Defaults to 'affine'.
+    verbose: bool
+        Whether to print additional information related like commands and their arguments are printed. Defaults
+        to False.
+    debug: bool
+        Whether to run in 'debug mode' where each step is saved with an individual name and intermediate
+        files are not deleted. Dafaults to False.
+
+    Returns
+    _______
+    rows: List[Dict[str, Any]]
+        An updated version of the input `rows`, which contains the updated paths for the moved images.
+    sitk_im_cache: Dict[str, Image]
+        An updated version of the input `sitk_im_cache`, which contains the moved images.
+    """
+
+    moving_image_path = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
 
     if debug:
         moved_image_path = moving_image_path.replace(".nii.gz", "_longreg.nii.gz")
@@ -294,7 +380,6 @@ def long_reg(
     else:
         moved_image_path = moving_image_path
 
-    
     accompanying_images = [
         {
             "moving": study_SS_mask_file,
@@ -379,7 +464,21 @@ def long_reg(
     return rows, sitk_im_cache
 
 
-def fill_foreground_mask(initial_foreground: np.ndarray):
+def fill_foreground_mask(initial_foreground: np.ndarray) -> np.ndarray:
+    """
+    Fill the initial foreground mask so that it will include the entire foreground.
+
+    Parameters
+    __________
+    initial_foreground: np.ndarray
+        The initial foreground mask that represents the border of the foreground but is not filled.
+
+    Returns
+    _______
+    foreground: np.ndarray
+        The filled foreground mask.
+
+    """
     foreground_cc = connected_components(initial_foreground)
     ccs, counts = np.unique(foreground_cc, return_counts=True)
 
@@ -424,7 +523,7 @@ def preprocess_study(
     registration_target: str | None = None,
     registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
     orientation: str = "RAS",
-    spacing: str = "1,1,1",
+    spacing: Sequence[float | int] = [1, 1, 1],
     skullstrip: bool = True,
     pre_skullstripped: bool = False,
     binarize_seg: bool = False,
@@ -455,9 +554,9 @@ def preprocess_study(
         The location of the file that will be used as the fixed image for the purposes of registration.
     orientation: str
         The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
-    spacing: str
-        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
-        are in mm. Defaults to '1,1,1'.
+    spacing: Sequence[float | int]
+        A sequence of floats or ints indicating the desired spacing of preprocessed data. Measurements
+        are in mm. Defaults to [1, 1, 1].
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
     pre_skullstripped: bool
@@ -533,7 +632,7 @@ def preprocess_study(
         preprocessed_file = output_dir / os.path.basename(input_file)
 
         rows[i][pipeline_key] = str(preprocessed_file)
-        
+
         try:
             sitk_im_cache[str(preprocessed_file)] = ReadImage(input_file)
 
@@ -585,15 +684,18 @@ def preprocess_study(
 
                 sitk_im_cache[output_seg] = output_nifti
 
-    ### RAS
+                if verbose:
+                    print(f"{preprocessed_seg} binarized")
+
+    ### orientation
     orienter = DICOMOrientImageFilter()
-    orienter.SetDesiredCoordinateOrientation("RAS")
+    orienter.SetDesiredCoordinateOrientation(orientation)
 
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
 
         if debug:
-            output_file = preprocessed_file.replace(".nii.gz", "_RAS.nii.gz")
+            output_file = preprocessed_file.replace(".nii.gz", f"_{orientation}.nii.gz")
             rows[i][pipeline_key] = output_file
 
         else:
@@ -603,6 +705,9 @@ def preprocess_study(
         output_nifti = orienter.Execute(nifti)
 
         sitk_im_cache[output_file] = output_nifti
+
+        if verbose:
+            print(f"{preprocessed_file} set to {orientation} orientation")
 
         if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
             preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
@@ -619,8 +724,10 @@ def preprocess_study(
 
             sitk_im_cache[output_seg] = output_nifti
 
+            if verbose:
+                print(f"{preprocessed_seg} set to {orientation} orientation")
+
     ### Spacing
-    new_spacing = [float(s) for s in spacing.split(",")]
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
 
@@ -636,18 +743,21 @@ def preprocess_study(
         original_size = nifti.GetSize()
         new_size = [
             int(round(osz * osp / ns))
-            for osz, osp, ns in zip(original_size, original_spacing, new_spacing)
+            for osz, osp, ns in zip(original_size, original_spacing, spacing)
         ]
         output_nifti = Resample(
             nifti,
             new_size,
             interpolator=sitkLinear,
             outputOrigin=nifti.GetOrigin(),
-            outputSpacing=new_spacing,
+            outputSpacing=spacing,
             outputDirection=nifti.GetDirection(),
         )
 
         sitk_im_cache[output_file] = output_nifti
+
+        if verbose:
+            print(f"{preprocessed_file} resampled to {spacing} spacing")
 
         if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
             preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
@@ -664,18 +774,21 @@ def preprocess_study(
             original_size = nifti.GetSize()
             new_size = [
                 int(round(osz * osp / ns))
-                for osz, osp, ns in zip(original_size, original_spacing, new_spacing)
+                for osz, osp, ns in zip(original_size, original_spacing, spacing)
             ]
             output_nifti = Resample(
                 nifti,
                 new_size,
                 interpolator=sitkNearestNeighbor,
                 outputOrigin=nifti.GetOrigin(),
-                outputSpacing=new_spacing,
+                outputSpacing=spacing,
                 outputDirection=nifti.GetDirection(),
             )
 
             sitk_im_cache[output_seg] = output_nifti
+
+            if verbose:
+                print(f"{preprocessed_seg} resampled to {spacing} spacing")
 
     ### Loose Skullstrip
     if pre_skullstripped:
@@ -696,6 +809,9 @@ def preprocess_study(
 
             sitk_im_cache[SS_mask] = out_nifti
 
+            if verbose:
+                print(f'"Loose" skullstrip mask obtained from {preprocessed_file}')
+
     else:
         for i in range(n):
             preprocessed_file = rows[i][pipeline_key]
@@ -709,13 +825,15 @@ def preprocess_study(
                 m=SS_mask,
             )
 
+            if verbose:
+                print(f'"Loose" skullstrip mask obtained from {preprocessed_file}')
+
     if debug:
         if registration_target is not None:
             main_SS_file = registration_target.replace(
                 ".nii.gz", "_RAS_spacing_SS.nii.gz"
             )
             sitk_im_cache[main_SS_file] = ReadImage(main_SS_file)
-
 
     else:
         if registration_target is not None:
@@ -724,7 +842,6 @@ def preprocess_study(
 
     study_SS_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
     study_SS_mask_file = rows[0][pipeline_key].replace(".nii.gz", "_SS_mask.nii.gz")
-
 
     ### Register based on loose skullstrip
     for i in range(1, n):
@@ -743,8 +860,8 @@ def preprocess_study(
             rows,
             pipeline_key,
             main_SS_file,
-            sitk_im_cache,
             study_SS_mask_file,
+            sitk_im_cache,
             registration_model,
             verbose,
             debug,
@@ -801,6 +918,9 @@ def preprocess_study(
 
         sitk_im_cache[output_file] = n4_corrected
 
+        if verbose:
+            print(f"{preprocessed_file} underwent N4 bias field correction")
+
     ### appy final skullmask if skullstripping
     if skullstrip:
         for i in range(n):
@@ -825,6 +945,9 @@ def preprocess_study(
 
             sitk_im_cache[output_file] = output_nifti
 
+            if verbose:
+                print(f"Study skullstrip mask applied to {preprocessed_file}")
+
             if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
                 preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
 
@@ -846,6 +969,9 @@ def preprocess_study(
                 output_nifti.CopyInformation(nifti)
 
                 sitk_im_cache[output_seg] = output_nifti
+
+                if verbose:
+                    print(f"Study skullstrip mask applied to {preprocessed_seg}")
 
     ### Normalization
     for i in range(n):
@@ -891,47 +1017,10 @@ def preprocess_study(
 
         sitk_im_cache[output_file] = output_nifti
 
-    ### Orientation
-    if orientation != "RAS":
-        orienter.SetDesiredCoordinateOrientation(orientation)
-
-        for i in range(n):
-            preprocessed_file = rows[i][pipeline_key]
-
-            if debug:
-                output_file = preprocessed_file.replace(
-                    ".nii.gz", f"_{orientation}.nii.gz"
-                )
-                rows[i][pipeline_key] = output_file
-
-            else:
-                output_file = preprocessed_file
-
-            nifti = sitk_im_cache[preprocessed_file]
-            output_nifti = orienter.Execute(nifti)
-
-            sitk_im_cache[output_file] = output_nifti
-
-            if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
-                preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
-
-                if debug:
-                    output_seg = preprocessed_seg.replace(
-                        ".nii.gz", f"_{orientation}.nii.gz"
-                    )
-                    rows[i][f"{pipeline_key}_seg"] = output_seg
-
-                else:
-                    output_seg = preprocessed_seg
-
-                nifti = sitk_im_cache[preprocessed_seg]
-                output_nifti = orienter.Execute(nifti)
-
-                sitk_im_cache[output_seg] = output_nifti
+        if verbose:
+            print(f"{preprocessed_file} background set to 0")
 
     ### Write files:
-    os.makedirs(output_dir, exist_ok=True)
-
     for k, v in sitk_im_cache.items():
         WriteImage(v, k)
 
@@ -967,7 +1056,7 @@ def preprocess_patient(
     longitudinal_registration: bool = False,
     registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
     orientation: str = "RAS",
-    spacing: str = "1,1,1",
+    spacing: Sequence[float | int] = [1, 1, 1],
     skullstrip: bool = True,
     pre_skullstripped: bool = False,
     binarize_seg: bool = False,
@@ -1002,9 +1091,9 @@ def preprocess_patient(
         and 'deform'. Defaults to 'affine'.
     orientation: str
         The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
-    spacing: str
-        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
-        are in mm. Defaults to '1,1,1'.
+    spacing: Sequence[float | int]
+        A sequence of floats or ints indicating the desired spacing of preprocessed data. Measurements
+        are in mm. Defaults to [1, 1, 1].
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
     pre_skullstripped: bool
@@ -1213,163 +1302,18 @@ def preprocess_from_csv(
     csv: Path | str,
     preprocessed_dir: Path | str,
     patients: Sequence[str] | None = None,
-    pipeline_key: str = "preprocessed",
-    registration_key: str = "T1Post",
-    longitudinal_registration: bool = False,
-    registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
-    orientation: str = "RAS",
-    spacing: str = "1,1,1",
-    skullstrip: bool = True,
-    pre_skullstripped: bool = False,
-    binarize_seg: bool = False,
-    cpus: int = 0,
-    verbose: bool = False,
-) -> pd.DataFrame:
-    """
-    Preprocess all of the studies for a patient in a DataFrame.
-
-    Parameters
-    __________
-    csv: Path | str
-        The path to a CSV containing an entire dataset. It must contain the following columns:  'nifti',
-        'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription',
-        and 'SeriesType'.
-    preprocessed_dir: Path
-        The directory that will contain the preprocessed NIfTI files.
-    patients: Sequece[str] | None
-        A sequence of patients to select from the 'Anon_PatientID' column of the CSV. If 'None' is provided,
-        all patients will be preprocessed.
-    pipeline_key: str
-        The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
-        Defaults to 'preprocessed'.
-    registration_key: str
-        The value that will be used to select the fixed image during registration. This should correspond
-        to a value within the 'NormalizedSeriesDescription' column in the csv. If you have segmentation
-        files in your data. They should correspond to this same series. Defaults to 'T1Post'.
-    longitudinal_registration: bool
-        Whether to register all of the subsequent studies for a patient to the first study. Defaults to
-        False.
-    registration_model: str
-        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
-        and 'deform'. Defaults to 'affine'.
-    orientation: str
-        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
-    spacing: str
-        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
-        are in mm. Defaults to '1,1,1'.
-    skullstrip: bool
-        Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
-    pre_skullstripped: bool
-        Whether the input data is already skullstripped. Skullstripping will not be applied if specified.
-    binarize_seg: bool
-        Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
-        applied by default.
-    cpus: int
-        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
-    verbose: bool
-        Whether to print additional information such as individual commands and their arguments. Defaults to False.
-
-    Returns
-    _______
-    pd.DataFrame:
-        A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
-        the locations of the preprocessing outputs. This function will also overwrite the input CSV with
-        this DataFrame.
-    """
-
-    source_external_software()
-
-    df = pd.read_csv(csv, dtype=str)
-
-    if pipeline_key in df.keys():
-        df = df.drop(columns=pipeline_key)
-        if f"{pipeline_key}_seg" in df.keys():
-            df = df.drop(columns=f"{pipeline_key}_seg")
-
-    df.to_csv(csv, index=False)
-
-    required_columns = [
-        "nifti",
-        "Anon_PatientID",
-        "Anon_StudyID",
-        "StudyInstanceUID",
-        "SeriesInstanceUID",
-        "NormalizedSeriesDescription",
-        "SeriesType",
-    ]
-    optional_columns = ["seg"]
-
-    check_required_columns(df, required_columns, optional_columns)
-
-    preprocessed_dir = Path(preprocessed_dir)
-
-    df = df.drop_duplicates(subset="SeriesInstanceUID").reset_index(drop=True)
-
-    filtered_df = df.copy().dropna(subset="nifti")
-
-    if patients is None:
-        patients = filtered_df["Anon_PatientID"].unique()
-
-    if pre_skullstripped:
-        skullstrip = False
-
-    kwargs_list = [
-        {
-            "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
-            "preprocessed_dir": preprocessed_dir,
-            "pipeline_key": pipeline_key,
-            "registration_key": registration_key,
-            "longitudinal_registration": longitudinal_registration,
-            "registration_model": registration_model,
-            "orientation": orientation,
-            "spacing": spacing,
-            "skullstrip": skullstrip,
-            "pre_skullstripped": pre_skullstripped,
-            "binarize_seg": binarize_seg,
-            "verbose": verbose,
-            "source_software": False,
-            "check_columns": False,
-        }
-        for patient in patients
-    ]
-
-    with tqdm(
-        total=len(kwargs_list), desc="Preprocessing patients"
-    ) as pbar, ThreadPoolExecutor(cpus if cpus >= 1 else 1) as executor:
-        futures = [
-            executor.submit(preprocess_patient, **kwargs) for kwargs in kwargs_list
-        ]
-        for future in as_completed(futures):
-            preprocessed_df = future.result()
-            df = pd.read_csv(csv, dtype=str)
-            df = pd.merge(df, preprocessed_df, how="outer")
-            df = (
-                df.drop_duplicates(subset="SeriesInstanceUID")
-                .sort_values(["Anon_PatientID", "Anon_StudyID"])
-                .reset_index(drop=True)
-            )
-            df.to_csv(csv, index=False)
-            pbar.update(1)
-
-    df = pd.read_csv(csv, dtype=str)
-    return df
-
-
-def debug_from_csv(
-    csv: Path | str,
-    preprocessed_dir: Path | str,
-    patients: Sequence[str] | None = None,
     pipeline_key: str = "debug",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
     registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
     orientation: str = "RAS",
-    spacing: str = "1,1,1",
+    spacing: Sequence[float | int] = [1, 1, 1],
     skullstrip: bool = True,
     pre_skullstripped: bool = False,
     binarize_seg: bool = False,
     cpus: int = 1,
     verbose: bool = False,
+    debug: bool = False,
 ) -> pd.DataFrame:
     """
     Preprocess all of the studies for a patient in a DataFrame.
@@ -1400,9 +1344,9 @@ def debug_from_csv(
         and 'deform'. Defaults to 'affine'.
     orientation: str
         The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
-    spacing: str
-        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
-        are in mm. Defaults to '1,1,1'.
+    spacing: Sequence[float | int]
+        A sequence of floats or ints indicating the desired spacing of preprocessed data. Measurements
+        are in mm. Defaults to [1, 1, 1].
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
     pre_skullstripped: bool
@@ -1414,6 +1358,10 @@ def debug_from_csv(
         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
     verbose: bool
         Whether to print additional information such as individual commands and their arguments. Defaults to False.
+    debug: bool
+        Whether to run in debug mode. Each intermediate step will be saved using a suffix for differentiation.
+        The input CSV will not be altered. Instead, a new copy will be saved to the output directory. Defaults
+        to False.
 
     Returns
     _______
@@ -1426,7 +1374,10 @@ def debug_from_csv(
     source_external_software()
 
     df = pd.read_csv(csv, dtype=str)
-    csv = preprocessed_dir / "debug.csv"
+
+    if debug:
+        csv = preprocessed_dir / "debug.csv"
+        pipeline_key = "debug"
 
     if pipeline_key in df.keys():
         df = df.drop(columns=pipeline_key)
@@ -1455,7 +1406,7 @@ def debug_from_csv(
     filtered_df = df.copy().dropna(subset="nifti")
 
     if patients is None:
-        patients = filtered_df["Anon_PatientID"].unique()
+        patients = list(filtered_df["Anon_PatientID"].unique())
 
     if pre_skullstripped:
         skullstrip = False
@@ -1476,7 +1427,7 @@ def debug_from_csv(
             "verbose": verbose,
             "source_software": False,
             "check_columns": False,
-            "debug": True,
+            "debug": debug,
         }
         for patient in patients
     ]
