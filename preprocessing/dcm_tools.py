@@ -1,4 +1,7 @@
-"""Tools for converting between image formats."""
+"""
+The `dcm_tools` module contains code relevant for analyzing DICOM files.
+"""
+# TODO document the Curie functions and filter to only necessary components
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 

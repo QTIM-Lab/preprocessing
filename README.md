@@ -1,5 +1,5 @@
 ## preprocessing
-`preprocessing` is a python library designed for the purpose of preprocessing MRI data at QTIM. It currently supports reorganization of dicom files, subsequent nifti conversion, and preprocessing for brain data. Its outputs are intended to follow the BIDS organizational scheme.
+`preprocessing` is a python library designed for the purpose of preprocessing MRI data at QTIM. It currently supports reorganization of dicom and nifti files to follow BIDS conventions, dicom to nifti conversion, and preprocessing for brain data. Its outputs are intended to follow the BIDS organizational scheme.
 
 ## Table of Contents
 * **[Installation Guide](#installation-guide)**

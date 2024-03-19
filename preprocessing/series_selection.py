@@ -1,3 +1,17 @@
+"""
+The `series_selection` module utilizes `mr_series_selection` to predict normalized series
+descriptions for series within a `preprocessing` library compatible dataset.
+
+Public Functions
+________________
+series_in_study
+    Call upon 'mr_series_selection' to add 'NormalizedSeriesDescription' and 'SeriesType'
+    columns to a pd.DataFrame containing a single study.
+
+series_from_csv
+    Call upon 'mr_series_selection' to add 'NormalizedSeriesDescription' and 'SeriesType'
+    columns to every study within a dataset.
+"""
 import pandas as pd
 
 from pathlib import Path
@@ -5,12 +19,9 @@ from pydicom import dcmread
 from tqdm import tqdm
 from mr_series_selection.series_selection import get_series_classification
 from preprocessing.utils import check_required_columns
+from preprocessing.constants import DEFAULT_SERIES_KEY
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-default_key = {
-    "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
-    "T1Post": [["iso3D AX T1 WithContrast", "iso3D AX T1 WithContrast RFMT"], "anat"],
-}
+from typing import Dict, List
 
 
 def description_sort(column: pd.Series) -> pd.Series:
@@ -49,7 +60,7 @@ def description_sort(column: pd.Series) -> pd.Series:
 def series_in_study(
     study_df: pd.DataFrame,
     ruleset: str = "brain",
-    description_key: dict = default_key,
+    description_key: Dict[str, List[str]] = DEFAULT_SERIES_KEY,
     check_columns: bool = True,
 ) -> pd.DataFrame:
     """
@@ -61,17 +72,20 @@ def series_in_study(
     study_df: pd.DataFrame
         A DataFrame containing data for a single study. It must contain the following
         columns: ['SeriesDescription', 'dicoms'].
+
     ruleset: str
         Ruleset used within mr_series_selection to predict the NormalizedDescription of
         each series. Options include 'brain', 'lumbar', and 'prostate'. Defaults to 'brain'.
+
     description_key: dict
         Key for combining 'NormalizedDescription's defined by mr_series_selection into desired
         categories. This information is provided by using a path to a json file containing this
         information. If nothing is provided, the description_key will default to:
-        default_key = {
+        DEFAULT_SERIES_KEY = {
             "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
             "T1Post": [["iso3D AX T1 WithContrast", "iso3D AX T1 WithContrast RFMT"], "anat"],
         }
+
     check_columns: bool
         Whether to check 'study_df' for the required columns. Defaults to True.
 
@@ -147,7 +161,7 @@ def series_in_study(
 def series_from_csv(
     csv: Path | str,
     ruleset: str = "brain",
-    description_key: dict = default_key,
+    description_key: Dict[str, List[str]] = DEFAULT_SERIES_KEY,
     cpus: int = 1,
     check_columns: bool = True,
 ) -> pd.DataFrame:
@@ -160,18 +174,22 @@ def series_from_csv(
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following
         columns: ['StudyInstanceUID', 'SeriesInstanceUID', 'SeriesDescription', 'dicoms'].
+
     ruleset: str
         Ruleset used within mr_series_selection to predict the NormalizedDescription of
         each series. Options include 'brain', 'lumbar', and 'prostate'. Defaults to 'brain'.
+
     description_key: dict
         Key for combining 'NormalizedDescription's defined by mr_series_selection into desired
         categories. If nothing is provided, the description_key will default to:
-        default_key = {
+        DEFAULT_SERIES_KEY = {
             "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
             "T1Post": [["iso3D AX T1 WithContrast", "iso3D AX T1 WithContrast RFMT"], "anat"],
         }
+
     cpus: int
-        Number of cpus to use for multiprocessing. Defaults to 0 (no multiprocessing).
+        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
+
     check_columns: bool
         Whether to check the CSV for the required columns. Defaults to True.
 
@@ -241,7 +259,6 @@ def series_from_csv(
 
 
 __all__ = [
-    "default_key",
     "series_in_study",
     "series_from_csv",
 ]

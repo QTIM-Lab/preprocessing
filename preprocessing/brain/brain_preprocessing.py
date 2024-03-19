@@ -1,4 +1,18 @@
-### imports
+"""
+The `brain_preprocessing` module defines the tools for processing MRI data
+with a pipeline designed specifically for brain data.
+
+Public Functions
+________________
+preprocess_study
+    Preprocess a single study from a DataFrame.
+
+preprocess_patient
+    Preprocess all of the studies for a patient in a DataFrame.
+
+preprocess_from_csv
+    Preprocess all of the studies within a dataset.
+"""
 import os
 import shutil
 import pandas as pd
@@ -30,7 +44,7 @@ from preprocessing.utils import (
     check_required_columns,
 )
 from preprocessing.synthmorph import synthmorph_registration
-from preprocessing.synthstrip import synthstrip_skullstrip
+from .synthstrip import synthstrip_skullstrip
 from typing import Sequence, List, Literal, Dict, Any, Tuple
 from scipy.ndimage import (
     binary_fill_holes,
@@ -53,6 +67,7 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
     row: dict
         A row of a DataFrame represented as a dictionary. It is expected to have a 'nifti'
         key and optionally 'seg'.
+
     preprocessing_args: dict
         A dictionary containing the arguments originally provided to 'preprocess_study' or
         'preprocess_from_csv'.
@@ -223,7 +238,7 @@ def local_reg(
     debug: bool = False,
 ) -> Tuple[Dict[str, Any], Dict[str, Image]]:
     """
-    Perform registration on a series using synthmorph. Meant for registration of images within the same study.
+    Perform registration on a series using Synthmorph. Meant for registration of images within the same study.
 
     Parameters
     __________
@@ -238,7 +253,7 @@ def local_reg(
         The cache used to store intermediate files within the registration pipeline following this
         format: {path: Image}.
     model: str
-        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
         and 'deform'. Defaults to 'affine'.
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed. Defaults
@@ -266,7 +281,7 @@ def local_reg(
 
     moving_image_path = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
 
-    accompanying_images = [{"moving": preprocessed_file, "out_moving": output_file}]
+    accompanying_images = [{"moving": preprocessed_file, "moved": output_file}]
 
     if "seg" in row and not pd.isna(row["seg"]):
         preprocessed_seg = row[f"{pipeline_key}_seg"]
@@ -280,7 +295,7 @@ def local_reg(
         accompanying_images.append(
             {
                 "moving": preprocessed_seg,
-                "out_moving": output_seg,
+                "moved": output_seg,
                 "interp_method": "nearest",
             }
         )
@@ -295,7 +310,7 @@ def local_reg(
     )
     if verbose:
         print(
-            f"Registered files generated to {[d['out_moving'] for d in accompanying_images]}"
+            f"Registered files generated to {[d['moved'] for d in accompanying_images]}"
         )
 
     good_registrations, sitk_im_cache = verify_reg(
@@ -310,7 +325,7 @@ def local_reg(
 
         if len(accompanying_images) > 1:
             for accompanying_image in accompanying_images:
-                moving_image_path = accompanying_image["out_moving"]
+                moving_image_path = accompanying_image["moved"]
                 interp_method = accompanying_image.get("interp_method", "linear")
 
                 sitk_im_cache = verify_reg(
@@ -355,7 +370,7 @@ def long_reg(
         The cache used to store intermediate files within the registration pipeline following this
         format: {path: Image}.
     model: str
-        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
         and 'deform'. Defaults to 'affine'.
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed. Defaults
@@ -383,7 +398,7 @@ def long_reg(
     accompanying_images = [
         {
             "moving": study_SS_mask_file,
-            "out_moving": study_SS_mask_file.replace(".nii.gz", "_longreg.nii.gz"),
+            "moved": study_SS_mask_file.replace(".nii.gz", "_longreg.nii.gz"),
             "interp_method": "nearest",
         }
     ]
@@ -398,9 +413,7 @@ def long_reg(
         else:
             output_file = preprocessed_file
 
-        accompanying_images.append(
-            {"moving": preprocessed_file, "out_moving": output_file}
-        )
+        accompanying_images.append({"moving": preprocessed_file, "moved": output_file})
 
         if "seg" in row and not pd.isna(row["seg"]):
             preprocessed_seg = row[f"{pipeline_key}_seg"]
@@ -414,7 +427,7 @@ def long_reg(
             accompanying_images.append(
                 {
                     "moving": preprocessed_seg,
-                    "out_moving": output_seg,
+                    "moved": output_seg,
                     "interp_method": "nearest",
                 }
             )
@@ -432,7 +445,7 @@ def long_reg(
 
     if verbose:
         print(
-            f"Registered files generated to {[d['out_moving'] for d in accompanying_images]}"
+            f"Registered files generated to {[d['moved'] for d in accompanying_images]}"
         )
 
     good_registrations, sitk_im_cache = verify_reg(
@@ -447,7 +460,7 @@ def long_reg(
 
         if len(accompanying_images) > 1:
             for accompanying_image in accompanying_images:
-                moving_image_path = accompanying_image["out_moving"]
+                moving_image_path = accompanying_image["moved"]
                 interp_method = accompanying_image.get("interp_method", "linear")
 
                 sitk_im_cache = verify_reg(
@@ -1090,7 +1103,7 @@ def preprocess_patient(
         Whether to register all of the subsequent studies for a patient to the first study. Defaults to
         False.
     registration_model: str
-        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
         and 'deform'. Defaults to 'affine'.
     orientation: str
         The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
@@ -1319,7 +1332,7 @@ def preprocess_from_csv(
     debug: bool = False,
 ) -> pd.DataFrame:
     """
-    Preprocess all of the studies for a patient in a DataFrame.
+    Preprocess all of the studies within a dataset.
 
     Parameters
     __________
@@ -1343,7 +1356,7 @@ def preprocess_from_csv(
         Whether to register all of the subsequent studies for a patient to the first study. Defaults to
         False.
     registration_model: str
-        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
         and 'deform'. Defaults to 'affine'.
     orientation: str
         The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
@@ -1465,3 +1478,10 @@ def preprocess_from_csv(
     )
     df.to_csv(csv, index=False)
     return df
+
+
+__all__ = [
+    "preprocess_study",
+    "preprocess_patient",
+    "preprocess_from_csv",
+]

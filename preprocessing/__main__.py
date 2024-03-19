@@ -1,3 +1,8 @@
+"""
+This Module serves as the entrypoint for the `preprocessing` CLI. It has no public
+functions intended for use in the Python API. Run 'preprocessing -h' in the terminal
+for a command usage guide.
+"""
 import argparse
 import json
 import sys
@@ -24,7 +29,30 @@ except InvalidGitRepositoryError:
     seed_tensorflow=False,
     seed_torch=False,
 )
-def tracked_command(func: Callable, kwargs: Dict[str, Any], record_dir: Path | str):
+def tracked_command(
+    func: Callable, kwargs: Dict[str, Any], record_dir: Path | str
+) -> Any:
+    """
+    A standardized command format that runs a function from the `preprocessing` library
+    and tracks useful information with pycrumbs.
+
+    Parameters
+    __________
+    func: Callable
+        The function that will be used for the command.
+
+    kwargs: Dict[str, Any]
+        The key-word arguments that will be passed to `func`.
+
+    record_dir: Path | str
+        The directory in which the pycrumbs tracking json will be stored (should be the
+        same as the directory containing `func`'s outputs').
+
+    Returns
+    _______
+    output: Any
+        Whatever is returned by `func(**kwargs)`.
+    """
     return func(**kwargs)
 
 
@@ -45,24 +73,24 @@ The following commands are available:
     reorganize-dicoms           Reorganize DICOMs to follow the BIDS convention. Any DICOMs found
                                 recursively within this directory will be reorganized (at least
                                 one level of subdirectories is assumed). Anonomyzation keys for
-                                PatientIDs and StudyIDs are provided within a csv.
+                                PatientIDs and StudyIDs are provided within a CSV.
 
     reorganize-niftis           Reorganize a NIfTI dataset to follow BIDS convention. As NIfTI files
                                 lack metadata, anonymization keys must be provided in the form of a
                                 CSV, such as one obtained with `nifti-dataset-anon-keys`.
 
-    dataset-to-nifti            Convert DICOMs to NIfTI file format. A csv is required to map a
+    dataset-to-nifti            Convert DICOMs to NIfTI file format. A CSV is required to map a
                                 DICOM series to the resulting .nii.gz file and to provide
                                 the context for filenames. The outputs will comply with the BIDS
                                 conventions.
 
-    predict-series              Predict the sequence type for every series in your dataset. A csv
+    predict-series              Predict the sequence type for every series in your dataset. A CSV
                                 is required to indicate the location of the corresponding DICOMs.
                                 Predictions are made using the mr_series_selection repo's analysis
                                 of the DICOM header. A json can be provided to combine multiple
                                 NormalizedDescriptions into a single category.
 
-    brain-preprocessing         Preprocess NIfTI files for deep learning. A csv is required to
+    brain-preprocessing         Preprocess NIfTI files for deep learning. A CSV is required to
                                 indicate the location of source files and to procide the context
                                 for filenames. The outputs will comply with BIDS conventions.
 
@@ -106,7 +134,7 @@ old_project_anon_keys.add_argument(
     type=str,
     help=(
         """
-        The directory that will contain the output csv and potentially
+        The directory that will contain the output CSV and potentially
         an error file.
         """
     ),
@@ -136,7 +164,7 @@ nifti_dataset_anon_keys.add_argument(
     metavar="output-dir",
     type=Path,
     help=(
-        "The directory that will contain the output csv and potentially an error file."
+        "The directory that will contain the output CSV and potentially an error file."
     ),
 )
 
@@ -155,7 +183,7 @@ reorganize_d = subparsers.add_parser(
         Reorganize DICOMs to follow the BIDS convention. Any DICOMs found
         recursively within this directory will be reorganized (at least
         one level of subdirectories is assumed). Anonomyzation keys for
-        PatientIDs and StudyIDs are provided within a csv.
+        PatientIDs and StudyIDs are provided within a CSV.
         """
     ),
 )
@@ -185,7 +213,7 @@ reorganize_d.add_argument(
     default=None,
     help=(
         """
-        A csv mapping PatientID and StudyInstanceUID to anonymous values. If None is
+        A CSV mapping PatientID and StudyInstanceUID to anonymous values. If None is
         provided, the anonymization will be inferred from the DICOM headers.
         """
     ),
@@ -261,7 +289,7 @@ dataset_to_nifti = subparsers.add_parser(
     "dataset-to-nifti",
     description=(
         """
-        Convert DICOMs to NIfTI file format. A csv is required to map a
+        Convert DICOMs to NIfTI file format. A CSV is required to map a
         DICOM series to the resulting .nii.gz file and to provide
         the context for filenames. The outputs will comply with the BIDS
         conventions.
@@ -281,7 +309,7 @@ dataset_to_nifti.add_argument(
     type=Path,
     help=(
         """
-        A csv containing dicom location and information required for the nifti file
+        A CSV containing dicom location and information required for the nifti file
         names. It must contain the columns: ['dicoms', 'Anon_PatientID', 
         'Anon_StudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription',
         'SeriesType'].
@@ -309,7 +337,7 @@ predict_series = subparsers.add_parser(
     "predict-series",
     description=(
         """
-        Predict the sequence type for every series in your dataset. A csv
+        Predict the sequence type for every series in your dataset. A CSV
         is required to indicate the location of the corresponding DICOMs.
         Predictions are made using the mr_series_selection repo's analysis
         of the DICOM header. A json can be provided to combine multiple
@@ -351,7 +379,7 @@ predict_series.add_argument(
         categories. This information is provided by using a path to a json file containing this
         information. If nothing is provided, the description_key will default to: 
 
-        default_key = {
+        DEFAULT_SERIES_KEY = {
             "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
             "T1Post": [["iso3D AX T1 WithContrast", "iso3D AX T1 WithContrast RFMT"], "anat"],
         }
@@ -373,7 +401,7 @@ brain_preprocessing = subparsers.add_parser(
     "brain-preprocessing",
     description=(
         """
-        Preprocess NIfTI files for deep learning. A csv is required to
+        Preprocess NIfTI files for deep learning. A CSV is required to
         indicate the location of source files and to procide the context
         for filenames. The outputs will comply with BIDS conventions.
         """
@@ -392,7 +420,7 @@ brain_preprocessing.add_argument(
     type=Path,
     help=(
         """
-        A csv containing nifti location and information required for the output file names.
+        A CSV containing nifti location and information required for the output file names.
         It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID', 
         'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
         """
@@ -419,7 +447,7 @@ brain_preprocessing.add_argument(
     default="preprocessed",
     help=(
         """
-        The key that will be used in the csv to indicate the new locations of preprocessed 
+        The key that will be used in the CSV to indicate the new locations of preprocessed
         files. Defaults to 'preprocessed'.
         """
     ),
@@ -434,7 +462,7 @@ brain_preprocessing.add_argument(
         """
         The value that will be used to select the fixed image during registration. This 
         should correspond to a value within the 'NormalizedSeriesDescription' column in
-        the csv. If you have segmentation files in your data. They should correspond to
+        the CSV. If you have segmentation files in your data. They should correspond to
         this same series. Defaults to 'T1Post'.
         """
     ),
@@ -557,12 +585,14 @@ brain_preprocessing.add_argument(
         for differentiation. The input CSV will not be altered. Instead, a new copy will
         be saved to the output directory.
         """
-    )
+    ),
 )
 
 
-def main():
-    # Help.
+def main() -> None:
+    """
+    The CLI for the `preprocessing` library. Run 'preprocessing -h' for additional help.
+    """
     if len(sys.argv) == 1:
         parser.print_usage()
         exit(0)
@@ -624,20 +654,16 @@ def main():
         )
 
     elif args.command == "predict-series":
-        from preprocessing.series_selection import series_from_csv, default_key
-
-        if args.description_key is None:
-            description_key = default_key
-        else:
-            with open(args.description_key, "r") as json_file:
-                description_key = json.load(json_file)
+        from preprocessing.series_selection import series_from_csv
 
         kwargs = {
             "csv": args.csv,
             "ruleset": args.ruleset,
-            "description_key": description_key,
             "cpus": args.cpus,
         }
+
+        if args.description_key is not None:
+            kwargs["description_key"] = json.load(open(args.description_key, "r"))
 
         tracked_command(series_from_csv, kwargs=kwargs, record_dir=args.csv.parent)
 
@@ -668,3 +694,8 @@ def main():
         tracked_command(
             preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir
         )
+
+    exit(0)
+
+
+__all__ = []

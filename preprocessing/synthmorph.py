@@ -1,4 +1,11 @@
-# freesurfer/mri_synthmorph function extension
+"""
+The `synthmorph` module uses the Synthmorph models to perform image registration.
+
+Public Functions
+________________
+
+synthmorph_registration
+"""
 import os
 import numpy as np
 
@@ -8,23 +15,12 @@ import voxelmorph as vxm
 import surfa as sf
 
 from SimpleITK import Image
-from preprocessing.utils import sitk_to_surfa, surfa_to_sitk
+from preprocessing.utils import sitk_to_surfa, surfa_to_sitk, check_for_models
+from preprocessing.constants import PREPROCESSING_MODELS_PATH
+from typing import Dict, Literal, Sequence
 
+check_for_models(PREPROCESSING_MODELS_PATH)
 
-# Settings.
-default = {
-    "model": "joint",
-    "hyper": 0.5,
-    "extent": 256,
-    "steps": 7,
-}
-choices = {
-    "model": ("joint", "deform", "affine", "rigid"),
-    "extent": (192, 256),
-}
-limits = {
-    "steps": 5,
-}
 weights = {
     "joint": (
         "synthmorph.affine.2.h5",
@@ -47,16 +43,18 @@ def network_space(im, shape, center=None):
 
     Parameters
     ----------
-    im : surfa.Volume
+    im: surfa.Volume
         Input image to construct the transform for.
-    shape : (3,) array-like
+
+    shape: (3,) array-like
         Spatial shape of the network space.
-    center : surfa.Volume, optional
+
+    center: surfa.Volume, optional
         Center the network space on the center of a reference image.
 
     Returns
     -------
-    out : tuple of (3, 4) NumPy arrays
+    out: tuple of (3, 4) NumPy arrays
         Transform from network to input-image space and its inverse, thinking
         coordinates.
 
@@ -85,23 +83,27 @@ def transform(
 
     Parameters
     ----------
-    im : surfa.Volume or NumPy array or TensorFlow tensor
+    im: surfa.Volume or NumPy array or TensorFlow tensor
         Input image to transform, without batch dimension.
-    trans : array-like
+
+    trans: array-like
         Transform to apply to the image. A matrix of shape (3, 4), a matrix
         of shape (4, 4), or a displacement field of shape (*space, 3),
         without batch dimension.
-    shape : (3,) array-like, optional
+
+    shape: (3,) array-like, optional
         Output shape used for converting matrices to dense transforms. None
         means the shape of the input image will be used.
-    normalize : bool, optional
+
+    normalize: bool, optional
         Min-max normalize the image intensities into the interval [0, 1].
-    batch : bool, optional
+
+    batch: bool, optional
         Prepend a singleton batch dimension to the output tensor.
 
     Returns
     -------
-    out : float TensorFlow tensor
+    out: float TensorFlow tensor
         Transformed image with with a trailing feature dimension.
 
     """
@@ -136,9 +138,10 @@ def load_weights(model, weights):
 
     Parameters
     ----------
-    model : TensorFlow model
+    model: TensorFlow model
         Model to initialize.
-    weights : str
+
+    weights: str
         Path to weights file.
 
     """
@@ -168,11 +171,13 @@ def convert_to_ras(trans, source, target):
 
     Parameters
     ----------
-    trans : (3, 4) or (4, 4) or (*space, 3) array-like
+    trans: (3, 4) or (4, 4) or (*space, 3) array-like
         Matrix transform or displacement field.
-    source : castable surfa.ImageGeometry
+
+    source: castable surfa.ImageGeometry
         Transform source (or moving) image geometry.
-    target : castable surfa.ImageGeometry
+
+    target: castable surfa.ImageGeometry
         Transform target (or fixed) image geometry.
 
     Returns
@@ -207,29 +212,129 @@ def convert_to_ras(trans, source, target):
     x = tf.reshape(x, shape=(*fix.shape, -1))
     return vxm.utils.compose((mov_to_ras, trans), **prop) + x
 
-
+# TODO consider support for using transforms as inputs for t,T,I.
+# In the form of the surfa transform
+# or wrapped with the sitk converters for sitk transforms
 def synthmorph_registration(
     moving: str | Image,
     fixed: str | Image,
-    interp_method="linear",
-    accompanying_images=[],
-    sitk_outputs=True,
-    sitk_im_cache={},
-    accompanying_in_cache=False,
-    m=default["model"],
-    o=None,
-    O=None,
-    H=False,
-    t=None,
-    T=None,
-    i=None,
-    j=0,
-    r=default["hyper"],
-    n=default["steps"],
-    e=default["extent"],
-    w=[],
-    d=None,
-):
+    interp_method: Literal["linear", "nearest"] = "linear",
+    accompanying_images: Sequence[Dict[str, str]] = [],
+    sitk_outputs: bool = True,
+    sitk_im_cache: Dict[str, Image] = {},
+    accompanying_in_cache: bool = False,
+    m: Literal["joint", "deform", "affine", "rigid"] = "joint",
+    o: str | None = None,
+    O: str | None = None,
+    H: bool = False,
+    t: str | None = None,
+    T: str | None = None,
+    i: str | None = None,
+    j: int = 0,
+    r: float = 0.5,
+    n: int = 7,
+    e: Literal[192, 256] = 256,
+    w: Sequence[str] = [],
+    d: str | None = None,
+) -> Dict[str, Image]:
+    """
+    Adaptation of Freesurfer's mri_synthmorph command that allows transformation of
+    multiple files at once.
+
+    Parameters
+    __________
+    moving: str | Image
+        The moving image to be used in registration. Will accept a string indicating
+        the location of the moving image NIfTI file or the corresponding SimpleITK.Image.
+
+    fixed: str | Image
+        The fixed image to be used in registration. Will accept a string indicating
+        the location of the fixed image NIfTI file or the corresponding SimpleITK.Image.
+
+    interp_method: Literal["linear", "nearest"]
+        The interpolation method to be used with the derived transformation. Defaults to
+        "linear".
+
+    accompanying_images: Sequence[Dict[str, str]]
+        Accompanying images that share the space of the moving image. The derived transform
+        will be applied to all of these images. `accompanying_images` is provided as a
+        sequence of dictionaries with the form:
+            [
+                {
+                    "moving": "/path/to/moving.nii.gz",
+                    "moved": "/path/to/moved.nii.gz",
+                    "interp_method": Literal["llinear", "nearest"] = "linear"
+                },
+                ...
+            ]
+
+    sitk_outputs: bool
+        Whether the transformed images will be output as a SimpleITK.Image. If True,
+        `sitk_im_cache` will be updated to contain the moved images. Otherwise, the
+        moved images will be written to the specified file path. Defaults to True.
+
+    sitk_im_cache: Dict[str, Image]
+        A dictionary mapping file locations (as strings) to SimpleITK.Images.
+
+    accompanying_in_cache: bool
+        Whether all of the paths within `accompanying_images` are stored within `sitk_im_cache`.
+        Defaults to False.
+
+    m: Literal["joint", "deform", "affine", "rigid"]
+        Model weights used for registration. Defaults to "joint".
+
+    o: str | None
+        Save path for the moving image registered to the fixed image. Defaults to None.
+
+    O: str | None
+        Save path for the fixed image registered to the moving image. Defaults to None.
+
+    H: bool
+        Update the voxel-to-world matrix instead of resampling when saving images to
+        `o` or `O`. For matrix transforms only. Not all software supports headers with
+        shear from affine registration. Defaults to False.
+
+    t: str | None
+        Save path for the transform from the moving to the fixed image, including any
+        initialization. Defaults to None.
+
+    T: str | None
+        Save path for the transform from the fixed to the moving image, including any
+        initialization. Defaults to None.
+
+    i: str | None
+        Path to an initial matrix transform to the moving image before the registration.
+
+    j: int
+        Number of TensorFlow threads. Defaults to 0
+
+    r: float
+        Regularization parameter in the open interval (0, 1) for deformable registration.
+        Higher values lead to smoother warps. Defaults to 0.5.
+
+    n: int
+        Integration steps for deformable registration. Lower numbers improve speed and
+        memory use but can lead to inaccuracies and folding voxels. Defaults to 7. Should
+        not be less than 5.
+
+    e: Literal[192, 256]
+        Isotropic extent of the registration space in unit voxels. Lower values improve
+        speed and memory use but may crop the anatomy of interest. Defaults to 256.
+
+    w: Sequence[str]
+        Alternative weights for the registration model. Provide more than one to set
+        submodel weights.
+
+    d: str | None
+        An output directory which will contain the input images moved to network space, named
+        "inp1.mgz" and "inp2.mgz".
+
+    Returns
+    _______
+    sitk_im_cache: Dict[str, Image]
+        A potentially updated version of the input `sitk_im_cache`, which contains the registered
+        images if `sitk_outputs` is True.
+    """
     in_shape = (e,) * 3
     is_mat = m in ("affine", "rigid")
 
@@ -241,7 +346,7 @@ def synthmorph_registration(
         print("Error: regularization strength not in open interval (0, 1)")
         exit(1)
 
-    if n < limits["steps"]:
+    if n < 5:
         print("Error: too few integration steps")
         exit(1)
 
@@ -354,10 +459,7 @@ def synthmorph_registration(
 
         # Weights.
         if not w:
-            fs = os.environ.get("FREESURFER_HOME")
-            if not fs:
-                sf.system.fatal("set environment variable FREESURFER_HOME or weights")
-            w = [os.path.join(fs, "models", f) for f in weights[m]]
+            w = [os.path.join(PREPROCESSING_MODELS_PATH, f) for f in weights[m]]
 
         for f in w:
             load_weights(model, weights=f)
@@ -426,7 +528,7 @@ def synthmorph_registration(
 
         for accompanying_image in accompanying_images:
             moving = accompanying_image["moving"]
-            out_moving = accompanying_image["out_moving"]
+            moved = accompanying_image["moved"]
             interp_method = accompanying_image.get("interp_method", "linear")
 
             if accompanying_in_cache:
@@ -444,9 +546,12 @@ def synthmorph_registration(
                 out = fix.new(out)
 
             if sitk_outputs:
-                sitk_im_cache[out_moving] = surfa_to_sitk(out)
+                sitk_im_cache[moved] = surfa_to_sitk(out)
 
             else:
-                out.save(out_moving)
+                out.save(moved)
 
     return sitk_im_cache
+
+
+__all__ = ["synthmorph_registration"]

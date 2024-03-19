@@ -1,4 +1,31 @@
-### reorganize dicom data to match BIDS organizational scheme
+"""
+The `reorganize` module provides code for reorganizing DICOM or NIfTI datasets
+to follow the BIDS naming conventions. These outputs yield datasets that are
+compatible with the rest of the `preprocessing` library.
+
+Public Functions
+________________
+find_anon_keys
+    Create anonymization keys for anonymous PatientID and StudyID from previous
+    QTIM organizational scheme. Is compatible with data following a following
+    <Patient_ID>/<Study_ID> directory hierarchy.
+
+nifti_anon_csv
+    Create anonymization keys for a dataset that starts within NIfTI format. If the
+    'SeriesDescription's are not normalized, 'NormalizedSeriesDescription's must be
+    obtained externally before the NIfTI dataset can be reorganized.
+
+reorganize_dicoms
+    Reorganize DICOMs to follow the BIDS convention. Any DICOMs found recursively
+    within this directory will be reorganized (at least one level of subdirectories
+    is assumed). Anonomyzation keys for PatientIDs and StudyIDs are provided within
+    a CSV.
+
+reorganize_niftis
+    Reorganize a NIfTI dataset to follow BIDS convention. As NIfTI files lack metadata,
+    anonymization keys must be provided in the form of a CSV, such as one obtained with
+    `nifti_anon_csv`.
+"""
 import pandas as pd
 import glob
 import os
@@ -25,7 +52,8 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
     ----------
     input_dir: Path | str
         The directory containing all of the dicom files for a project.
-        Should follow the <Patient_ID>/<Study_ID> convention
+        Should follow the <Patient_ID>/<Study_ID> convention.
+
     output_dir: Path | str
         The directory that will contain the output csv and potentially
         an error file.
@@ -99,15 +127,17 @@ def copy_dicoms(
 ) -> pd.DataFrame:
     """
     Copies all of the dicoms present within a directory to
-    <new_dicom_dir>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm
+    <new_dicom_dir>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm.
 
     Parameters
     __________
     sub_dir: Path | str
         A directory containing DICOM files. Intended to be a subdirectory of within
         the root directory of a DICOM dataset.
+
     new_dicom_dir: Path | str
         The new root directory under which the copied DICOMs will be stored.
+
     anon_df: pd.DataFrame
         A DataFrame containing the key to match an Anonymized PatientID and
         Visit_ID to the StudyInstanceUID of the DICOMs.
@@ -195,6 +225,7 @@ def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
     df: pd.DataFrame
         A DataFrame for which you wish to provide anonymized patient and study
         identifiers. It must contain the columns: 'PatientID' and 'StudyDate'.
+
     check_columns: bool
         Whether to check `df` for required columns. Defaults to True.
 
@@ -253,19 +284,24 @@ def reorganize_dicoms(
     cpus: int = 1,
 ) -> pd.DataFrame:
     """
-    Copies all of the dicoms present within a dataset's root directory to
-    <new_dicom_dir>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm
+    Reorganize DICOMs to follow the BIDS convention. Any DICOMs found recursively
+    within this directory will be reorganized (at least one level of subdirectories
+    is assumed). Anonomyzation keys for PatientIDs and StudyIDs are provided within
+    a CSV.
 
     Parameters
     __________
     original_dicom_dir: Path | str
         The original root directory containing all of the DICOM files for a dataset.
+
     new_dicom_dir: Path | str
         The new root directory under which the copied DICOMs will be stored.
+
     anon_csv: Path | str | pd.DataFrame | None
         A CSV or DataFrame containing the key to match an Anonymized PatientID and
         Visit_ID to the StudyInstanceUID of the DICOMs. If None is provided, the
         anonymization will be completed automatically based on the DICOM headers.
+
     cpus: int
         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
 
@@ -347,7 +383,29 @@ def reorganize_dicoms(
 
 def nifti_anon_csv(
     nifti_dir: Path | str, output_dir: Path | str, normalized_descriptions: bool = False
-):
+) -> pd.DataFrame:
+    """
+    Create anonymization keys for a dataset that starts within NIfTI format. If the
+    'SeriesDescription's are not normalized, 'NormalizedSeriesDescription's must be
+    obtained externally before the NIfTI dataset can be reorganized.
+
+    Parameters
+    __________
+    nifti_dir: Path | str
+        The directory containing all of the NIfTI files you wish to anonymize.
+
+    output_dir: Path | str
+        The directory that will contain the output CSV and potentially an error file.
+
+    normalized_descriptions: bool
+        Whether the 'SeriesDescription' in the NIfTI file name is already normalized.
+        Defaults to False.
+
+    Returns
+    _______
+        A DataFrame containing the key to match simulated DICOM metadata to the original
+        NIfTI files. Also saved as a CSV within the 'output_dir'.
+    """
     nifti_dir = Path(nifti_dir)
     output_dir = Path(output_dir)
 
@@ -416,6 +474,32 @@ def reorganize_niftis(
     anon_csv: Path | str | pd.DataFrame,
     cpus: int = 1,
 ) -> pd.DataFrame:
+    """
+    Reorganize a NIfTI dataset to follow BIDS convention. As NIfTI files lack metadata,
+    anonymization keys must be provided in the form of a CSV, such as one obtained with
+    `nifti_anon_csv`.
+
+    Parameters
+    __________
+    nifti_dir: Path | str
+        The new root directory under which the copied NIfTIs will be stored.
+
+    anon_csv: Path | str | pd.DataFrame
+        A CSV containing the original location of NIfTI files and metadata required for
+        preprocessing commands. It must contain the columns: 'Anon_PatientID',
+        'Anon_StudyID', 'PatientID', 'StudyDate', 'SeriesInstanceUID', 'StudyInstanceUID',
+        'SeriesDescription', 'original_nifti', and 'NormalizedSeriesDescription'. 'SeriesType'
+        can also be provided, otherwise "anat" will be assumed.
+
+    cpus: int
+         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
+
+    Returns
+    _______
+    pd.DataFrame:
+        A DataFrame containing the location and simulated metadata of the NIfTI data at the
+        series level. Also saved as a CSV within the 'nifti_dir'.
+    """
     if isinstance(anon_csv, (Path, str)):
         anon_df = pd.read_csv(anon_csv, dtype=str)
 
@@ -518,3 +602,11 @@ def reorganize_niftis(
     df.to_csv(dataset_csv, index=False)
 
     return df
+
+
+__all__ = [
+    "find_anon_keys",
+    "nifti_anon_csv",
+    "reorganize_dicoms",
+    "reorganize_niftis",
+]

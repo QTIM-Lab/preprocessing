@@ -1,3 +1,4 @@
+# TODO explore BIDS validation adn bids specific functionality
 import os
 from pathlib import Path
 from bids_validator import BIDSValidator
@@ -12,6 +13,7 @@ def validate(rootpath: Path | str, paths: Path | str | List[Path | str]):
     __________
     rootpath: Path | str
         The path to the root of the BIDS dataset.
+
     paths: Path | str | List[Path | str]
         The path to file(s) to check against the BIDSValidator. They must be relative to
         'rootpath', but include a leading '/'.

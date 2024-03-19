@@ -1,3 +1,17 @@
+"""
+The `nifti_conversion` module contains tools for converting from DICOM to NIfTI format.
+
+Public Functions
+________________
+convert_to_nifti
+    Convert a DICOM series to a NIfTI file.
+
+convert_study
+    Convert a DICOM study to NIfTI files representing each series.
+
+convert_batch_to_nifti
+    Convert a DICOM dataset to NIfTI files representing each series.
+"""
 import os
 import pandas as pd
 import numpy as np
@@ -25,6 +39,7 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
     series_dir: Path | str
         The path to a directory containing a DICOM series. All of the DICOM instances
         are assumed to have the .dcm file extension.
+
     eps: float
         The absolute error tolerance allowed to pass the integrity checks. Defaults to 1e-3.
 
@@ -101,23 +116,31 @@ def convert_to_nifti(
     __________
     dicom_dir: Path | str
         The path to a directory containing all of the DICOM instances in a single series.
+
     nifti_dir: Path | str
         The root directory under which the converted NIfTI files will be written. Subdirectories
         will be created to follow BIDS convention.
+
     anon_patient_id: str
         The anonymized PatientID for the series being converted (e.g., 'sub-01').
+
     anon_study_id: str
         The anonymized StudyID for the series being converted (e.g., 'ses-01').
+
     manufacturer: str
         The manufacturer information originally stored in the DICOM header.
+
     normalized_series_description: str
         The series_description normalized to a consistent value within a dataset.
+
     subdir: Literal['anat', 'func', 'dwi']
         The subdirectory under the study directory. This represents the modality information for
         BIDS. Currently, the supported options are 'anat', 'func', and 'dwi'.
+
     overwrite: bool
         Whether to overwrite the NIfTI file if there is already one with the same output name.
         Defaults to False.
+
     source_software: bool
         Whether to call `source_external_software` to add software required for conversion. Defaults
         to True.
@@ -193,15 +216,19 @@ def convert_study(
         A DataFrame containing data for a single study. It must contain the following
         columns: ['dicoms', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID',
         'Manufacturer', 'NormalizedSeriesDescription', 'SeriesType'].
+
     nifti_dir: Path | str
         The root directory under which the converted NIfTI files will be written. Subdirectories
         will be created to follow BIDS convention.
+
     overwrite: bool
         Whether to overwrite the NIfTI file if there is already one with the same output name.
         Defaults to False.
+
     source_software: bool
         Whether to call `source_external_software` to add software required for conversion. Defaults
         to True.
+
     check_columns: bool
         Whether to check 'study_df' for the required columns. Defaults to True.
 
@@ -272,18 +299,23 @@ def convert_batch_to_nifti(
     nifti_dir: Path | str
         The root directory under which the converted NIfTI files will be written. Subdirectories
         will be created to follow BIDS convention.
+
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following
         columns: ['dicoms', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID',
         'SeriesInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription', 'SeriesType'].
+
     overwrite: bool
         Whether to overwrite the NIfTI file if there is already one with the same output name.
         Defaults to False.
+
     source_software: bool
         Whether to call `source_external_software` to add software required for conversion. Defaults
         to True.
+
     cpus: int
         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
+
     check_columns: bool
         Whether to check the CSV for the required columns. Defaults to True.
 
@@ -357,3 +389,6 @@ def convert_batch_to_nifti(
     )
     df.to_csv(csv, index=False)
     return df
+
+
+__all__ = ["convert_to_nifti", "convert_study", "convert_batch_to_nifti"]

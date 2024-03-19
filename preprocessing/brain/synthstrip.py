@@ -1,3 +1,12 @@
+"""
+The `synthmstrip` module uses the Synthmorph models to perform image registration.
+
+Public Functions
+________________
+synthstrip_skullstrip
+    Adaptation of Freesurfer's mri_synthstrip command. One of `out`, `m`, or `d` must
+    be specified.
+"""
 import os
 import torch
 import numpy as np
@@ -5,7 +14,11 @@ import surfa as sf
 
 from torch import nn
 from SimpleITK import Image
-from preprocessing.utils import sitk_to_surfa, surfa_to_sitk
+from preprocessing.utils import sitk_to_surfa, surfa_to_sitk, check_for_models
+from preprocessing.constants import PREPROCESSING_MODELS_PATH
+from typing import Dict
+
+check_for_models(PREPROCESSING_MODELS_PATH)
 
 
 def extend_sdt(sdt, border=1):
@@ -17,14 +30,15 @@ def extend_sdt(sdt, border=1):
 
     Parameters
     ----------
-    sdt : sf.Volume
+    sdt: sf.Volume
         Narrow-band signed distance transform estimated by SynthStrip.
-    border : float, optional
+
+    border: float, optional
         Mask border threshold in millimeters.
 
     Returns
     -------
-    sdt : sf.Volume
+    sdt: sf.Volume
         Extended SDT.
 
     """
@@ -190,7 +204,7 @@ class ConvBlock(nn.Module):
 
 def synthstrip_skullstrip(
     image: str | Image,
-    sitk_im_cache={},
+    sitk_im_cache: Dict[str, Image] = {},
     sitk_out: bool = True,
     out: str | None = None,
     m: str | None = None,
@@ -199,7 +213,49 @@ def synthstrip_skullstrip(
     threads: int | None = None,
     no_csf: bool = False,
     mod: str | None = None,
-) -> {}:
+) -> Dict[str, Image]:
+    """
+    Adaptation of Freesurfer's mri_synthstrip command. One of `out`, `m`, or `d` must
+    be specified.
+
+    Parameters
+    __________
+    image: str | Image
+        The image that will be used for skullstripping. Will accept a string indicating
+        the location of the moving image NIfTI file or the corresponding SimpleITK.Image.
+
+    sitk_im_cache: Dict[str, Image]
+        A dictionary mapping file locations (as strings) to SimpleITK.Images.
+
+    sitk_out: bool
+        Whether the transformed images will be output as a SimpleITK.Image. If True,
+        `sitk_im_cache` will be updated to contain the moved images. Otherwise, the
+        moved images will be written to the specified file path. Defaults to True.
+
+    out: str | None
+        Save path to the skullstripped image. Defaults to None.
+
+    m: str | None
+        Save path to the binary brain mask. Defaults to None.
+
+    d: str | None
+        Save path to the distance transform. Defaults to None.
+
+    b: int
+        Mask border threshold in mm. Defaults to 1.
+
+    no_csf: bool
+        Whether to exclude CSF from brain border. Defaults to False.
+
+    mod: str | None
+        Alternative weights for the skullstrip model.
+
+    Returns
+    _______
+    sitk_im_cache: Dict[str, Image]
+        A potentially updated version of the input `sitk_im_cache`, which contains the registered
+        images if `sitk_outputs` is True.
+    """
     # sanity check on the inputs
     if not out and not m and not d:
         sf.system.fatal("Must provide at least one -o, -m, or -d output flag.")
@@ -219,17 +275,16 @@ def synthstrip_skullstrip(
         # print("Using custom model weights")
     else:
         version = "1"
-        # print(f"Running SynthStrip model version {version}")
-        fshome = os.environ.get("FREESURFER_HOME")
-        if fshome is None:
-            sf.system.fatal(
-                "FREESURFER_HOME env variable must be set! Make sure FreeSurfer is properly sourced."
-            )
+
         if no_csf:
             # print("Excluding CSF from brain boundary")
-            modelfile = os.path.join(fshome, "models", f"synthstrip.nocsf.{version}.pt")
+            modelfile = os.path.join(
+                PREPROCESSING_MODELS_PATH, f"synthstrip.nocsf.{version}.pt"
+            )
         else:
-            modelfile = os.path.join(fshome, "models", f"synthstrip.{version}.pt")
+            modelfile = os.path.join(
+                PREPROCESSING_MODELS_PATH, f"synthstrip.{version}.pt"
+            )
     checkpoint = torch.load(modelfile, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
 
@@ -309,3 +364,6 @@ def synthstrip_skullstrip(
             image.new(dist).save(d)
 
     return sitk_im_cache
+
+
+__all__ = ["synthstrip_skullstrip"]
