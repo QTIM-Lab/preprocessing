@@ -14,10 +14,10 @@ preprocess_from_csv
     Preprocess all of the studies within a dataset.
 """
 import os
-import shutil
 import pandas as pd
 import numpy as np
 import json
+import warnings
 
 from SimpleITK import (
     DICOMOrientImageFilter,
@@ -170,13 +170,17 @@ def verify_reg(
     __________
     fixed_image_path: str
         The path to the fixed image, which must be a key within `sitk_im_cache`.
+
     moving_image_path: str
         The path to the moving image, which must be a key within `sitk_im_cache`.
+
     sitk_im_cache: Dict[str, Image]
         The cache used to store intermediate files within the registration pipeline following this
         format: {path: Image}.
+
     interp_method: Literal["linear", "nearest"]
         The interpolation method to use if the images needs to be resampled. Defaults to "linear".
+
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed.
 
@@ -184,6 +188,7 @@ def verify_reg(
     _______
     good_registrations: bool
         Whether the registration was of good quality and did not required resampling.
+
     sitk_im_cache: Dict[str, Image]
         A potentially updated version of the input `sitk_im_cache`, which contains the resampled images
         if applicable.
@@ -244,20 +249,26 @@ def local_reg(
     __________
     row: Dict[str, Any]
         A dictionary representing a series row from the study DataFrame / CSV.
+
     pipeline_key:
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
         Defaults to 'preprocessed'.
+
     fixed_image_path: str
         The path to the fixed image, which must be a key within `sitk_im_cache`.
+
     sitk_im_cache: Dict[str, Image]
         The cache used to store intermediate files within the registration pipeline following this
         format: {path: Image}.
+
     model: str
         The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
         and 'deform'. Defaults to 'affine'.
+
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed. Defaults
         to False.
+
     debug: bool
         Whether to run in 'debug mode' where each step is saved with an individual name and intermediate
         files are not deleted. Dafaults to False.
@@ -266,6 +277,7 @@ def local_reg(
     _______
     row: Dict[str, Any]
         An updated version of the input `row`, which contains the updated path for the moved image.
+
     sitk_im_cache: Dict[str, Image]
         An updated version of the input `sitk_im_cache`, which contains the moved image.
     """
@@ -533,7 +545,7 @@ def preprocess_study(
     preprocessed_dir: Path | str,
     pipeline_key: str,
     registration_key: str = "T1Post",
-    registration_target: str | None = None,
+    registration_target: Path | str | None = None,
     registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
     orientation: str = "RAS",
     spacing: Sequence[float | int] = [1, 1, 1],
@@ -554,36 +566,49 @@ def preprocess_study(
         A DataFrame containing nifti location and information required for the output file names
         for a single study. It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID',
         'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+
     preprocessed_dir: Path
         The directory that will contain the preprocessed NIfTI files.
+
     pipeline_key: str
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
         Defaults to 'preprocessed'.
+
     registration_key: str
         The value that will be used to select the fixed image during registration. This should correspond
         to a value within the 'NormalizedSeriesDescription' column in the csv. If you have segmentation
         files in your data. They should correspond to this same series. Defaults to 'T1Post'.
-    registration_target: str | None
+
+    registration_target: Path | str | None
         The location of the file that will be used as the fixed image for the purposes of registration.
+
     orientation: str
         The orientation standard that you wish to set for preprocessed data. Defaults to 'RAI'."
+
     spacing: Sequence[float | int]
         A sequence of floats or ints indicating the desired spacing of preprocessed data. Measurements
         are in mm. Defaults to [1, 1, 1].
+
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+
     pre_skullstripped: bool
         Whether the input data is already skullstripped. Skullstripping will not be applied if specified.
+
     binarize_seg: bool
         Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
         applied by default.
+
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed.
+
     source_software: bool
         Whether to call `source_external_software` to add software required for preprocessing. Defaults
         to True.
+
     check_columns: bool
         Whether to check `study_df` for required columns. Defaults to True.
+
     debug: bool
         Whether to run in 'debug mode' where each step is saved with an individual name and intermediate
         files are not deleted. Dafaults to False.
@@ -593,7 +618,6 @@ def preprocess_study(
     pd.DataFrame:
         A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
         the locations of the preprocessing outputs.
-
     """
     if source_software:
         source_external_software()
@@ -843,15 +867,31 @@ def preprocess_study(
 
     if debug:
         if registration_target is not None:
+            registration_target = str(registration_target)
             main_SS_file = registration_target.replace(
                 ".nii.gz", "_RAS_spacing_SS.nii.gz"
             )
+
+            if not Path(main_SS_file).exists():
+                main_SS_file = registration_target
+
             sitk_im_cache[main_SS_file] = ReadImage(main_SS_file)
+
+        else:
+            main_SS_file = None
 
     else:
         if registration_target is not None:
+            registration_target = str(registration_target)
             main_SS_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
+
+            if not Path(main_SS_file).exists():
+                main_SS_file = registration_target
+
             sitk_im_cache[main_SS_file] = ReadImage(main_SS_file)
+
+        else:
+            main_SS_file = None
 
     study_SS_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
     study_SS_mask_file = rows[0][pipeline_key].replace(".nii.gz", "_SS_mask.nii.gz")
@@ -1038,7 +1078,8 @@ def preprocess_study(
 
     ### Write files:
     for k, v in sitk_im_cache.items():
-        WriteImage(v, k)
+        if k != main_SS_file:
+            WriteImage(v, k)
 
     ### copy metadata
     preprocessing_args = {
@@ -1070,6 +1111,7 @@ def preprocess_patient(
     pipeline_key: str = "preprocessed",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
+    atlas_target: Path | str | None = None,
     registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
     orientation: str = "RAS",
     spacing: Sequence[float | int] = [1, 1, 1],
@@ -1090,40 +1132,58 @@ def preprocess_patient(
         A DataFrame containing nifti location and information required for the output file names
         for a single patient. It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID',
         'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+
     preprocessed_dir: Path
         The directory that will contain the preprocessed NIfTI files.
+
     pipeline_key: str
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
         Defaults to 'preprocessed'.
+
     registration_key: str
         The value that will be used to select the fixed image during registration. This should correspond
         to a value within the 'NormalizedSeriesDescription' column in the csv. If you have segmentation
         files in your data. They should correspond to this same series. Defaults to 'T1Post'.
+
     longitudinal_registration: bool
         Whether to register all of the subsequent studies for a patient to the first study. Defaults to
         False.
+
+    atlas_target: Path | str | None
+        The path to an atlas file if using using an atlas for the registration. If provided, `longitudinal_registration`
+        will be disabled.
+
     registration_model: str
         The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
         and 'deform'. Defaults to 'affine'.
+
     orientation: str
-        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
+        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'.
+
     spacing: Sequence[float | int]
         A sequence of floats or ints indicating the desired spacing of preprocessed data. Measurements
         are in mm. Defaults to [1, 1, 1].
+
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+
     pre_skullstripped: bool
         Whether the input data is already skullstripped. Skullstripping will not be applied if specified.
+
     binarize_seg: bool
         Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
         applied by default.
+
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed.
+
     source_software: bool
         Whether to call `source_external_software` to add software required for preprocessing. Defaults
         to True.
+
     check_columns: bool
         Whether to check `study_df` for required columns. Defaults to True.
+
     debug: bool
         Whether to run in 'debug mode' where each step is saved with an individual name and intermediate
         files are not deleted. Dafaults to False.
@@ -1133,7 +1193,6 @@ def preprocess_patient(
     pd.DataFrame:
         A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
         the locations of the preprocessing outputs.
-
     """
 
     if source_software:
@@ -1152,6 +1211,17 @@ def preprocess_patient(
         optional_columns = ["seg"]
 
         check_required_columns(patient_df, required_columns, optional_columns)
+
+    if atlas_target:
+        assert Path(atlas_target).exists(), f"{atlas_target} must exist if provided."
+
+        if longitudinal_registration:
+            longitudinal_registration = False
+            warnings.warn(
+                "Registering to an atlas is mutually exclusive with longitudinal registration. "
+                "Your preference for longitudinal registration has been overwritten.",
+                UserWarning,
+            )
 
     if patient_df.shape[0] == 0:
         return patient_df
@@ -1173,7 +1243,7 @@ def preprocess_patient(
             preprocessed_dir=preprocessed_dir,
             pipeline_key=pipeline_key,
             registration_key=registration_key,
-            registration_target=None,
+            registration_target=atlas_target,
             registration_model=registration_model,
             orientation=orientation,
             spacing=spacing,
@@ -1187,107 +1257,74 @@ def preprocess_patient(
         )
     )
 
-    if getattr(preprocessed_dfs[0], "failed_preprocessing", False):
-        # remove failed preprocessed studies
-        anon_patientID = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
-        anon_studyID = study_df.loc[study_df.index[0], "Anon_StudyID"]
-        study_dir = preprocessed_dir / anon_patientID / anon_studyID
-
-        if study_dir.exists():
-            shutil.rmtree(study_dir)
-
-        if patient_df.shape[0] > 1:
-            patient_df = patient_df.loc[1:, :]
-            preprocess_patient(
-                patient_df=patient_df,
-                preprocessed_dir=preprocessed_dir,
-                pipeline_key=pipeline_key,
-                registration_key=registration_key,
-                longitudinal_registration=longitudinal_registration,
-                registration_model=registration_model,
-                orientation=orientation,
-                spacing=spacing,
-                skullstrip=skullstrip,
-                pre_skullstripped=pre_skullstripped,
-                binarize_seg=binarize_seg,
-                verbose=verbose,
-                source_software=source_software,
-                check_columns=check_columns,
-                debug=debug,
+    if len(study_uids) > 1:
+        if longitudinal_registration:
+            reg_sorted = (
+                preprocessed_dfs[0]
+                .sort_values(
+                    ["NormalizedSeriesDescription"],
+                    key=lambda x: (x != registration_key).astype(int),
+                )
+                .reset_index(drop=True)
             )
 
-        else:
-            return patient_df
-
-    else:
-        if len(study_uids) > 1:
-            if longitudinal_registration:
-                reg_sorted = (
-                    preprocessed_dfs[0]
-                    .sort_values(
-                        ["NormalizedSeriesDescription"],
-                        key=lambda x: (x != registration_key).astype(int),
-                    )
-                    .reset_index(drop=True)
-                )
-
-                if debug:
-                    output_dir = os.path.dirname(reg_sorted[pipeline_key][0])
-                    base_name = os.path.basename(reg_sorted["nifti"][0])
-                    registration_target = f"{output_dir}/{base_name}"
-
-                else:
-                    registration_target = reg_sorted[pipeline_key][0]
-
-                for study_uid in study_uids[1:]:
-                    study_df = patient_df[
-                        patient_df["StudyInstanceUID"] == study_uid
-                    ].copy()
-
-                    preprocessed_dfs.append(
-                        preprocess_study(
-                            study_df=study_df,
-                            preprocessed_dir=preprocessed_dir,
-                            pipeline_key=pipeline_key,
-                            registration_key=registration_key,
-                            registration_target=registration_target,
-                            registration_model=registration_model,
-                            orientation=orientation,
-                            spacing=spacing,
-                            skullstrip=skullstrip,
-                            pre_skullstripped=pre_skullstripped,
-                            binarize_seg=binarize_seg,
-                            verbose=verbose,
-                            source_software=False,
-                            check_columns=False,
-                            debug=debug,
-                        )
-                    )
+            if debug:
+                output_dir = os.path.dirname(reg_sorted[pipeline_key][0])
+                base_name = os.path.basename(reg_sorted["nifti"][0])
+                registration_target = f"{output_dir}/{base_name}"
 
             else:
-                for study_uid in study_uids[1:]:
-                    study_df = patient_df[
-                        patient_df["StudyInstanceUID"] == study_uid
-                    ].copy()
+                registration_target = reg_sorted[pipeline_key][0]
 
-                    preprocessed_dfs.append(
-                        preprocess_study(
-                            study_df=study_df,
-                            preprocessed_dir=preprocessed_dir,
-                            pipeline_key=pipeline_key,
-                            registration_key=registration_key,
-                            registration_target=None,
-                            registration_model=registration_model,
-                            orientation=orientation,
-                            spacing=spacing,
-                            skullstrip=skullstrip,
-                            pre_skullstripped=pre_skullstripped,
-                            verbose=verbose,
-                            source_software=False,
-                            check_columns=False,
-                            debug=debug,
-                        )
+            for study_uid in study_uids[1:]:
+                study_df = patient_df[
+                    patient_df["StudyInstanceUID"] == study_uid
+                ].copy()
+
+                preprocessed_dfs.append(
+                    preprocess_study(
+                        study_df=study_df,
+                        preprocessed_dir=preprocessed_dir,
+                        pipeline_key=pipeline_key,
+                        registration_key=registration_key,
+                        registration_target=registration_target,
+                        registration_model=registration_model,
+                        orientation=orientation,
+                        spacing=spacing,
+                        skullstrip=skullstrip,
+                        pre_skullstripped=pre_skullstripped,
+                        binarize_seg=binarize_seg,
+                        verbose=verbose,
+                        source_software=False,
+                        check_columns=False,
+                        debug=debug,
                     )
+                )
+
+        else:
+            for study_uid in study_uids[1:]:
+                study_df = patient_df[
+                    patient_df["StudyInstanceUID"] == study_uid
+                ].copy()
+
+                preprocessed_dfs.append(
+                    preprocess_study(
+                        study_df=study_df,
+                        preprocessed_dir=preprocessed_dir,
+                        pipeline_key=pipeline_key,
+                        registration_key=registration_key,
+                        registration_target=atlas_target,
+                        registration_model=registration_model,
+                        orientation=orientation,
+                        spacing=spacing,
+                        skullstrip=skullstrip,
+                        pre_skullstripped=pre_skullstripped,
+                        verbose=verbose,
+                        source_software=False,
+                        check_columns=False,
+                        debug=debug,
+                    )
+                )
 
         # clear extra files
         anon_patientID = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
@@ -1318,9 +1355,10 @@ def preprocess_from_csv(
     csv: Path | str,
     preprocessed_dir: Path | str,
     patients: Sequence[str] | None = None,
-    pipeline_key: str = "debug",
+    pipeline_key: str = "preprocessed",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
+    atlas_target: Path | str | None = None,
     registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
     orientation: str = "RAS",
     spacing: Sequence[float | int] = [1, 1, 1],
@@ -1340,40 +1378,58 @@ def preprocess_from_csv(
         The path to a CSV containing an entire dataset. It must contain the following columns:  'nifti',
         'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription',
         and 'SeriesType'.
+
     preprocessed_dir: Path
         The directory that will contain the preprocessed NIfTI files.
+
     patients: Sequece[str] | None
         A sequence of patients to select from the 'Anon_PatientID' column of the CSV. If 'None' is provided,
         all patients will be preprocessed.
+
     pipeline_key: str
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
-        Defaults to 'debug'.
+        Defaults to 'preprocessed'.
+
     registration_key: str
         The value that will be used to select the fixed image during registration. This should correspond
         to a value within the 'NormalizedSeriesDescription' column in the csv. If you have segmentation
         files in your data. They should correspond to this same series. Defaults to 'T1Post'.
+
     longitudinal_registration: bool
         Whether to register all of the subsequent studies for a patient to the first study. Defaults to
         False.
+
+    atlas_target: Path | str | None
+        The path to an atlas file if using using an atlas for the registration. If provided, `longitudinal_registration`
+        will be disabled.
+
     registration_model: str
         The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
         and 'deform'. Defaults to 'affine'.
+
     orientation: str
-        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
+        The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'.
+
     spacing: Sequence[float | int]
         A sequence of floats or ints indicating the desired spacing of preprocessed data. Measurements
         are in mm. Defaults to [1, 1, 1].
+
     skullstrip: bool
         Whether to apply skullstripping to preprocessed data. Skullstripping will be applied by default.
+
     pre_skullstripped: bool
         Whether the input data is already skullstripped. Skullstripping will not be applied if specified.
+
     binarize_seg: bool
         Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
         applied by default.
+
     cpus: int
         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
+
     verbose: bool
         Whether to print additional information such as individual commands and their arguments. Defaults to False.
+
     debug: bool
         Whether to run in debug mode. Each intermediate step will be saved using a suffix for differentiation.
         The input CSV will not be altered. Instead, a new copy will be saved to the output directory. Defaults
@@ -1427,6 +1483,17 @@ def preprocess_from_csv(
     if pre_skullstripped:
         skullstrip = False
 
+    if atlas_target:
+        assert Path(atlas_target).exists(), f"{atlas_target} must exist if provided."
+
+        if longitudinal_registration:
+            longitudinal_registration = False
+            warnings.warn(
+                "Registering to an atlas is mutually exclusive with longitudinal registration. "
+                "Your preference for longitudinal registration has been overwritten.",
+                UserWarning,
+            )
+
     kwargs_list = [
         {
             "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
@@ -1434,6 +1501,7 @@ def preprocess_from_csv(
             "pipeline_key": pipeline_key,
             "registration_key": registration_key,
             "longitudinal_registration": longitudinal_registration,
+            "atlas_target": atlas_target,
             "registration_model": registration_model,
             "orientation": orientation,
             "spacing": spacing,

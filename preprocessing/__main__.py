@@ -481,6 +481,19 @@ brain_preprocessing.add_argument(
 )
 
 brain_preprocessing.add_argument(
+    "-a",
+    "--atlas-target",
+    type=Path,
+    default=None,
+    help=(
+        """
+        The path to an atlas file if using using an atlas for the registration. If provided,
+        `--longitudinal-registration` will be ignored.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
     "-m",
     "--model",
     choices=["rigid", "affine", "joint", "deform"],
@@ -680,6 +693,7 @@ def main() -> None:
             "pipeline_key": args.pipeline_key,
             "registration_key": args.registration_key,
             "longitudinal_registration": args.longitudinal_registration,
+            "atlas_target": args.atlas_target,
             "registration_model": args.model,
             "orientation": args.orientation,
             "spacing": [float(s) for s in args.spacing.split(",")],
