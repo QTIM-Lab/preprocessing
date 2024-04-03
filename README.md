@@ -7,6 +7,7 @@
    * [External Software](#external-software)
 * **[CLI User Guide](#cli-user-guide)**
    * [old-project-anon-keys Command](#old-project-anon-keys-command)
+   * [nifti-dataset-anon-keys Command](#nifti-dataset-anon-keys-command)
    * [reorganize-dicoms Command](#reorganize-dicoms-command)
    * [dataset-to-nifti Command](#dataset-to-nifti-command)
    * [predict-series Command](#predict-series-command)
@@ -32,17 +33,9 @@ poetry add git+ssh://git@github.com/QTIM-Lab/preprocessing.git
 ```
 
 ### External Software
-Aside from python dependencies, this repo also requires external software to run some of the commands. On Martinos Machines, everything will be sourced automatically and will require no additional work on your part. If you want to use `preprocessing` on your own machine, you will have to install ANTS (>= 2.3.5), Slicer (>= 5.2.2), fsl (>= 6.0.6), freesurfer (dev), and CUDA 11.8 and source them within your shell. For user-specific or otherwise non-system installations, it is recommended to add analogous lines to the following directly to your .bashrc, .zshrc, etc.:
+Aside from python dependencies, this repo also requires external software to run some of the commands. On Martinos Machines, everything will be sourced automatically and will require no additional work on your part. If you want to use `preprocessing` on your own machine, you will have to install dcm2niix and source it within your shell. It is easily accessible as a part of `fsl`. For user-specific or otherwise non-system installations, it is recommended to add analogous lines to the following directly to your .bashrc, .zshrc, etc.:
 ```bash
-export PATH=/usr/local/freesurfer/dev/bin:${PATH}
 export PATH=/usr/pubsw/packages/fsl/6.0.6/bin:${PATH}
-export PATH=/usr/pubsw/packages/CUDA/11.8/bin:${PATH}
-
-export LD_LIBRARY_PATH=/usr/pubsw/packages/CUDA/11.8/lib64:{LD_LIBRARY_PATH}
-
-export FREESURFER_HOME=/usr/local/freesurfer/dev
-source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
-
 export FSLDIR=/usr/pubsw/packages/fsl/6.0.6/
 source ${FSLDIR}/etc/fslconf/fsl.sh
 ```
@@ -54,20 +47,28 @@ This library utilizes csv files for the majority of its functions. Specific colu
 
 ### old-project-anon-keys Command
 ```bash
-preprocessing old-project-anon-keys <input-dir> <output-dir>
+preprocessing old-project-anon-keys <input-dir> <output-dir> \
+        [-h | --help]
 ```
 This command creates anonymization keys for anonymous PatientID and StudyID from the previous QTIM organizational scheme. This command is compatible with data following a following <Patient_ID>/<Study_ID> directory hierarchy.
+
+### nifti-dataset-anon-keys Command
+```bash
+preprocessing nifti-dataset-anon-keys <nifti-dir> <output-dir> \
+        [--normalized-descriptions] [-h | --help]
+```
+This command creates anonymization keys for a dataset that starts within NIfTI format. If the 'SeriesDescription's are not normalized, 'NormalizedSeriesDescription's must be obtained externally before the NIfTI dataset can be reorganized.
 
 ### reorganize-dicoms Command
 ```bash
 preprocessing reorganize-dicoms <original-dicom-dir> <new-dicom-dir> \
-        [--anon-csv=None] [-c | --cpus=1]
+        [--anon-csv] [-c | --cpus=1] [-h | --help]
 ```
 This command reorganizes DICOMs to follow the BIDS convention. Any DICOMs found recursively within this directory will be reorganized (at least one level of subdirectories is assumed). Anonomyzation keys for PatientIDs and StudyIDs are provided within a csv.
 
 ### dataset-to-nifti Command
 ```bash
-preprocessing dataset-to-nifti <nifti-dir> <csv> [--overwrite=False] \
+preprocessing dataset-to-nifti <nifti-dir> <csv> [--overwrite] \
         [-c | --cpus=1] [-h | --help]
 ```
 This command converts DICOMs to NIfTI file format. A csv is required to map a DICOM series to the resulting .nii.gz file and to provide the context for filenames. The outputs will comply with the BIDS conventions.
@@ -89,20 +90,13 @@ default_key = {\
 ### brain-preprocessing Command
 ```bash
 preprocessing brain-preprocessing <preprocessed-dir> <csv> \
-        [--pipeline-key="preprocessed"] [--registration-key="T1Post"] \
-        [--longitudinal-registration=False] [-m | --model="affine"] \
-        [--orientation="RAS"] [--spacing="1,1,1"] [--no-skullstrip=False] \
-        [-c | --cpus=1] [-g | --gpu=False] [-v | --verbose=False] [-h | --help]
+        [-p | --patients] [-pk | --pipeline-key="preprocessed"] \
+        [-rk | --registration-key="T1Post"] \
+        [-l | --longitudinal-registration=False] [-a | --atlas-target] \
+        [-m | --model="affine"] [ -o | --orientation="RAS"] \
+        [-s | --spacing="1,1,1"] [-ns | --no-skullstrip=False] \
+        [-ps | --pre-skullstripped] [-b | --binarize-seg] \
+        [-c | --cpus=1] [-g | --gpu=False] [-v | --verbose=False] \
+        [-d | --debug] [-h | --help]
 ```
 This command preprocesses NIfTI files for deep learning. A csv is required to indicate the location of source files and to procide the context for filenames. The outputs will comply with BIDS conventions.
-
-### debug-preprocessing Command
-```bash
-preprocessing deug-preprocessing <preprocessed-dir> <csv> \
-        [--patients=None] [--pipeline-key="debug"] \
-        [--registration-key="T1Post"] [--longitudinal-registration=False] \
-        [-m | --model="affine"] [--orientation="RAS"] [--spacing="1,1,1"] \
-        [--no-skullstrip=False] [-c | --cpus=1] [-g | --gpu=False] \
-        [-v | --verbose=False] [-h | --help]
-```
-This command has the same functionality as the `brain-preprocessing` command, with the exception of saving intermediate results under different filenames. It is recommended to indicate the specific patients that want to be analyzed.
