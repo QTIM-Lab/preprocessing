@@ -5,6 +5,7 @@
 * **[Installation Guide](#installation-guide)**
    * [Python Installation](#python-installation)
    * [External Software](#external-software)
+   * [External Models](#external-models)
 * **[CLI User Guide](#cli-user-guide)**
    * [old-project-anon-keys Command](#old-project-anon-keys-command)
    * [nifti-dataset-anon-keys Command](#nifti-dataset-anon-keys-command)
@@ -39,6 +40,9 @@ export PATH=/usr/pubsw/packages/fsl/6.0.6/bin:${PATH}
 export FSLDIR=/usr/pubsw/packages/fsl/6.0.6/
 source ${FSLDIR}/etc/fslconf/fsl.sh
 ```
+
+### External Models
+In order to complete skullstripping and registration tasks, `preprocessing` relies on [SynthStrip](https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/) and [SynthMorph](https://martinos.org/malte/synthmorph/). The first time a command that requires these models is called, you will be prompted to define an environment variable `PREPROCESSINF_MODELS_PATH` and to update your RC file to be used in the future. If you are on a Martinos machine, these models are already downloaded and available if you specify 'Martinos'.
 
 ## CLI User Guide
 While you can import this code directly into your own python scripts, the most convenient way to run common functions is through the CLI. Once installed to your project's environment using pip or poetry, you will be able to access the most important functionality through `preprocessing`'s various subcommands. At any time, use `preprocessing --help` for an overview of the available commands and a brief description of each. For more in depth descriptions of each command, use `preprocessing <command> --help`.
