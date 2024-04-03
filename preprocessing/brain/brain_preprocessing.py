@@ -30,8 +30,8 @@ from SimpleITK import (
     WriteImage,
     GetArrayFromImage,
     GetImageFromArray,
+    OtsuThresholdImageFilter,
     N4BiasFieldCorrectionImageFilter,
-    RescaleIntensity,
     sitkFloat32,
     sitkUInt8,
     Cast,
@@ -46,14 +46,9 @@ from preprocessing.utils import (
 from preprocessing.synthmorph import synthmorph_registration
 from .synthstrip import synthstrip_skullstrip
 from typing import Sequence, List, Literal, Dict, Any, Tuple
-from scipy.ndimage import (
-    binary_fill_holes,
-    binary_closing,
-    distance_transform_edt,
-    generate_binary_structure,
-)
+from scipy.ndimage import binary_fill_holes
 from cc3d import connected_components
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> None:
@@ -504,6 +499,7 @@ def fill_foreground_mask(initial_foreground: np.ndarray) -> np.ndarray:
         The filled foreground mask.
 
     """
+    shape = initial_foreground.shape
     foreground_cc = connected_components(initial_foreground)
     ccs, counts = np.unique(foreground_cc, return_counts=True)
 
@@ -516,26 +512,17 @@ def fill_foreground_mask(initial_foreground: np.ndarray) -> np.ndarray:
 
     foreground = (foreground_cc == largest_cc).astype(int)
 
-    struct_2d = generate_binary_structure(2, 2)
-
-    for z in range(foreground.shape[0]):
+    for z in range(shape[0]):
         foreground_slice = foreground[z, ...]
         if 1 not in np.unique(foreground_slice):
             continue
-        border_mask = np.ones_like(foreground_slice)
-        border_mask[0, :] = border_mask[-1, :] = border_mask[:, 0] = border_mask[
-            :, -1
-        ] = 0
-        distance = distance_transform_edt(border_mask)
+        for i in range(shape[1]):
+            foreground_slice[i] = binary_fill_holes(foreground_slice[i]).astype(int)
 
-        iterations = int(distance[foreground_slice == 1].min())
-
-        foreground[z, ...] = binary_fill_holes(
-            binary_closing(
-                foreground_slice, structure=struct_2d, iterations=iterations
-            ),
-            structure=struct_2d,
-        )
+        for j in range(shape[2]):
+            foreground_slice[:, j] = binary_fill_holes(foreground_slice[:, j]).astype(
+                int
+            )
 
     return foreground.astype(int)
 
@@ -928,13 +915,16 @@ def preprocess_study(
             ".nii.gz", "_foreground_mask.nii.gz"
         )
         nifti = sitk_im_cache[rows[0][pipeline_key]]
-        foreground = RescaleIntensity(nifti, 0, 100)
 
         if pre_skullstripped:
-            foreground_array = 1 - (GetArrayFromImage(foreground) == 0).astype(int)
+            foreground_array = 1 - (GetArrayFromImage(nifti) == 0).astype(int)
 
         else:
-            foreground_array = (GetArrayFromImage(foreground) > 10).astype(int)
+            threshold_filter = OtsuThresholdImageFilter()
+            threshold_filter.Execute(nifti)
+            threshold = threshold_filter.GetThreshold()
+
+            foreground_array = (GetArrayFromImage(nifti) >= threshold).astype(int)
             foreground_array = fill_foreground_mask(foreground_array)
 
         foreground = GetImageFromArray(foreground_array)
@@ -1518,7 +1508,7 @@ def preprocess_from_csv(
 
     with tqdm(
         total=len(kwargs_list), desc="Preprocessing patients"
-    ) as pbar, ThreadPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
         futures = [
             executor.submit(preprocess_patient, **kwargs) for kwargs in kwargs_list
         ]
