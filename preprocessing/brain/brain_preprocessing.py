@@ -39,10 +39,8 @@ from SimpleITK import (
 
 from pathlib import Path
 from tqdm import tqdm
-from preprocessing.utils import (
-    source_external_software,
-    check_required_columns,
-)
+from preprocessing.utils import check_required_columns
+
 from preprocessing.synthmorph import synthmorph_registration
 from .synthstrip import synthstrip_skullstrip
 from typing import Sequence, List, Literal, Dict, Any, Tuple
@@ -540,7 +538,6 @@ def preprocess_study(
     pre_skullstripped: bool = False,
     binarize_seg: bool = False,
     verbose: bool = False,
-    source_software: bool = True,
     check_columns: bool = True,
     debug: bool = False,
 ) -> pd.DataFrame:
@@ -589,10 +586,6 @@ def preprocess_study(
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed.
 
-    source_software: bool
-        Whether to call `source_external_software` to add software required for preprocessing. Defaults
-        to True.
-
     check_columns: bool
         Whether to check `study_df` for required columns. Defaults to True.
 
@@ -606,9 +599,6 @@ def preprocess_study(
         A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
         the locations of the preprocessing outputs.
     """
-    if source_software:
-        source_external_software()
-
     if check_columns:
         required_columns = [
             "nifti",
@@ -1109,7 +1099,6 @@ def preprocess_patient(
     pre_skullstripped: bool = False,
     binarize_seg: bool = False,
     verbose: bool = False,
-    source_software: bool = True,
     check_columns: bool = True,
     debug: bool = False,
 ):
@@ -1167,10 +1156,6 @@ def preprocess_patient(
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed.
 
-    source_software: bool
-        Whether to call `source_external_software` to add software required for preprocessing. Defaults
-        to True.
-
     check_columns: bool
         Whether to check `study_df` for required columns. Defaults to True.
 
@@ -1184,9 +1169,6 @@ def preprocess_patient(
         A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
         the locations of the preprocessing outputs.
     """
-
-    if source_software:
-        source_external_software()
 
     if check_columns:
         required_columns = [
@@ -1241,7 +1223,6 @@ def preprocess_patient(
             pre_skullstripped=pre_skullstripped,
             binarize_seg=binarize_seg,
             verbose=verbose,
-            source_software=False,
             check_columns=False,
             debug=debug,
         )
@@ -1285,7 +1266,6 @@ def preprocess_patient(
                         pre_skullstripped=pre_skullstripped,
                         binarize_seg=binarize_seg,
                         verbose=verbose,
-                        source_software=False,
                         check_columns=False,
                         debug=debug,
                     )
@@ -1310,7 +1290,6 @@ def preprocess_patient(
                         skullstrip=skullstrip,
                         pre_skullstripped=pre_skullstripped,
                         verbose=verbose,
-                        source_software=False,
                         check_columns=False,
                         debug=debug,
                     )
@@ -1432,9 +1411,6 @@ def preprocess_from_csv(
         the locations of the preprocessing outputs. This function will also overwrite the input CSV with
         this DataFrame.
     """
-
-    source_external_software()
-
     df = pd.read_csv(csv, dtype=str)
 
     if debug:
@@ -1499,7 +1475,6 @@ def preprocess_from_csv(
             "pre_skullstripped": pre_skullstripped,
             "binarize_seg": binarize_seg,
             "verbose": verbose,
-            "source_software": False,
             "check_columns": False,
             "debug": debug,
         }
