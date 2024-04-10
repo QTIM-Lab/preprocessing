@@ -1316,29 +1316,29 @@ def preprocess_patient(
                     )
                 )
 
-        # clear extra files
-        anon_patientID = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
-        patient_dir = preprocessed_dir / anon_patientID
+    # clear extra files
+    anon_patientID = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
+    patient_dir = preprocessed_dir / anon_patientID
 
-        out_df = pd.concat(preprocessed_dfs, ignore_index=True)
+    out_df = pd.concat(preprocessed_dfs, ignore_index=True)
 
-        if not debug:
-            extra_files = (
-                list(patient_dir.glob("**/*SS.nii.gz"))
-                + list(patient_dir.glob("**/*mask.nii.gz"))
-                + list(patient_dir.glob("**/*longreg.nii.gz"))
-                + list(patient_dir.glob("**/*.mgz"))
-                + list(patient_dir.glob("**/*.m3z"))
-                + list(patient_dir.glob("**/*.txt"))
-            )
+    if not debug:
+        extra_files = (
+            list(patient_dir.glob("**/*SS.nii.gz"))
+            + list(patient_dir.glob("**/*mask.nii.gz"))
+            + list(patient_dir.glob("**/*longreg.nii.gz"))
+            + list(patient_dir.glob("**/*.mgz"))
+            + list(patient_dir.glob("**/*.m3z"))
+            + list(patient_dir.glob("**/*.txt"))
+        )
 
-            print("......Clearing unnecessary files......")
-            for file in extra_files:
-                os.remove(file)
+        print("......Clearing unnecessary files......")
+        for file in extra_files:
+            os.remove(file)
 
-        print(f"Finished preprocessing {anon_patientID}:")
-        print(out_df)
-        return out_df
+    print(f"Finished preprocessing {anon_patientID}:")
+    print(out_df)
+    return out_df
 
 
 def preprocess_from_csv(
