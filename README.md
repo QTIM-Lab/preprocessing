@@ -13,6 +13,7 @@
    * [dataset-to-nifti Command](#dataset-to-nifti-command)
    * [predict-series Command](#predict-series-command)
    * [brain-preprocessing Command](#brain-preprocessing-command)
+   * [track-tumors Command](#track-tumors-command)
 
 ## Installation Guide
 If you are working on a Martinos machine and want to use `preprocessing` directly, you will already have access to it through the corresponding pyenv environment (visit this [guide](https://github.com/QTIM-Lab/qtim-standards/blob/main/environment_setup.md) for more information on using pyenv at Martinos). Simply run: 
@@ -104,3 +105,10 @@ preprocessing brain-preprocessing <preprocessed-dir> <csv> \
         [-d | --debug] [-h | --help]
 ```
 This command preprocesses NIfTI files for deep learning. A csv is required to indicate the location of source files and to procide the context for filenames. The outputs will comply with BIDS conventions.
+
+### track-tumors Command
+```
+preprocessing track-tumors <tracking-dir> <csv> \
+        [-p | patients] [-pk | --pipeline-key="preprocessed"] \
+        [-l | --labels="1"] [-c | --cpus=1] [-h | --help]
+```

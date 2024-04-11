@@ -94,6 +94,13 @@ The following commands are available:
                                 indicate the location of source files and to procide the context
                                 for filenames. The outputs will comply with BIDS conventions.
 
+    track-tumors                Longitudinal tracking of individual tumors. Each connected component
+                                for a given label within a segmentation mask is assigned a unique ID
+                                that will remain consistent across all scans belonging to the same
+                                patient. This command assumes that longitudinal or atlas registration
+                                was used when preprocessing the data.
+
+
 Run `preprocessing <command> --help` for more details about how to use each individual command.
 
 """
@@ -607,8 +614,8 @@ tumor_tracking = subparsers.add_parser(
         """
         Longitudinal tracking of individual tumors. Each connected component for a given
         label within a segmentation mask is assigned a unique ID that will remain consistent
-        across all scans belonging to the same patient patient. This command assumes that
-        the longitudinal or atlas registration was used when preprocessing the data.
+        across all scans belonging to the same patient. This command assumes that
+        longitudinal or atlas registration was used when preprocessing the data.
         """
     ),
 )
@@ -653,8 +660,7 @@ tumor_tracking.add_argument(
     default="preprocessed",
     help=(
         """
-        The key that will be used in the CSV to indicate the new locations of preprocessed
-        files. Defaults to 'preprocessed'.
+        The key used in the CSV when preprocessing was performed. Defaults to 'preprocessed'.
         """
     ),
 )
