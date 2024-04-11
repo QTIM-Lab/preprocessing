@@ -601,6 +601,86 @@ brain_preprocessing.add_argument(
     ),
 )
 
+tumor_tracking = subparsers.add_parser(
+    "track-tumors",
+    description=(
+        """
+        Longitudinal tracking of individual tumors. Each connected component for a given
+        label within a segmentation mask is assigned a unique ID that will remain consistent
+        across all scans belonging to the same patient patient. This command assumes that
+        the longitudinal or atlas registration was used when preprocessing the data.
+        """
+    ),
+)
+
+tumor_tracking.add_argument(
+    "tracking_dir",
+    metavar="tracking-dir",
+    type=Path,
+    help=("The directory that will contain the tumor id mask files."),
+)
+
+tumor_tracking.add_argument(
+    "csv",
+    type=Path,
+    help=(
+        """
+        A CSV containing nifti location and information required for the output file names.
+        It must contain the columns: 'Anon_PatientID', 'Anon_StudyID', and 'SeriesType'.
+        Additionally, '<pipeline_key>_seg' must be present with the assumption that the
+        corresponding segmentation masks have been preprocessed.
+        """
+    ),
+)
+
+tumor_tracking.add_argument(
+    "-p",
+    "--patients",
+    type=str,
+    default=None,
+    help=(
+        """
+        A comma delimited list of patients to select from the 'Anon_PatientID' column
+        of the CSV
+        """
+    ),
+)
+
+tumor_tracking.add_argument(
+    "-pk",
+    "--pipeline-key",
+    type=str,
+    default="preprocessed",
+    help=(
+        """
+        The key that will be used in the CSV to indicate the new locations of preprocessed
+        files. Defaults to 'preprocessed'.
+        """
+    ),
+)
+
+tumor_tracking.add_argument(
+    "-l",
+    "--labels",
+    type=str,
+    default="1",
+    help=(
+        """
+        A comma delimited list of the labels included in the segmentation masks.
+        """
+    ),
+)
+
+tumor_tracking.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
 
 def main() -> None:
     """
@@ -708,6 +788,26 @@ def main() -> None:
         tracked_command(
             preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir
         )
+
+    elif args.command == "track-tumors":
+        from preprocessing.longitudinal_tracking import track_tumors_csv
+
+        if isinstance(args.patients, str):
+            args.patients = args.patients.split(",")
+
+        if isinstance(args.labels, str):
+            args.labels = [int(i) for i in args.labels.split(",")]
+
+        kwargs = {
+            "csv": args.csv,
+            "tracking_dir": args.tracking_dir,
+            "patients": args.patients,
+            "pipeline_key": args.pipeline_key,
+            "labels": args.labels,
+            "cpus": args.cpus,
+        }
+
+        tracked_command(track_tumors_csv, kwargs=kwargs, record_dir=args.tracking_dir)
 
     exit(0)
 

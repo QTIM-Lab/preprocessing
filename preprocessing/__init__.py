@@ -41,6 +41,7 @@ __all__ = [
     "brain",
     "constants",
     "dcm_tools",
+    "longitudinal_tracking",
     "series_selection",
     "synthmorph",
     "utils",
