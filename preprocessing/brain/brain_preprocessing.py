@@ -39,7 +39,7 @@ from SimpleITK import (
 
 from pathlib import Path
 from tqdm import tqdm
-from preprocessing.utils import check_required_columns
+from preprocessing.utils import check_required_columns, cpu_adjust
 
 from preprocessing.synthmorph import synthmorph_registration
 from .synthstrip import synthstrip_skullstrip
@@ -1480,6 +1480,8 @@ def preprocess_from_csv(
         }
         for patient in patients
     ]
+
+    cpus = cpu_adjust(max_process_mem=3e9, cpus=cpus)
 
     with tqdm(
         total=len(kwargs_list), desc="Preprocessing patients"

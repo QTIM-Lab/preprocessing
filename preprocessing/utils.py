@@ -32,11 +32,17 @@ initialize_models
 
 check_for_models
     Checks that all of the Synthmorph and Synthstrip models have been successfully installed.
+
+cpu_adjust
+    Confirms that the number of parallel processes will fit into the current amount of allowed
+    memory and adjusts to an appropriate number if necessary.
 """
 
 import os
 import pandas as pd
 import numpy as np
+import psutil
+import warnings
 
 from shutil import which
 from typing import Sequence
@@ -259,7 +265,7 @@ def initialize_models() -> str:
 
     Returns
     _______
-    models_dir
+    models_dir: str
         The directory specified by user input to store the models.
     """
     models_dir = input(
@@ -385,6 +391,52 @@ def check_for_models(models_dir: str) -> None:
             print(f"synthstrip.nocsf.1.pt could not be downloaded due to {error}")
             quit()
 
+def cpu_adjust(
+    max_process_mem: int | float,
+    cpus: int,
+    threshold: float = 0.8
+) -> int:
+    """
+    Confirms that the number of parallel processes will fit into the current amount of allowed
+    memory and adjusts to an appropriate number if necessary.
+
+    Parameters
+    __________
+    max_process_mem: int | float
+        The expected maximum memory (expressed in bytes) that will be consumed by each process.
+
+    cpus: int
+        The number of cpus used for multiprocessing.
+
+    threshold: float
+        The proportion of the available memory that can be used for the task. Defaults to 0.8.
+
+    Returns
+    _______
+    cpus: int
+        A potentially adjusted number of cpus that should fit into memory for a given task
+
+    Raises
+    ______
+    UserWarning
+        A warning is raised notifying the user that too many cpus were requested for a task
+        and that the allowed amount has been lowered to a new value.
+    """
+
+    allowed_mem = int(psutil.virtual_memory().available * threshold)
+
+    max_cpus = int(allowed_mem / max_process_mem)
+
+    if cpus <= max_cpus:
+        return cpus
+
+    warnings.warn(
+        f"There is not enough available memory to use {cpus} cpus for this task. "
+        f"This task will proceed using {max_cpus} cpus.",
+        UserWarning
+    )
+    return max_cpus
+
 
 __all__ = [
     "MissingColumnsError",
@@ -395,4 +447,5 @@ __all__ = [
     "surfa_to_sitk",
     "initialize_models",
     "check_for_models",
+    "cpu_adjust"
 ]
