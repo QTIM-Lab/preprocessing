@@ -220,7 +220,7 @@ def synthmorph_registration(
     fixed: str | Image,
     interp_method: Literal["linear", "nearest"] = "linear",
     accompanying_images: Sequence[Dict[str, str]] = [],
-    sitk_outputs: bool = True,
+    sitk_out: bool = True,
     sitk_im_cache: Dict[str, Image] = {},
     accompanying_in_cache: bool = False,
     m: Literal["joint", "deform", "affine", "rigid"] = "joint",
@@ -268,7 +268,7 @@ def synthmorph_registration(
                 ...
             ]
 
-    sitk_outputs: bool
+    sitk_out: bool
         Whether the transformed images will be output as a SimpleITK.Image. If True,
         `sitk_im_cache` will be updated to contain the moved images. Otherwise, the
         moved images will be written to the specified file path. Defaults to True.
@@ -333,7 +333,7 @@ def synthmorph_registration(
     _______
     sitk_im_cache: Dict[str, Image]
         A potentially updated version of the input `sitk_im_cache`, which contains the registered
-        images if `sitk_outputs` is True.
+        images if `sitk_out` is True.
     """
     in_shape = (e,) * 3
     is_mat = m in ("affine", "rigid")
@@ -438,7 +438,7 @@ def synthmorph_registration(
             geom_1 = sf.ImageGeometry(in_shape, vox2world=mov_to_ras @ net_to_mov)
             geom_2 = sf.ImageGeometry(in_shape, vox2world=fix_to_ras @ net_to_fix)
 
-            if sitk_outputs:
+            if sitk_out:
                 sitk_im_cache[inp_1] = surfa_to_sitk(sf.Volume(inputs[0][0], geom_1))
                 sitk_im_cache[inp_2] = surfa_to_sitk(sf.Volume(inputs[1][0], geom_2))
 
@@ -505,7 +505,7 @@ def synthmorph_registration(
                 )
                 out = fix.new(out)
 
-            if sitk_outputs:
+            if sitk_out:
                 sitk_im_cache[o] = surfa_to_sitk(out)
 
             else:
@@ -520,7 +520,7 @@ def synthmorph_registration(
                 out = transform(fix, trans=vox_2, shape=mov.shape)
                 out = mov.new(out)
 
-            if sitk_outputs:
+            if sitk_out:
                 sitk_im_cache[O] = surfa_to_sitk(out)
 
             else:
@@ -545,7 +545,7 @@ def synthmorph_registration(
                 )
                 out = fix.new(out)
 
-            if sitk_outputs:
+            if sitk_out:
                 sitk_im_cache[moved] = surfa_to_sitk(out)
 
             else:

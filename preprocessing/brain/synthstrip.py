@@ -254,7 +254,7 @@ def synthstrip_skullstrip(
     _______
     sitk_im_cache: Dict[str, Image]
         A potentially updated version of the input `sitk_im_cache`, which contains the registered
-        images if `sitk_outputs` is True.
+        images if `sitk_out` is True.
     """
     # sanity check on the inputs
     if not out and not m and not d:
