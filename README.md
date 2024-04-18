@@ -10,6 +10,7 @@
    * [old-project-anon-keys Command](#old-project-anon-keys-command)
    * [nifti-dataset-anon-keys Command](#nifti-dataset-anon-keys-command)
    * [reorganize-dicoms Command](#reorganize-dicoms-command)
+   * [reorganize-niftis Command](#reorganize-niftis-command)
    * [dataset-to-nifti Command](#dataset-to-nifti-command)
    * [predict-series Command](#predict-series-command)
    * [brain-preprocessing Command](#brain-preprocessing-command)
@@ -48,7 +49,7 @@ In order to complete skullstripping and registration tasks, `preprocessing` reli
 ## CLI User Guide
 While you can import this code directly into your own python scripts, the most convenient way to run common functions is through the CLI. Once installed to your project's environment using pip or poetry, you will be able to access the most important functionality through `preprocessing`'s various subcommands. At any time, use `preprocessing --help` for an overview of the available commands and a brief description of each. For more in depth descriptions of each command, use `preprocessing <command> --help`.
 
-This library utilizes csv files for the majority of its functions. Specific columns may be required for each to run properly. If you are using the CLI, use `--help` to view the columns required for a given command. Alternatively, reference the docstrings if you wish to use `preprocessing` directly within python. For an example of what formatting to expect, check [here](example.csv).
+This library utilizes CSV files for the majority of its functions. Specific columns may be required for each to run properly. If you are using the CLI, use `--help` to view the columns required for a given command. Alternatively, reference the docstrings if you wish to use `preprocessing` directly within python. For an example of what formatting to expect, check [here](example.csv).
 
 ### old-project-anon-keys Command
 ```bash
@@ -69,14 +70,21 @@ This command creates anonymization keys for a dataset that starts within NIfTI f
 preprocessing reorganize-dicoms <original-dicom-dir> <new-dicom-dir> \
         [--anon-csv] [-c | --cpus=1] [-h | --help]
 ```
-This command reorganizes DICOMs to follow the BIDS convention. Any DICOMs found recursively within this directory will be reorganized (at least one level of subdirectories is assumed). Anonomyzation keys for PatientIDs and StudyIDs are provided within a csv.
+This command reorganizes DICOMs to follow the BIDS convention. Any DICOMs found recursively within this directory will be reorganized (at least one level of subdirectories is assumed). Anonomyzation keys for PatientIDs and StudyIDs can be provided within a CSV, such as one obtained with the `old-project-anon-keys` command.
+
+### reorganize-niftis Command
+```bash
+preprocessing reorganize-niftis <nifti-dir> <anon-csv> \
+        [-c | --cpus=1] [-h | --help]
+```
+This command reorganizes NIfTIs to follow the BIDS convention. As NIfTI files lack metadata, anonymization keys must be provided in the form of a CSV, such as one obtained with the `nifti-dataset-anon-keys` command.
 
 ### dataset-to-nifti Command
 ```bash
 preprocessing dataset-to-nifti <nifti-dir> <csv> [--overwrite] \
         [-c | --cpus=1] [-h | --help]
 ```
-This command converts DICOMs to NIfTI file format. A csv is required to map a DICOM series to the resulting .nii.gz file and to provide the context for filenames. The outputs will comply with the BIDS conventions.
+This command converts DICOMs to NIfTI file format. A CSV is required to map a DICOM series to the resulting .nii.gz file and to provide the context for filenames. The outputs will comply with the BIDS conventions.
 
 ### predict-series Command
 ```bash
@@ -84,7 +92,7 @@ preprocessing predict-series <csv> [--ruleset="brain"] \
         [--description-key=default_key] [-c | --cpus=1] \
         [-h | --help]
 ```
-This command predicts the sequence type for every series in your dataset. A csv is required to indicate the location of the corresponding DICOMs. Predictions are made using the mr-series-selection repo's analysis of the DICOM header. A json can be provided to combine multiple NormalizedDescriptions into a single category.
+This command predicts the sequence type for every series in your dataset. A CSV is required to indicate the location of the corresponding DICOMs. Predictions are made using the mr-series-selection repo's analysis of the DICOM header. A json can be provided to combine multiple NormalizedDescriptions into a single category.
 Description keys should map a NormalizedDescription to a standard name and a SeriesType (BIDS modality) like so:
 
 default_key = {\
@@ -101,10 +109,10 @@ preprocessing brain-preprocessing <preprocessed-dir> <csv> \
         [-m | --model="affine"] [ -o | --orientation="RAS"] \
         [-s | --spacing="1,1,1"] [-ns | --no-skullstrip=False] \
         [-ps | --pre-skullstripped] [-b | --binarize-seg] \
-        [-c | --cpus=1] [-g | --gpu=False] [-v | --verbose=False] \
+        [-c | --cpus=1] [-v | --verbose=False] \
         [-d | --debug] [-h | --help]
 ```
-This command preprocesses NIfTI files for deep learning. A csv is required to indicate the location of source files and to procide the context for filenames. The outputs will comply with BIDS conventions.
+This command preprocesses NIfTI files for deep learning. A CSV is required to indicate the location of source files and to procide the context for filenames. The outputs will comply with BIDS conventions.
 
 ### track-tumors Command
 ```
@@ -112,3 +120,4 @@ preprocessing track-tumors <tracking-dir> <csv> \
         [-p | patients] [-pk | --pipeline-key="preprocessed"] \
         [-l | --labels="1"] [-c | --cpus=1] [-h | --help]
 ```
+This command perfoms longitudinal tracking of individual tumors. Each connected component for a given label within a segmentation mask is assigned a unique ID that will remain consistent across all scans belonging to the same patient.
