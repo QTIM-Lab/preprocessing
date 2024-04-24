@@ -687,6 +687,73 @@ tumor_tracking.add_argument(
     ),
 )
 
+volume_tracking = subparsers.add_parser(
+    "track-volume",
+    description=(
+        """
+        Longitudinal tracking of individual tumor volumes. Each connected component for a given
+        label within a segmentation mask is assigned a unique ID that will remain consistent
+        across all scans belonging to the same patient. This command assumes that
+        longitudinal or atlas registration was used when preprocessing the data.
+        """
+    ),
+)
+
+volume_tracking.add_argument(
+    "plot_dir",
+    metavar="plot-dir",
+    type=Path,
+    help=("The directory that will contain the tumor id mask files."),
+)
+
+volume_tracking.add_argument(
+    "csv",
+    type=Path,
+    help=(
+        """
+        A CSV containing nifti location and information required for the output file names.
+        It must contain the columns: 'Anon_PatientID', 'Anon_StudyID', and 'SeriesType'.
+        Additionally, '<pipeline_key>_seg' must be present with the assumption that the
+        corresponding segmentation masks have been preprocessed.
+        """
+    ),
+)
+
+volume_tracking.add_argument(
+    "-p",
+    "--patients",
+    type=str,
+    default=None,
+    help=(
+        """
+        A comma delimited list of patients to select from the 'Anon_PatientID' column
+        of the CSV
+        """
+    ),
+)
+
+volume_tracking.add_argument(
+    "-pk",
+    "--pipeline-key",
+    type=str,
+    default="preprocessed",
+    help=(
+        """
+        The key used in the CSV when preprocessing was performed. Defaults to 'preprocessed'.
+        """
+    ),
+)
+
+volume_tracking.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
 
 def main() -> None:
     """
@@ -796,7 +863,7 @@ def main() -> None:
         )
 
     elif args.command == "track-tumors":
-        from preprocessing.longitudinal_tracking import track_tumors_csv
+        from preprocessing.qc import track_tumors_csv
 
         if isinstance(args.patients, str):
             args.patients = args.patients.split(",")
@@ -814,6 +881,22 @@ def main() -> None:
         }
 
         tracked_command(track_tumors_csv, kwargs=kwargs, record_dir=args.tracking_dir)
+
+    elif args.command == "track-volume":
+        from preprocessing.qc import vol_plot_csv
+
+        if isinstance(args.patients, str):
+            args.patients = args.patients.split(",")
+
+        kwargs = {
+            "csv": args.csv,
+            "plot_dir": args.plot_dir,
+            "patients": args.patients,
+            "pipeline_key": args.pipeline_key,
+            "cpus": args.cpus,
+        }
+
+        tracked_command(vol_plot_csv, kwargs=kwargs, record_dir=args.plot_dir)
 
     exit(0)
 

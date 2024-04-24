@@ -1,5 +1,5 @@
 """
-The `longitudinal_tracking` module defines the tools for longitudinal tracking of
+The `tumor_ids` module defines the tools for longitudinal tracking of
 individual tumors. Each connected component for a given label within a segmentation mask
 is assigned unique ID that will remain consistent across all scans belonging
 to the same patient patient. This code assumes that the longitudinal or atlas registration
@@ -71,8 +71,8 @@ def assign_tumor_ids(
                     tracked_tumors += 1
                     cc_map[cc] = tracked_tumors
 
-            for cc in cc_map.keys():
-                current[current == cc] = cc_map[cc]
+            vector_map = np.vectorize(lambda x: cc_map.get(x, x))
+            current = vector_map(current)
 
             cc_arrays[label][cc_files[i]] = current
 
@@ -116,7 +116,7 @@ def track_patient_tumors(
         "Anon_PatientID",
         "Anon_StudyID",
         "SeriesType",
-        f"{pipeline_key}_seg"
+        f"{pipeline_key}_seg",
     ]
 
     check_required_columns(patient_df, required_columns)
@@ -161,7 +161,9 @@ def track_patient_tumors(
 
             rows[i][f"{pipeline_key}_label{label}_ids"] = tumor_id_file
 
-    return patient_df
+    out_df = pd.DataFrame(rows, dtype=str)
+
+    return out_df
 
 
 def track_tumors_csv(
@@ -179,7 +181,7 @@ def track_tumors_csv(
     Parameters
     __________
     csv: Path | str
-        The path to a CSV containing an entire dataset. It must contain the following columns:  
+        The path to a CSV containing an entire dataset. It must contain the following columns:
         'Anon_PatientID', 'Anon_StudyID', 'SeriesType', and f'{pipeline_key}_seg'. Additionally,
         the previous preprocessing is assumed to have been registered longitudinally or to an
         atlas.
@@ -188,7 +190,7 @@ def track_tumors_csv(
         The directory that will contain the tumor id mask files.
 
     patients: Sequence[str] | None
-        A sequence of patients to select from the 'Anon_PatientID' column of the CSV. If 'None' 
+        A sequence of patients to select from the 'Anon_PatientID' column of the CSV. If 'None'
         is provided, all patients will be preprocessed.
 
     pipeline_key: str
@@ -198,7 +200,7 @@ def track_tumors_csv(
         A sequence of the labels included in the segmentation masks.
 
     cpus: int
-        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing). 
+        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
 
     Returns
     _______
@@ -212,7 +214,7 @@ def track_tumors_csv(
         "Anon_PatientID",
         "Anon_StudyID",
         "SeriesType",
-        f"{pipeline_key}_seg"
+        f"{pipeline_key}_seg",
     ]
 
     check_required_columns(df, required_columns)
@@ -221,7 +223,7 @@ def track_tumors_csv(
 
     if patients is None:
         patients = list(filtered_df["Anon_PatientID"].unique())
- 
+
     kwargs_list = [
         {
             "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
@@ -262,5 +264,6 @@ def track_tumors_csv(
     )
 
     return df
+
 
 __all__ = ["track_patient_tumors", "track_tumors_csv"]

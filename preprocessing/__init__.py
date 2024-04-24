@@ -14,6 +14,9 @@ brain
     The `brain` package contains tools specific to preprocessing brain data, such as
     skullstripping and the brain preprocessing pipeline.
 
+qc
+    The `qc` package contains tools related to data quality control.
+
 Public Modules
 ______________
 constants
@@ -39,9 +42,9 @@ utils
 __all__ = [
     "bids",
     "brain",
+    "qc",
     "constants",
     "dcm_tools",
-    "longitudinal_tracking",
     "series_selection",
     "synthmorph",
     "utils",

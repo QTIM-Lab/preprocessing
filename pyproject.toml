@@ -25,12 +25,11 @@ scikit-image = "^0.22.0"
 highdicom = "^0.22.0"
 tensorflow = "2.14"
 torch = "^2.2.1"
-
+seaborn = "^0.13.2"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.2"
 ipywidgets = "^8.1.2"
-seaborn = "^0.13.2"
 
 [build-system]
 requires = ["poetry-core"]
