@@ -475,6 +475,28 @@ generate_slurm.add_argument(
     ),
 )
 
+aggregate_slurm = subparsers.add_parser(
+    "aggregate-slurm-results",
+    description=(
+        """
+        Aggregate slurm results.
+        """
+    ),
+)
+
+aggregate_slurm.add_argument(
+    "slurm_dir",
+    metavar="slurm-dir",
+    type=Path,
+    help=("slurm dir"),
+)
+
+aggregate_slurm.add_argument(
+    "csv",
+    type=Path,
+    help=("csv"),
+)
+
 brain_preprocessing = subparsers.add_parser(
     "brain-preprocessing",
     description=(
@@ -921,6 +943,11 @@ def main() -> None:
             patients=args.patients,
             cpus=args.cpus
         )
+
+    elif args.command == "aggregate-slurm-results":
+        from preprocessing.slurm_concurrency import aggregate_slurm_results
+
+        aggregate_slurm_results(slurm_dir=args.slurm_dir, csv=args.csv)
 
     elif args.command == "brain-preprocessing":
         from preprocessing.brain import preprocess_from_csv
