@@ -6,6 +6,7 @@ for a command usage guide.
 import argparse
 import json
 import sys
+import os
 
 from pathlib import Path
 from typing import Callable, Dict, Any
@@ -280,18 +281,6 @@ reorganize_n.add_argument(
     ),
 )
 
-
-# def validate_bids(self):
-#     paths = sys.argv[2:]
-#
-#     if ("--help" in paths) or ("-h" in paths):
-#         print(
-#             "File(s) validated for BIDS convention. Use spaces to delimit multiple files."
-#         )
-#     else:
-#         validate(paths)
-
-
 dataset_to_nifti = subparsers.add_parser(
     "dataset-to-nifti",
     description=(
@@ -401,6 +390,88 @@ predict_series.add_argument(
     default=1,
     help=(
         "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
+generate_slurm = subparsers.add_parser(
+    "generate-slurm-template",
+    description=(
+        """
+        Make slurm script.
+        """
+    )
+)
+
+generate_slurm.add_argument(
+    "base_command",
+    metavar="base-command",
+    type=str,
+    help=(
+        "The command you wish to run in parallel (including its arguments not related to multiprocessing)."
+    )
+)
+
+generate_slurm.add_argument(
+    "slurm_dir",
+    metavar="slurm-dir",
+    type=Path,
+    help=("The directory that will contain the slurm array script and output files.")
+)
+
+generate_slurm.add_argument(
+    "--account",
+    type=str,
+    default="qtim",
+   help=("")
+)
+
+generate_slurm.add_argument(
+    "--partition",
+    type=str,
+    default="basic",
+    help=("")
+)
+
+generate_slurm.add_argument(
+    "--time",
+    type=str,
+    default="05:00:00",
+    help=("")
+)
+
+generate_slurm.add_argument(
+    "--mail-update",
+    action="store_true",
+    help=("")
+)
+
+generate_slurm.add_argument(
+    "--mem-per-cpu",
+    type=str,
+    default="6G",
+    help=("")
+)
+
+generate_slurm.add_argument(
+    "-p",
+    "--patients",
+    type=str,
+    default=None,
+    help=(
+        """
+        A comma delimited list of patients to select from the 'Anon_PatientID' column
+        of the CSV
+        """
+    ),
+)
+
+generate_slurm.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=50,
+    help=(
+        "Number of cpus to use for concurrently. Defaults to 50."
     ),
 )
 
@@ -833,6 +904,24 @@ def main() -> None:
 
         tracked_command(series_from_csv, kwargs=kwargs, record_dir=args.csv.parent)
 
+    elif args.command == "generate-slurm-template":
+        from preprocessing.slurm_concurrency import generate_array_template
+
+        if isinstance(args.patients, str):
+            args.patients = args.patients.split(",")
+
+        generate_array_template(
+            command=args.base_command,
+            slurm_dir=args.slurm_dir,
+            account=args.account,
+            partition=args.partition,
+            time=args.time,
+            memory=args.mem_per_cpu,
+            mail_update=args.mail_update,
+            patients=args.patients,
+            cpus=args.cpus
+        )
+
     elif args.command == "brain-preprocessing":
         from preprocessing.brain import preprocess_from_csv
 
@@ -858,9 +947,14 @@ def main() -> None:
             "debug": args.debug,
         }
 
-        tracked_command(
-            preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir
-        )
+        if "SLURM_ARRAY_TASK_ID" in os.environ:
+            preprocess_from_csv(**kwargs)
+
+        else:
+            tracked_command(
+                preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir
+            )
+
 
     elif args.command == "track-tumors":
         from preprocessing.qc import track_tumors_csv

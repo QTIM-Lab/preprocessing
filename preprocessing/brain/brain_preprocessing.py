@@ -1413,9 +1413,14 @@ def preprocess_from_csv(
     """
     df = pd.read_csv(csv, dtype=str)
 
+    preprocessed_dir = Path(preprocessed_dir).resolve()
+
     if debug:
         csv = preprocessed_dir / "debug.csv"
         pipeline_key = "debug"
+
+    elif all(var in os.environ for var in ["SLURM_ARRAY_TASK_ID", "SLURM_ARRAY_OUTPUTS"]):
+        csv = Path(os.environ['SLURM_ARRAY_OUTPUTS']).resolve() / f"{os.environ['SLURM_ARRAY_TASK_ID']}.csv"
 
     if pipeline_key in df.keys():
         df = df.drop(columns=pipeline_key)
