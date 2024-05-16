@@ -148,8 +148,8 @@ def copy_dicoms(
         A DataFrame containing the location and metadata of the DICOM data at the
         series level.
     """
-    sub_dir = Path(sub_dir)
-    new_dicom_dir = Path(new_dicom_dir)
+    sub_dir = Path(sub_dir).resolve()
+    new_dicom_dir = Path(new_dicom_dir).resolve()
 
     files = list(sub_dir.glob("**/*"))
     rows = []
@@ -311,8 +311,8 @@ def reorganize_dicoms(
         A DataFrame containing the location and metadata of the DICOM data at the
         series level.
     """
-    original_dicom_dir = Path(original_dicom_dir)
-    new_dicom_dir = Path(new_dicom_dir)
+    original_dicom_dir = Path(original_dicom_dir).resolve()
+    new_dicom_dir = Path(new_dicom_dir).resolve()
     dataset_csv = new_dicom_dir / "dataset.csv"
 
     if isinstance(anon_csv, (Path, str)):
@@ -406,8 +406,8 @@ def nifti_anon_csv(
         A DataFrame containing the key to match simulated DICOM metadata to the original
         NIfTI files. Also saved as a CSV within the 'output_dir'.
     """
-    nifti_dir = Path(nifti_dir)
-    output_dir = Path(output_dir)
+    nifti_dir = Path(nifti_dir).resolve()
+    output_dir = Path(output_dir).resolve()
 
     rows = []
 
@@ -522,7 +522,7 @@ def reorganize_niftis(
 
     check_required_columns(anon_df, required_columns, optional_columns)
 
-    nifti_dir = Path(nifti_dir)
+    nifti_dir = Path(nifti_dir).resolve()
     dataset_csv = nifti_dir / "dataset.csv"
 
     def copy_nifti(anon_row: dict) -> pd.DataFrame:

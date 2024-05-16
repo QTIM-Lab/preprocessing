@@ -49,7 +49,7 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
         The success or failure of the integrity checks are represented as True or False
         respectively.
     """
-    series_dir = Path(series_dir)
+    series_dir = Path(series_dir).resolve()
 
     files = list(series_dir.glob("**/*.dcm"))
 
@@ -153,7 +153,7 @@ def convert_to_nifti(
     if source_software:
         source_external_software()
 
-    nifti_dir = Path(nifti_dir)
+    nifti_dir = Path(nifti_dir).resolve()
 
     output_dir = nifti_dir / anon_patient_id / anon_study_id / subdir
     output_nifti = (

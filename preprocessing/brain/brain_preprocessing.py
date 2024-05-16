@@ -77,7 +77,7 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
             with open(original_metafile, "r") as json_file:
                 data = json.load(json_file)
         except Exception:
-            data = original_metafile
+            data = os.path.abspath(original_metafile)
         meta_dict = {
             "source_file": row["nifti"],
             "original_metafile": data,
@@ -111,7 +111,7 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
                 with open(original_metafile, "r") as json_file:
                     data = json.load(json_file)
             except Exception:
-                data = original_metafile
+                data = os.path.abspath(original_metafile)
             meta_dict = {
                 "source_file": row["nifti"],
                 "original_metafile": data,
@@ -613,7 +613,7 @@ def preprocess_study(
 
         check_required_columns(study_df, required_columns, optional_columns)
 
-    preprocessed_dir = Path(preprocessed_dir)
+    preprocessed_dir = Path(preprocessed_dir).resolve()
 
     filtered_df = (
         study_df.copy()
@@ -1198,7 +1198,7 @@ def preprocess_patient(
     if patient_df.shape[0] == 0:
         return patient_df
 
-    preprocessed_dir = Path(preprocessed_dir)
+    preprocessed_dir = Path(preprocessed_dir).resolve()
 
     study_uids = patient_df["StudyInstanceUID"].unique()
 
@@ -1442,7 +1442,7 @@ def preprocess_from_csv(
 
     check_required_columns(df, required_columns, optional_columns)
 
-    preprocessed_dir = Path(preprocessed_dir)
+    preprocessed_dir = Path(preprocessed_dir).resolve()
 
     df = df.drop_duplicates(subset="SeriesInstanceUID").reset_index(drop=True)
 

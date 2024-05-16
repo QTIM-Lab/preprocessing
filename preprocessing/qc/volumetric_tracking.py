@@ -64,7 +64,7 @@ def vol_plot_patient(
     if out_df.empty:
         return out_df
 
-    out_dir = Path(plot_dir) / patient_id
+    out_dir = Path(plot_dir).resolve() / patient_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
     sns.lineplot(out_df, x="Relative Date [Y]", y="Normalized Volume", hue="Tumor ID")
@@ -131,7 +131,7 @@ def vol_plot_csv(
 
     check_required_columns(df, required_columns)
 
-    plot_dir = Path(plot_dir)
+    plot_dir = Path(plot_dir).resolve()
     summary_csv = plot_dir / "summary.csv"
 
     if summary_csv.exists():

@@ -121,7 +121,7 @@ def track_patient_tumors(
 
     check_required_columns(patient_df, required_columns)
 
-    tracking_dir = Path(tracking_dir)
+    tracking_dir = Path(tracking_dir).resolve()
     rows = patient_df.to_dict("records")
 
     cc_arrays = {}

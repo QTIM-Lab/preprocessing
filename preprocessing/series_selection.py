@@ -121,7 +121,7 @@ def series_in_study(
     normalized_descriptions = []
     series_types = []
     for dicom_dir in filtered_df["dicoms"]:
-        files = Path(dicom_dir).glob("*")
+        files = Path(dicom_dir).resolve().glob("*")
         dcms = []
         for file in files:
             try:
