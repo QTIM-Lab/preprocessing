@@ -1,18 +1,8 @@
 """
-The `slurm_concurrency` module defines the tools for achieving concurrency within an array of
-slurm jobs as opposed to on a single machine. No functions should not be run on the cluster's
-login node. Only the job array itself should be called from the cluster using `sbatch`.
-
-Public functions
-________________
-generate_array_template
-    Generate a script that can be used to launch an array of slurm jobs with `sbatch`. Do not
-    run on directly on the cluster's login node. Instead write to a location accessible to the
-    cluster while running on a different machine.
-
-aggregate_slurm_results
-    Update the primary CSV with the results from the slurm array jobs. Do not run on directly
-    on the cluster's login node.
+The `slurm_concurrency` module serves as the entrypoint for the `spreprocessing` CLI. It functions
+similarly to the standard `preprocessing` CLI but is designed for use with slurm. It has no public
+functions intended for use in the Python API. Run 'spreprocessing -h' in the terminal for a command
+usage guide.
 """
 import pandas as pd
 import os
@@ -39,9 +29,7 @@ def generate_array_template(
     dependency: str | None = None,
 ) -> str:
     """
-    Generate a script that can be used to launch an array of slurm jobs with `sbatch`. Do not
-    run on directly on the cluster's login node. Instead write to a location accessible to the
-    cluster while running on a different machine.
+    Generate a script that can be used to launch an array of slurm jobs with `sbatch`.
 
     Parameters
     __________
@@ -96,7 +84,7 @@ def generate_array_template(
     script = "#!/bin/bash"
     
     if cpus > 1:
-        script += f"\n#SBATCH --array={0}-{num_patients-1}%{cpus}"
+        script += f"\n#SBATCH --array={0}-{num_patients-1}%{min(cpus, num_patients)}"
         script += f"\n#SBATCH --output={slurm_dir}/%A_%a.out"
     else:
         script += f"\n#SBATCH --output={slurm_dir}/%j.out"
@@ -121,7 +109,11 @@ def generate_array_template(
 
     script += (f"\n\n{command}")
 
-    outfile = slurm_dir / "primary_job.sh"
+    if cpus > 1:
+        outfile = slurm_dir / "primary_job.sh"
+
+    else:
+        outfile = slurm_dir / "aggregation_job.sh"
 
     with open(outfile, "w") as f:
         f.writelines(script)
@@ -190,11 +182,61 @@ def launch_slurm(
     mail_update: bool = False,
     patients: Sequence[str] | None = None,
     cpus: int = 50,
-):
+) -> None:
+    """
+    Launch a primary job array and aggregation job for a supported funciton using slurm.
+
+    Parameters
+    __________
+    function_name: Literal['brain_preprocessing']
+        The basename of the function that will be called.
+
+    function_kwargs: Dict[str, Any]
+        The kwargs that will be used in the command when it is called.
+
+    slurm_dir: Path | str
+        The directory that will contain the job array script and its outputs when this script is
+        run.
+
+    csv: Path | str
+        The primary CSV associated with running the desired function.
+
+    account: str
+        The account to use for the slurm array. Defaults to 'qtim'.
+
+    partition: str
+        The partition to use for the slurm array. Defaults to 'basic'.
+
+    time: str
+        The maximum time allotted for each job within the slurm array. Defaults to '05:00:00'.
+
+    memory: str
+        The memory allotted for each job within the slurm array. Defaults to '10G'.
+
+    mail_update: bool
+        Whether to send a mail update upon the completion or failure of the slurm array. Defaults
+        to `False`.
+
+    patients: Sequence[str] | None
+        A sequence of patients to select from the 'Anon_PatientID' column of the CSV referenced in
+        `command`. If 'None' is provided, all patients will be preprocessed.
+
+    cpus: int
+        The number of concurrent jobs to run within the slurm array. Defaults to 50.
+
+    Returns
+    _______
+    None
+    """
+    def quotewrap(s):
+        return f"\"{s}\""
+
+    slurm_dir = Path(slurm_dir).resolve()
+
     if function_name == "brain_preprocessing":
         primary_command = (
-            "python -c 'from preprocessing.brain import preprocess_from_csv; "
-            f"preprocess_from_csv(**{function_kwargs})'"
+            "python -c \'from preprocessing.brain import preprocess_from_csv; "
+            f"preprocess_from_csv({', '.join([f'{k}={quotewrap(v) if isinstance(v, (str, Path)) else v}' for k,v in function_kwargs.items()])})\'"
         )
 
     primary_jobfile = generate_array_template(
@@ -210,8 +252,8 @@ def launch_slurm(
         cpus=cpus,
     )
 
-    job = run(["sbatch", primary_jobfile], capture_output=True)
-    primary_job_id = job.stdout.strip().split()[-1].decode()
+    primary_job = run(["sbatch", primary_jobfile], capture_output=True)
+    primary_job_id = primary_job.stdout.strip().split()[-1].decode()
 
     aggregation_command = (
         "python -c 'from preprocessing.slurm_concurrency import aggregate_slurm_results; "
@@ -232,11 +274,14 @@ def launch_slurm(
         dependency=primary_job_id
     )
 
-    run(["sbatch", aggregation_jobfile])
+    aggregation_job = run(["sbatch", aggregation_jobfile], capture_output=True)
+    aggregation_job_id = aggregation_job.stdout.strip().split()[-1].decode()
+
+    print(f"Submitted primary job: {primary_job_id} followed by aggregation job: {aggregation_job_id}")
 
 
 USAGE_STR = """
-spreprocessing <command> [<args>]
+spreprocessing [<slurm-args>] <command> [<command-args>]
 
 This is the alternative slurm CLI for achieving concurrency on a compute cluster. Only use on
 machines that support slurm. For normal use, return to the standard `preprocessing` CLI.

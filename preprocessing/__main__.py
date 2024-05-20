@@ -1,5 +1,5 @@
 """
-This Module serves as the entrypoint for the `preprocessing` CLI. It has no public
+The `__main__` module serves as the entrypoint for the `preprocessing` CLI. It has no public
 functions intended for use in the Python API. Run 'preprocessing -h' in the terminal
 for a command usage guide.
 """
