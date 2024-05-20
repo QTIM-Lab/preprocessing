@@ -257,7 +257,7 @@ def launch_slurm(
 
     aggregation_command = (
         "python -c 'from preprocessing.slurm_concurrency import aggregate_slurm_results; "
-        f"aggregate_slurm_results({slurm_dir}, {csv})'"
+        f"aggregate_slurm_results({quotewrap(slurm_dir)}, {quotewrap(csv)})'"
     )
 
     aggregation_jobfile = generate_array_template(
@@ -601,6 +601,6 @@ def slurm_cli() -> None:
             cpus=args.cpus,
         )
 
-        exit(0)
+    exit(0)
 
 __all__ = []
