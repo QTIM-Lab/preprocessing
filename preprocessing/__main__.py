@@ -393,110 +393,6 @@ predict_series.add_argument(
     ),
 )
 
-generate_slurm = subparsers.add_parser(
-    "generate-slurm-template",
-    description=(
-        """
-        Make slurm script.
-        """
-    )
-)
-
-generate_slurm.add_argument(
-    "base_command",
-    metavar="base-command",
-    type=str,
-    help=(
-        "The command you wish to run in parallel (including its arguments not related to multiprocessing)."
-    )
-)
-
-generate_slurm.add_argument(
-    "slurm_dir",
-    metavar="slurm-dir",
-    type=Path,
-    help=("The directory that will contain the slurm array script and output files.")
-)
-
-generate_slurm.add_argument(
-    "--account",
-    type=str,
-    default="qtim",
-   help=("")
-)
-
-generate_slurm.add_argument(
-    "--partition",
-    type=str,
-    default="basic",
-    help=("")
-)
-
-generate_slurm.add_argument(
-    "--time",
-    type=str,
-    default="05:00:00",
-    help=("")
-)
-
-generate_slurm.add_argument(
-    "--mail-update",
-    action="store_true",
-    help=("")
-)
-
-generate_slurm.add_argument(
-    "--mem-per-cpu",
-    type=str,
-    default="6G",
-    help=("")
-)
-
-generate_slurm.add_argument(
-    "-p",
-    "--patients",
-    type=str,
-    default=None,
-    help=(
-        """
-        A comma delimited list of patients to select from the 'Anon_PatientID' column
-        of the CSV
-        """
-    ),
-)
-
-generate_slurm.add_argument(
-    "-c",
-    "--cpus",
-    type=int,
-    default=50,
-    help=(
-        "Number of cpus to use for concurrently. Defaults to 50."
-    ),
-)
-
-aggregate_slurm = subparsers.add_parser(
-    "aggregate-slurm-results",
-    description=(
-        """
-        Aggregate slurm results.
-        """
-    ),
-)
-
-aggregate_slurm.add_argument(
-    "slurm_dir",
-    metavar="slurm-dir",
-    type=Path,
-    help=("slurm dir"),
-)
-
-aggregate_slurm.add_argument(
-    "csv",
-    type=Path,
-    help=("csv"),
-)
-
 brain_preprocessing = subparsers.add_parser(
     "brain-preprocessing",
     description=(
@@ -855,6 +751,11 @@ def main() -> None:
     if len(sys.argv) == 1:
         parser.print_usage()
         exit(0)
+    
+    assert not any(["SLURM" in var for var in os.environ.keys()]), (
+        "This is an incorrect use of the `preprocessing` library's CLI. To use with slurm, "
+        "please switch to the `spreprocessing` CLI. Run `spreprocessing -h` for additional help."
+    )
 
     args = parser.parse_args()
 
@@ -926,29 +827,6 @@ def main() -> None:
 
         tracked_command(series_from_csv, kwargs=kwargs, record_dir=args.csv.parent)
 
-    elif args.command == "generate-slurm-template":
-        from preprocessing.slurm_concurrency import generate_array_template
-
-        if isinstance(args.patients, str):
-            args.patients = args.patients.split(",")
-
-        generate_array_template(
-            command=args.base_command,
-            slurm_dir=args.slurm_dir,
-            account=args.account,
-            partition=args.partition,
-            time=args.time,
-            memory=args.mem_per_cpu,
-            mail_update=args.mail_update,
-            patients=args.patients,
-            cpus=args.cpus
-        )
-
-    elif args.command == "aggregate-slurm-results":
-        from preprocessing.slurm_concurrency import aggregate_slurm_results
-
-        aggregate_slurm_results(slurm_dir=args.slurm_dir, csv=args.csv)
-
     elif args.command == "brain-preprocessing":
         from preprocessing.brain import preprocess_from_csv
 
@@ -974,14 +852,7 @@ def main() -> None:
             "debug": args.debug,
         }
 
-        if "SLURM_ARRAY_TASK_ID" in os.environ:
-            preprocess_from_csv(**kwargs)
-
-        else:
-            tracked_command(
-                preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir
-            )
-
+        tracked_command(preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir)
 
     elif args.command == "track-tumors":
         from preprocessing.qc import track_tumors_csv

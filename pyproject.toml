@@ -37,3 +37,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 preprocessing = "preprocessing.__main__:main"
+spreprocessing = "preprocessing.slurm_concurrency:slurm_cli"

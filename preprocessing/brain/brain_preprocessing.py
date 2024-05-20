@@ -1451,6 +1451,9 @@ def preprocess_from_csv(
     if patients is None:
         patients = list(filtered_df["Anon_PatientID"].unique())
 
+    if "SLURM_ARRAY_TASK_ID" in os.environ:
+        patients = [patients[int(os.environ["SLURM_ARRAY_TASK_ID"])]]
+
     if pre_skullstripped:
         skullstrip = False
 
