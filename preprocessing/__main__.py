@@ -237,6 +237,15 @@ reorganize_d.add_argument(
     ),
 )
 
+reorganize_d.add_argument(
+    "--include-incomplete",
+    action="store_true",
+    help=(
+        "Whether to keep other instances in a series after some instances have failed to be "
+        "copied."
+    )
+)
+
 reorganize_n = subparsers.add_parser(
     "reorganize-niftis",
     description=(
@@ -785,6 +794,7 @@ def main() -> None:
             "new_dicom_dir": args.new_dicom_dir,
             "anon_csv": args.anon_csv,
             "cpus": args.cpus,
+            "drop_incomplete_series": not args.include_incomplete,
         }
 
         tracked_command(reorganize_dicoms, kwargs=kwargs, record_dir=args.new_dicom_dir)

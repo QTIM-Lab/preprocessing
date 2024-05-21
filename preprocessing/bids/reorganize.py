@@ -123,7 +123,10 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
 
 
 def copy_dicoms(
-    sub_dir: Path | str, new_dicom_dir: Path | str, anon_df: pd.DataFrame | None
+    sub_dir: Path | str,
+    new_dicom_dir: Path | str,
+    anon_df: pd.DataFrame | None,
+    drop_incomplete_series: bool = True,
 ) -> pd.DataFrame:
     """
     Copies all of the dicoms present within a directory to
@@ -153,11 +156,15 @@ def copy_dicoms(
 
     files = list(sub_dir.glob("**/*"))
     rows = []
+    incomplete_series = []
 
     for file in files:
         try:
             dcm = dcmread(file, stop_before_pixels=True)
-            if not hasattr(dcm, "StudyInstanceUID"):
+            if not all(
+                hasattr(dcm, attr)
+                for attr in ["StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID"]
+            ):
                 continue
 
         except Exception:
@@ -172,18 +179,10 @@ def copy_dicoms(
             anon_patient_id = None
             anon_study_id = None
 
-        try:
-            row = {
-                "Anon_PatientID": anon_patient_id,
-                "Anon_StudyID": anon_study_id,
-            }
-        except Exception as error:
-            error = f"{file} encountered: {error}\n"
-            print(error)
-            errorfile = open(new_dicom_dir / "reorganization_errors.txt", "a")
-            errorfile.write(error)
-
-            row = {"Anon_PatientID": None, "Anon_StudyID": None}
+        row = {
+            "Anon_PatientID": anon_patient_id,
+            "Anon_StudyID": anon_study_id,
+        }
 
         for key in META_KEYS:
             attr = getattr(dcm, key, None)
@@ -191,25 +190,34 @@ def copy_dicoms(
 
         save_path = new_dicom_dir / dcm.SeriesInstanceUID
         row["dicoms"] = save_path
+
+        out_file = save_path / f"{dcm.SOPInstanceUID}.dcm"
+
+        os.makedirs(save_path, exist_ok=True)
+
         try:
-            out_file = save_path / f"{dcm.SOPInstanceUID}.dcm"
+            shutil.copy(file, out_file)
         except Exception as error:
             error = f"{file} encountered: {error}\n"
             print(error)
             errorfile = open(new_dicom_dir / "reorganization_errors.txt", "a")
             errorfile.write(error)
-            # file is likely corrupted, so skip
+            incomplete_series.append(dcm.SeriesInstanceUID)
             continue
 
-        os.makedirs(save_path, exist_ok=True)
-        shutil.copy(file, out_file)
-
         rows.append(row)
-    df = (
-        pd.DataFrame(rows)
-        .drop_duplicates(subset=["SeriesInstanceUID"])
-        .reset_index(drop=True)
-    )
+
+    df = pd.DataFrame(rows)
+
+    if drop_incomplete_series:
+        for series_uid in incomplete_series:
+            save_paths = df[df["SeriesInstanceUID"] == series_uid]["dicoms"]
+
+            for path in save_paths:
+                shutil.rmtree(path, ignore_errors=True)
+            df = df[~df["SeriesInstanceUID"] == series_uid]
+
+    df = df.drop_duplicates(subset=["SeriesInstanceUID"]).reset_index(drop=True)
     print(df)
     return df
 
@@ -282,6 +290,7 @@ def reorganize_dicoms(
     new_dicom_dir: Path | str,
     anon_csv: Path | str | pd.DataFrame | None,
     cpus: int = 1,
+    drop_incomplete_series: bool = True,
 ) -> pd.DataFrame:
     """
     Reorganize DICOMs to follow the BIDS convention. Any DICOMs found recursively
@@ -331,6 +340,7 @@ def reorganize_dicoms(
             "sub_dir": sub_dir,
             "new_dicom_dir": new_dicom_dir,
             "anon_df": anon_df,
+            "drop_incomplete_series": drop_incomplete_series,
         }
         for sub_dir in sub_dirs
     ]
