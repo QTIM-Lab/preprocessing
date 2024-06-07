@@ -1059,7 +1059,10 @@ def preprocess_study(
     ### Write files:
     for k, v in sitk_im_cache.items():
         if k != main_SS_file:
-            WriteImage(v, k)
+            if any([s in Path(k).name for s in ["seg", "mask"]]):
+                WriteImage(Cast(v, sitkUInt8), k)
+            else:
+                WriteImage(Cast(v, sitkFloat32), k)
 
     ### copy metadata
     preprocessing_args = {
