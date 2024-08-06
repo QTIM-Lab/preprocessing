@@ -61,6 +61,9 @@ USAGE_STR = """
 preprocessing <command> [<args>]
 
 The following commands are available:
+    validate-installation       Check that the `preprocessing` library is installed correctly along
+                                with all of its dependencies.
+
     old-project-anon-keys       Create anonymization keys for anonymous PatientID and VisitID
                                 from previous QTIM organizational scheme. Should be compatible
                                 with data following a following <Patient_ID>/<Study_ID> directory
@@ -110,6 +113,16 @@ Run `preprocessing <command> --help` for more details about how to use each indi
 parser = argparse.ArgumentParser(usage=USAGE_STR)
 
 subparsers = parser.add_subparsers(dest="command")
+
+validate_installation = subparsers.add_parser(
+    "validate-installation",
+    description=(
+        """
+        Check that the `preprocessing` library is installed correctly
+        along with all of its dependencies.
+        """
+    )
+)
 
 old_project_anon_keys = subparsers.add_parser(
     "old-project-anon-keys",
@@ -768,7 +781,33 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if args.command == "old-project-anon-keys":
+    if args.command == "validate-installation":
+        try:
+            # check all packages
+            from preprocessing import data
+            from preprocessing import brain
+            from preprocessing import qc
+            from preprocessing import constants
+            from preprocessing import dcm_tools
+            from preprocessing import synthmorph
+            from preprocessing import utils
+            
+            utils.source_external_software()
+
+            if "PREPROCESSING_MODELS_PATH" in os.environ:
+                pass
+
+            else:
+                raise Exception("$PREPROCESSING_MODELS_PATH not specified.")
+
+            utils.check_for_models(os.environ["PREPROCESSING_MODELS_PATH"])
+            print("`preprocessing` installation is valid.")
+
+        except Exception as error:
+            print(f"`preprocessing` installation is invalid. Encountered the folloowing exception during validation: {error}")
+        
+
+    elif args.command == "old-project-anon-keys":
         from preprocessing.data import find_anon_keys
 
         kwargs = {"input_dir": args.input_dir, "output_dir": args.output_dir}
@@ -821,21 +860,7 @@ def main() -> None:
 
         tracked_command(
             convert_batch_to_nifti, kwargs=kwargs, record_dir=args.nifti_dir
-        )
-
-    elif args.command == "predict-series":
-        from preprocessing.series_selection import series_from_csv
-
-        kwargs = {
-            "csv": args.csv,
-            "ruleset": args.ruleset,
-            "cpus": args.cpus,
-        }
-
-        if args.description_key is not None:
-            kwargs["description_key"] = json.load(open(args.description_key, "r"))
-
-        tracked_command(series_from_csv, kwargs=kwargs, record_dir=args.csv.parent)
+        ) 
 
     elif args.command == "brain-preprocessing":
         from preprocessing.brain import preprocess_from_csv
