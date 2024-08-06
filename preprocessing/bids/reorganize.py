@@ -105,16 +105,16 @@ def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFram
                 continue
 
             anon_key = {
-                "Anon_PatientID": f"sub-{patient.replace('_', '')}",
+                "AnonPatientID": f"sub-{patient.replace('_', '')}",
                 "StudyInstanceUID": getattr(
                     dcm, "StudyInstanceUID", None
                 ),  # cover edge cases
-                "Anon_StudyID": f"ses-{i+1:02d}",
+                "AnonStudyID": f"ses-{i+1:02d}",
             }
 
             print(anon_key)
             dicts.append(anon_key)
-    df = pd.DataFrame(dicts).sort_values("Anon_PatientID")
+    df = pd.DataFrame(dicts).sort_values("AnonPatientID")
     os.makedirs(output_dir, exist_ok=True)
     out_csv = os.path.join(output_dir, "anonymization_keys.csv")
     print(f"saving to {out_csv}")
@@ -129,7 +129,7 @@ def copy_dicoms(
     drop_incomplete_series: bool = True,
 ) -> pd.DataFrame:
     """
-    Copies all of the dicoms present within a directory to
+    Copies all of the DICOMs present within a directory to
     <new_dicom_dir>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm.
 
     Parameters
@@ -172,16 +172,16 @@ def copy_dicoms(
 
         if anon_df is not None:
             anon_keys = anon_df[(anon_df["StudyInstanceUID"] == dcm.StudyInstanceUID)]
-            anon_patient_id = anon_keys.loc[anon_keys.index[0], "Anon_PatientID"]
-            anon_study_id = anon_keys.loc[anon_keys.index[0], "Anon_StudyID"]
+            anon_patient_id = anon_keys.loc[anon_keys.index[0], "AnonPatientID"]
+            anon_study_id = anon_keys.loc[anon_keys.index[0], "AnonStudyID"]
 
         else:
             anon_patient_id = None
             anon_study_id = None
 
         row = {
-            "Anon_PatientID": anon_patient_id,
-            "Anon_StudyID": anon_study_id,
+            "AnonPatientID": anon_patient_id,
+            "AnonStudyID": anon_study_id,
         }
 
         for key in META_KEYS:
@@ -189,7 +189,7 @@ def copy_dicoms(
             row[key] = attr
 
         save_path = new_dicom_dir / dcm.SeriesInstanceUID
-        row["dicoms"] = save_path
+        row["Dicoms"] = save_path
 
         out_file = save_path / f"{dcm.SOPInstanceUID}.dcm"
 
@@ -226,7 +226,7 @@ def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
     """
     Apply automated anonymization to a DatFrame. This function assumes
     that the 'PatientID' and 'StudyID' tags are consistent and correct
-    to derive Anon_PatientID = 'sub_{i:02d}' and Anon_StudyID = 'ses_{i:02d}'.
+    to derive AnonPatientID = 'sub_{i:02d}' and AnonStudyID = 'ses_{i:02d}'.
 
     Parameters
     __________
@@ -240,8 +240,8 @@ def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
     Returns
     _______
     pd.DataFrame
-        `df` with added or corrected columns 'Anon_PatientID' and
-        'Anon_StudyID'.
+        `df` with added or corrected columns 'AnonPatientID' and
+        'AnonStudyID'.
     """
 
     if check_columns:
@@ -264,11 +264,11 @@ def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
         for j, study_date in enumerate(study_dates):
             anon_study_dict[(patient, study_date)] = f"ses-{j+1:02d}"
 
-    df["Anon_PatientID"] = df["PatientID"].apply(
+    df["AnonPatientID"] = df["PatientID"].apply(
         lambda x: anon_patient_dict[x] if not pd.isna(x) else x
     )
 
-    df["Anon_StudyID"] = df.apply(
+    df["AnonStudyID"] = df.apply(
         (
             lambda x: anon_study_dict[(x["PatientID"], x["StudyDate"])]
             if not (pd.isna(x["PatientID"]) or pd.isna(x["StudyDate"]))
@@ -279,7 +279,7 @@ def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
 
     df = (
         df.drop_duplicates(subset="SeriesInstanceUID")
-        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .sort_values(["AnonPatientID", "AnonStudyID"])
         .reset_index(drop=True)
     )
     return df
@@ -362,7 +362,7 @@ def reorganize_dicoms(
             if anon_df is not None:
                 df = (
                     df.drop_duplicates(subset=["SeriesInstanceUID"])
-                    .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                    .sort_values(["AnonPatientID", "AnonStudyID"])
                     .reset_index(drop=True)
                 )
 
@@ -380,7 +380,7 @@ def reorganize_dicoms(
     df = (
         pd.read_csv(dataset_csv, dtype=str)
         .drop_duplicates(subset=["SeriesInstanceUID"])
-        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .sort_values(["AnonPatientID", "AnonStudyID"])
         .reset_index(drop=True)
     )
     print("Anonymizing CSV:")
@@ -464,7 +464,7 @@ def nifti_anon_csv(
             "SeriesInstanceUID": generate_uid(),
             "StudyInstanceUID": study_uid,
             "SeriesDescription": series_description,
-            "original_nifti": nifti,
+            "OriginalNifti": nifti,
         }
 
         if normalized_descriptions:
@@ -496,9 +496,9 @@ def reorganize_niftis(
 
     anon_csv: Path | str | pd.DataFrame
         A CSV containing the original location of NIfTI files and metadata required for
-        preprocessing commands. It must contain the columns: 'Anon_PatientID',
-        'Anon_StudyID', 'PatientID', 'StudyDate', 'SeriesInstanceUID', 'StudyInstanceUID',
-        'SeriesDescription', 'original_nifti', and 'NormalizedSeriesDescription'. 'SeriesType'
+        preprocessing commands. It must contain the columns: 'AnonPatientID',
+        'AnonStudyID', 'PatientID', 'StudyDate', 'SeriesInstanceUID', 'StudyInstanceUID',
+        'SeriesDescription', 'OriginalNifti', and 'NormalizedSeriesDescription'. 'SeriesType'
         can also be provided, otherwise "anat" will be assumed.
 
     cpus: int
@@ -517,18 +517,18 @@ def reorganize_niftis(
         anon_df = anon_csv
 
     required_columns = [
-        "Anon_PatientID",
-        "Anon_StudyID",
+        "AnonPatientID",
+        "AnonStudyID",
         "PatientID",
         "StudyDate",
         "SeriesInstanceUID",
         "StudyInstanceUID",
         "SeriesDescription",
-        "original_nifti",
+        "OriginalNifti",
         "NormalizedSeriesDescription",
     ]
 
-    optional_columns = ["SeriesType", "seg"]
+    optional_columns = ["SeriesType", "Seg"]
 
     check_required_columns(anon_df, required_columns, optional_columns)
 
@@ -537,8 +537,8 @@ def reorganize_niftis(
 
     def copy_nifti(anon_row: dict) -> pd.DataFrame:
         out_row = {
-            "Anon_PatientID": anon_row["Anon_PatientID"],
-            "Anon_StudyID": anon_row["Anon_StudyID"],
+            "AnonPatientID": anon_row["AnonPatientID"],
+            "AnonStudyID": anon_row["AnonStudyID"],
         }
 
         for key in META_KEYS + ["NormalizedSeriesDescription"]:
@@ -546,8 +546,8 @@ def reorganize_niftis(
 
         out_row["SeriesType"] = anon_row.get("SeriesType", "anat")
 
-        anon_patient_id = out_row["Anon_PatientID"]
-        anon_study_id = out_row["Anon_StudyID"]
+        anon_patient_id = out_row["AnonPatientID"]
+        anon_study_id = out_row["AnonStudyID"]
         series_type = out_row["SeriesType"]
         normalized_description = out_row["NormalizedSeriesDescription"]
 
@@ -558,16 +558,16 @@ def reorganize_niftis(
             f"{anon_patient_id}_{anon_study_id}_{normalized_description}.nii.gz"
         )
 
-        out_row["nifti"] = output_dir / nifti_basename
+        out_row["Nifti"] = output_dir / nifti_basename
 
-        shutil.copy(anon_row["original_nifti"], out_row["nifti"])
+        shutil.copy(anon_row["OriginalNifti"], out_row["Nifti"])
 
-        if "seg" in anon_row and not pd.isna(anon_row["seg"]):
+        if "Seg" in anon_row and not pd.isna(anon_row["Seg"]):
             seg_basename = f"{anon_patient_id}_{anon_study_id}_seg.nii.gz"
 
-            out_row["seg"] = output_dir / seg_basename
+            out_row["Seg"] = output_dir / seg_basename
 
-            shutil.copy(anon_row["seg"], out_row["seg"])
+            shutil.copy(anon_row["Seg"], out_row["Seg"])
 
         return pd.DataFrame([out_row])
 
@@ -594,7 +594,7 @@ def reorganize_niftis(
 
             df = (
                 df.drop_duplicates(subset=["SeriesInstanceUID"])
-                .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                .sort_values(["AnonPatientID", "AnonStudyID"])
                 .reset_index(drop=True)
             )
 
@@ -605,7 +605,7 @@ def reorganize_niftis(
     df = (
         pd.read_csv(dataset_csv, dtype=str)
         .drop_duplicates(subset=["SeriesInstanceUID"])
-        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .sort_values(["AnonPatientID", "AnonStudyID"])
         .reset_index(drop=True)
     )
 

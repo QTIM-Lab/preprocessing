@@ -59,7 +59,7 @@ def generate_array_template(
         to `False`.
 
     patients: Sequence[str] | None
-        A sequence of patients to select from the 'Anon_PatientID' column of the CSV referenced in
+        A sequence of patients to select from the 'AnonPatientID' column of the CSV referenced in
         `command`. If 'None' is provided, all patients will be preprocessed.
 
     cpus: int
@@ -72,7 +72,7 @@ def generate_array_template(
     """ 
     if patients is None:
         df = pd.read_csv(csv, dtype=str)
-        patients = list(df["Anon_PatientID"].unique())
+        patients = list(df["AnonPatientID"].unique())
         num_patients = len(patients)
 
     else:
@@ -156,7 +156,7 @@ def aggregate_slurm_results(slurm_dir: Path | str, csv: Path | str) -> None:
         df = pd.merge(df, slurm_df, how="outer")
         df = (
             df.drop_duplicates(subset="SeriesInstanceUID")
-            .sort_values(["Anon_PatientID", "Anon_StudyID"])
+            .sort_values(["AnonPatientID", "AnonStudyID"])
             .reset_index(drop=True)
         )
         df.to_csv(csv, index=False)
@@ -164,7 +164,7 @@ def aggregate_slurm_results(slurm_dir: Path | str, csv: Path | str) -> None:
     df = (
         pd.read_csv(csv, dtype=str)
         .drop_duplicates(subset="SeriesInstanceUID")
-        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .sort_values(["AnonPatientID", "AnonStudyID"])
         .reset_index(drop=True)
     )
     df.to_csv(csv, index=False)
@@ -218,7 +218,7 @@ def launch_slurm(
         to `False`.
 
     patients: Sequence[str] | None
-        A sequence of patients to select from the 'Anon_PatientID' column of the CSV referenced in
+        A sequence of patients to select from the 'AnonPatientID' column of the CSV referenced in
         `command`. If 'None' is provided, all patients will be preprocessed.
 
     cpus: int
@@ -398,8 +398,8 @@ brain_preprocessing.add_argument(
     type=Path,
     help=(
         """
-        A CSV containing nifti location and information required for the output file names.
-        It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID', 
+        A CSV containing NIfTI location and information required for the output file names.
+        It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID', 
         'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
         """
     ),
@@ -412,7 +412,7 @@ brain_preprocessing.add_argument(
     default=None,
     help=(
         """
-        A comma delimited list of patients to select from the 'Anon_PatientID' column
+        A comma delimited list of patients to select from the 'AnonPatientID' column
         of the CSV
         """
     ),

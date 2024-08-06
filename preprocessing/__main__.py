@@ -272,9 +272,9 @@ reorganize_n.add_argument(
         """
         A CSV containing the original location of NIfTI files and metadata
         required for preprocessing commands. It must contain the columns: 
-        'Anon_PatientID', 'Anon_StudyID', 'PatientID', 'StudyDate',
+        'AnonPatientID', 'AnonStudyID', 'PatientID', 'StudyDate',
         'SeriesInstanceUID', 'StudyInstanceUID', 'SeriesDescription',
-        'original_nifti', and 'NormalizedSeriesDescription'. 'SeriesType'
+        'OriginalNifti', and 'NormalizedSeriesDescription'. 'SeriesType'
         can also be provided, otherwise "anat" will be assumed.
         """
     ),
@@ -315,8 +315,8 @@ dataset_to_nifti.add_argument(
     help=(
         """
         A CSV containing dicom location and information required for the nifti file
-        names. It must contain the columns: ['dicoms', 'Anon_PatientID', 
-        'Anon_StudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription',
+        names. It must contain the columns: ['Dicoms', 'AnonPatientID', 
+        'AnonStudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription',
         'SeriesType'].
         """
     ),
@@ -357,7 +357,7 @@ predict_series.add_argument(
     help=(
         """
         The path to a CSV containing an entire dataset. It must contain the following
-        columns: ['StudyInstanceUID', 'SeriesInstanceUID', 'SeriesDescription', 'dicoms'].
+        columns: ['StudyInstanceUID', 'SeriesInstanceUID', 'SeriesDescription', 'Dicoms'].
         """
     ),
 )
@@ -425,8 +425,8 @@ brain_preprocessing.add_argument(
     type=Path,
     help=(
         """
-        A CSV containing nifti location and information required for the output file names.
-        It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID', 
+        A CSV containing NIfTI location and information required for the output file names.
+        It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID', 
         'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
         """
     ),
@@ -439,7 +439,7 @@ brain_preprocessing.add_argument(
     default=None,
     help=(
         """
-        A comma delimited list of patients to select from the 'Anon_PatientID' column
+        A comma delimited list of patients to select from the 'AnonPatientID' column
         of the CSV
         """
     ),
@@ -630,9 +630,9 @@ tumor_tracking.add_argument(
     type=Path,
     help=(
         """
-        A CSV containing nifti location and information required for the output file names.
-        It must contain the columns: 'Anon_PatientID', 'Anon_StudyID', and 'SeriesType'.
-        Additionally, '<pipeline_key>_seg' must be present with the assumption that the
+        A CSV containing NIfTI location and information required for the output file names.
+        It must contain the columns: 'AnonPatientID', 'AnonStudyID', and 'SeriesType'.
+        Additionally, '<pipeline_key>Seg' must be present with the assumption that the
         corresponding segmentation masks have been preprocessed.
         """
     ),
@@ -645,7 +645,7 @@ tumor_tracking.add_argument(
     default=None,
     help=(
         """
-        A comma delimited list of patients to select from the 'Anon_PatientID' column
+        A comma delimited list of patients to select from the 'AnonPatientID' column
         of the CSV
         """
     ),
@@ -709,9 +709,9 @@ volume_tracking.add_argument(
     type=Path,
     help=(
         """
-        A CSV containing nifti location and information required for the output file names.
-        It must contain the columns: 'Anon_PatientID', 'Anon_StudyID', and 'SeriesType'.
-        Additionally, '<pipeline_key>_seg' must be present with the assumption that the
+        A CSV containing NIfTI location and information required for the output file names.
+        It must contain the columns: 'AnonPatientID', 'AnonStudyID', and 'SeriesType'.
+        Additionally, '<pipeline_key>Seg' must be present with the assumption that the
         corresponding segmentation masks have been preprocessed.
         """
     ),
@@ -724,7 +724,7 @@ volume_tracking.add_argument(
     default=None,
     help=(
         """
-        A comma delimited list of patients to select from the 'Anon_PatientID' column
+        A comma delimited list of patients to select from the 'AnonPatientID' column
         of the CSV
         """
     ),

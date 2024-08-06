@@ -51,15 +51,15 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> None:
     """
-    Copy the metadata file paired with the original nifti file (and optionally the
+    Copy the metadata file paired with the original NIfTI file (and optionally the
     corresponding segmentation) and add the preprocessing arguments into a new metafile
     to be paired with the preprocessing outputs.
 
     Parameters
     __________
     row: dict
-        A row of a DataFrame represented as a dictionary. It is expected to have a 'nifti'
-        key and optionally 'seg'.
+        A row of a DataFrame represented as a dictionary. It is expected to have a 'Nifti'
+        key and optionally 'Seg'.
 
     preprocessing_args: dict
         A dictionary containing the arguments originally provided to 'preprocess_study' or
@@ -71,7 +71,7 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
         A metadata json is saved out to be paired with the preprocessed outputs.
 
     """
-    original_metafile = row["nifti"].replace(".nii.gz", ".json")
+    original_metafile = row["Nifti"].replace(".nii.gz", ".json")
     if Path(original_metafile).exists():
         try:
             with open(original_metafile, "r") as json_file:
@@ -79,7 +79,7 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
         except Exception:
             data = os.path.abspath(original_metafile)
         meta_dict = {
-            "source_file": row["nifti"],
+            "source_file": row["Nifti"],
             "original_metafile": data,
             "preprocessing_args": preprocessing_args,
         }
@@ -92,7 +92,7 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
             )
     else:
         meta_dict = {
-            "source_file": row["nifti"],
+            "source_file": row["Nifti"],
             "original_metafile": None,
             "preprocessing_args": preprocessing_args,
         }
@@ -104,8 +104,8 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
                 meta_dict, json_file, sort_keys=True, indent=2, separators=(",", ": ")
             )
 
-    if "seg" in row and not pd.isna(row["seg"]):
-        original_metafile = row["seg"].replace(".nii.gz", ".json")
+    if "Seg" in row and not pd.isna(row["Seg"]):
+        original_metafile = row["Seg"].replace(".nii.gz", ".json")
         if Path(original_metafile).exists():
             try:
                 with open(original_metafile, "r") as json_file:
@@ -113,12 +113,12 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
             except Exception:
                 data = os.path.abspath(original_metafile)
             meta_dict = {
-                "source_file": row["nifti"],
+                "source_file": row["Nifti"],
                 "original_metafile": data,
                 "preprocessing_args": preprocessing_args,
             }
             preprocessed_metafile = row[
-                f"{preprocessing_args['pipeline_key']}_seg"
+                f"{preprocessing_args['pipeline_key']}Seg"
             ].replace(".nii.gz", ".json")
             with open(preprocessed_metafile, "w") as json_file:
                 json.dump(
@@ -130,12 +130,12 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
                 )
         else:
             meta_dict = {
-                "source_file": row["nifti"],
+                "source_file": row["Nifti"],
                 "original_metafile": None,
                 "preprocessing_args": preprocessing_args,
             }
             preprocessed_metafile = row[
-                f"{preprocessing_args['pipeline_key']}_seg"
+                f"{preprocessing_args['pipeline_key']}Seg"
             ].replace(".nii.gz", ".json")
             with open(preprocessed_metafile, "w") as json_file:
                 json.dump(
@@ -288,11 +288,11 @@ def local_reg(
 
     accompanying_images = [{"moving": preprocessed_file, "moved": output_file}]
 
-    if "seg" in row and not pd.isna(row["seg"]):
-        preprocessed_seg = row[f"{pipeline_key}_seg"]
+    if "Seg" in row and not pd.isna(row["Seg"]):
+        preprocessed_seg = row[f"{pipeline_key}Seg"]
         if debug:
             output_seg = preprocessed_seg.replace(".nii.gz", "_localreg.nii.gz")
-            row[f"{pipeline_key}_seg"] = output_seg
+            row[f"{pipeline_key}Seg"] = output_seg
 
         else:
             output_seg = preprocessed_seg
@@ -420,11 +420,11 @@ def long_reg(
 
         accompanying_images.append({"moving": preprocessed_file, "moved": output_file})
 
-        if "seg" in row and not pd.isna(row["seg"]):
-            preprocessed_seg = row[f"{pipeline_key}_seg"]
+        if "Seg" in row and not pd.isna(row["Seg"]):
+            preprocessed_seg = row[f"{pipeline_key}Seg"]
             if debug:
                 output_seg = preprocessed_seg.replace(".nii.gz", "_longreg.nii.gz")
-                row[f"{pipeline_key}_seg"] = output_seg
+                row[f"{pipeline_key}Seg"] = output_seg
 
             else:
                 output_seg = preprocessed_seg
@@ -547,8 +547,8 @@ def preprocess_study(
     Parameters
     __________
     study_df: pd.DataFrame
-        A DataFrame containing nifti location and information required for the output file names
-        for a single study. It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID',
+        A DataFrame containing NIfTI location and information required for the output file names
+        for a single study. It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID',
         'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
 
     preprocessed_dir: Path
@@ -596,20 +596,20 @@ def preprocess_study(
     Returns
     _______
     pd.DataFrame:
-        A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
+        A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}Seg' to indicate
         the locations of the preprocessing outputs.
     """
     if check_columns:
         required_columns = [
-            "nifti",
-            "Anon_PatientID",
-            "Anon_StudyID",
+            "Nifti",
+            "AnonPatientID",
+            "AnonStudyID",
             "StudyInstanceUID",
             "SeriesInstanceUID",
             "NormalizedSeriesDescription",
             "SeriesType",
         ]
-        optional_columns = ["seg"]
+        optional_columns = ["Seg"]
 
         check_required_columns(study_df, required_columns, optional_columns)
 
@@ -626,8 +626,8 @@ def preprocess_study(
     if filtered_df.empty:
         return study_df
 
-    anon_patientID = filtered_df.loc[filtered_df.index[0], "Anon_PatientID"]
-    anon_studyID = filtered_df.loc[filtered_df.index[0], "Anon_StudyID"]
+    anon_patientID = filtered_df.loc[filtered_df.index[0], "AnonPatientID"]
+    anon_studyID = filtered_df.loc[filtered_df.index[0], "AnonStudyID"]
 
     rows = filtered_df.to_dict("records")
     n = len(rows)
@@ -642,7 +642,7 @@ def preprocess_study(
         )
         os.makedirs(output_dir, exist_ok=True)
 
-        input_file = rows[i]["nifti"]
+        input_file = rows[i]["Nifti"]
         preprocessed_file = output_dir / os.path.basename(input_file)
 
         rows[i][pipeline_key] = str(preprocessed_file)
@@ -658,11 +658,11 @@ def preprocess_study(
             setattr(study_df, "failed_preprocessing", True)
             return study_df
 
-        if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
-            input_seg = rows[i]["seg"]
+        if "Seg" in rows[i] and not pd.isna(rows[i]["Seg"]):
+            input_seg = rows[i]["Seg"]
             preprocessed_seg = output_dir / os.path.basename(input_seg)
 
-            rows[i][f"{pipeline_key}_seg"] = str(preprocessed_seg)
+            rows[i][f"{pipeline_key}Seg"] = str(preprocessed_seg)
 
             try:
                 sitk_im_cache[str(preprocessed_seg)] = ReadImage(input_seg)
@@ -678,12 +678,12 @@ def preprocess_study(
     ### Optionally enforce binary segmentations
     if binarize_seg:
         for i in range(n):
-            if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
-                preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+            if "Seg" in rows[i] and not pd.isna(rows[i]["Seg"]):
+                preprocessed_seg = rows[i][f"{pipeline_key}Seg"]
 
                 if debug:
                     output_seg = preprocessed_seg.replace(".nii.gz", "_binary.nii.gz")
-                    rows[i][f"{pipeline_key}_seg"] = output_seg
+                    rows[i][f"{pipeline_key}Seg"] = output_seg
 
                 else:
                     output_seg = preprocessed_seg
@@ -723,12 +723,12 @@ def preprocess_study(
         if verbose:
             print(f"{preprocessed_file} set to {orientation} orientation")
 
-        if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
-            preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+        if "Seg" in rows[i] and not pd.isna(rows[i]["Seg"]):
+            preprocessed_seg = rows[i][f"{pipeline_key}Seg"]
 
             if debug:
                 output_seg = preprocessed_seg.replace(".nii.gz", "_RAS.nii.gz")
-                rows[i][f"{pipeline_key}_seg"] = output_seg
+                rows[i][f"{pipeline_key}Seg"] = output_seg
 
             else:
                 output_seg = preprocessed_seg
@@ -773,12 +773,12 @@ def preprocess_study(
         if verbose:
             print(f"{preprocessed_file} resampled to {spacing} spacing")
 
-        if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
-            preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+        if "Seg" in rows[i] and not pd.isna(rows[i]["Seg"]):
+            preprocessed_seg = rows[i][f"{pipeline_key}Seg"]
 
             if debug:
                 output_seg = preprocessed_seg.replace(".nii.gz", "_spacing.nii.gz")
-                rows[i][f"{pipeline_key}_seg"] = output_seg
+                rows[i][f"{pipeline_key}Seg"] = output_seg
 
             else:
                 output_seg = preprocessed_seg
@@ -981,14 +981,14 @@ def preprocess_study(
             if verbose:
                 print(f"Study skullstrip mask applied to {preprocessed_file}")
 
-            if "seg" in rows[i] and not pd.isna(rows[i]["seg"]):
-                preprocessed_seg = rows[i][f"{pipeline_key}_seg"]
+            if "Seg" in rows[i] and not pd.isna(rows[i]["Seg"]):
+                preprocessed_seg = rows[i][f"{pipeline_key}Seg"]
 
                 if debug:
                     output_seg = preprocessed_seg.replace(
                         ".nii.gz", "_skullstripped.nii.gz"
                     )
-                    rows[i][f"{pipeline_key}_seg"] = output_seg
+                    rows[i][f"{pipeline_key}Seg"] = output_seg
 
                 else:
                     output_seg = preprocessed_seg
@@ -1059,7 +1059,7 @@ def preprocess_study(
     ### Write files:
     for k, v in sitk_im_cache.items():
         if k != main_SS_file:
-            if any([s in Path(k).name for s in ["seg", "mask"]]):
+            if any([s in Path(k).name.lower() for s in ["seg", "mask"]]):
                 WriteImage(Cast(v, sitkUInt8), k)
             else:
                 WriteImage(Cast(v, sitkFloat32), k)
@@ -1112,7 +1112,7 @@ def preprocess_patient(
     __________
     patient_df: pd.DataFrame
         A DataFrame containing nifti location and information required for the output file names
-        for a single patient. It must contain the columns: 'nifti', 'Anon_PatientID', 'Anon_StudyID',
+        for a single patient. It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID',
         'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
 
     preprocessed_dir: Path
@@ -1169,21 +1169,21 @@ def preprocess_patient(
     Returns
     _______
     pd.DataFrame:
-        A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
+        A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}Seg' to indicate
         the locations of the preprocessing outputs.
     """
 
     if check_columns:
         required_columns = [
-            "nifti",
-            "Anon_PatientID",
-            "Anon_StudyID",
+            "Nifti",
+            "AnonPatientID",
+            "AnonStudyID",
             "StudyInstanceUID",
             "SeriesInstanceUID",
             "NormalizedSeriesDescription",
             "SeriesType",
         ]
-        optional_columns = ["seg"]
+        optional_columns = ["Seg"]
 
         check_required_columns(patient_df, required_columns, optional_columns)
 
@@ -1244,7 +1244,7 @@ def preprocess_patient(
 
             if debug:
                 output_dir = os.path.dirname(reg_sorted[pipeline_key][0])
-                base_name = os.path.basename(reg_sorted["nifti"][0])
+                base_name = os.path.basename(reg_sorted["Nifti"][0])
                 registration_target = f"{output_dir}/{base_name}"
 
             else:
@@ -1299,7 +1299,7 @@ def preprocess_patient(
                 )
 
     # clear extra files
-    anon_patientID = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
+    anon_patientID = patient_df.loc[patient_df.index[0], "AnonPatientID"]
     patient_dir = preprocessed_dir / anon_patientID
 
     out_df = pd.concat(preprocessed_dfs, ignore_index=True)
@@ -1347,15 +1347,15 @@ def preprocess_from_csv(
     Parameters
     __________
     csv: Path | str
-        The path to a CSV containing an entire dataset. It must contain the following columns:  'nifti',
-        'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription',
+        The path to a CSV containing an entire dataset. It must contain the following columns:  'Nifti',
+        'AnonPatientID', 'AnonStudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription',
         and 'SeriesType'.
 
     preprocessed_dir: Path
         The directory that will contain the preprocessed NIfTI files.
 
     patients: Sequece[str] | None
-        A sequence of patients to select from the 'Anon_PatientID' column of the CSV. If 'None' is provided,
+        A sequence of patients to select from the 'AnonPatientID' column of the CSV. If 'None' is provided,
         all patients will be preprocessed.
 
     pipeline_key: str
@@ -1410,7 +1410,7 @@ def preprocess_from_csv(
     Returns
     _______
     pd.DataFrame:
-        A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}_seg' to indicate
+        A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}Seg' to indicate
         the locations of the preprocessing outputs. This function will also overwrite the input CSV with
         this DataFrame.
     """
@@ -1427,21 +1427,21 @@ def preprocess_from_csv(
 
     if pipeline_key in df.keys():
         df = df.drop(columns=pipeline_key)
-        if f"{pipeline_key}_seg" in df.keys():
-            df = df.drop(columns=f"{pipeline_key}_seg")
+        if f"{pipeline_key}Seg" in df.keys():
+            df = df.drop(columns=f"{pipeline_key}Seg")
 
     df.to_csv(csv, index=False)
 
     required_columns = [
-        "nifti",
-        "Anon_PatientID",
-        "Anon_StudyID",
+        "Nifti",
+        "AnonPatientID",
+        "AnonStudyID",
         "StudyInstanceUID",
         "SeriesInstanceUID",
         "NormalizedSeriesDescription",
         "SeriesType",
     ]
-    optional_columns = ["seg"]
+    optional_columns = ["Seg"]
 
     check_required_columns(df, required_columns, optional_columns)
 
@@ -1449,10 +1449,10 @@ def preprocess_from_csv(
 
     df = df.drop_duplicates(subset="SeriesInstanceUID").reset_index(drop=True)
 
-    filtered_df = df.copy().dropna(subset="nifti")
+    filtered_df = df.copy().dropna(subset="Nifti")
 
     if patients is None:
-        patients = list(filtered_df["Anon_PatientID"].unique())
+        patients = list(filtered_df["AnonPatientID"].unique())
 
     if "SLURM_ARRAY_TASK_ID" in os.environ:
         patients = [patients[int(os.environ["SLURM_ARRAY_TASK_ID"])]]
@@ -1473,7 +1473,7 @@ def preprocess_from_csv(
 
     kwargs_list = [
         {
-            "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
+            "patient_df": filtered_df[filtered_df["AnonPatientID"] == patient].copy(),
             "preprocessed_dir": preprocessed_dir,
             "pipeline_key": pipeline_key,
             "registration_key": registration_key,
@@ -1510,7 +1510,7 @@ def preprocess_from_csv(
             df = pd.merge(df, preprocessed_df, how="outer")
             df = (
                 df.drop_duplicates(subset="SeriesInstanceUID")
-                .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                .sort_values(["AnonPatientID", "AnonStudyID"])
                 .reset_index(drop=True)
             )
             df.to_csv(csv, index=False)
@@ -1519,7 +1519,7 @@ def preprocess_from_csv(
     df = (
         pd.read_csv(csv, dtype=str)
         .drop_duplicates(subset="SeriesInstanceUID")
-        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .sort_values(["AnonPatientID", "AnonStudyID"])
         .reset_index(drop=True)
     )
     df.to_csv(csv, index=False)

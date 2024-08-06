@@ -71,7 +71,7 @@ def series_in_study(
     __________
     study_df: pd.DataFrame
         A DataFrame containing data for a single study. It must contain the following
-        columns: ['SeriesDescription', 'dicoms'].
+        columns: ['SeriesDescription', 'Dicoms'].
 
     ruleset: str
         Ruleset used within mr_series_selection to predict the NormalizedDescription of
@@ -96,7 +96,7 @@ def series_in_study(
         if a series can be predicted by 'mr_series_selection'.
     """
     if check_columns:
-        required_columns = ["SeriesDescription", "dicoms"]
+        required_columns = ["SeriesDescription", "Dicoms"]
 
         check_required_columns(study_df, required_columns)
 
@@ -120,7 +120,7 @@ def series_in_study(
 
     normalized_descriptions = []
     series_types = []
-    for dicom_dir in filtered_df["dicoms"]:
+    for dicom_dir in filtered_df["Dicoms"]:
         files = Path(dicom_dir).resolve().glob("*")
         dcms = []
         for file in files:
@@ -173,7 +173,7 @@ def series_from_csv(
     __________
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following
-        columns: ['StudyInstanceUID', 'SeriesInstanceUID', 'SeriesDescription', 'dicoms'].
+        columns: ['StudyInstanceUID', 'SeriesInstanceUID', 'SeriesDescription', 'Dicoms'].
 
     ruleset: str
         Ruleset used within mr_series_selection to predict the NormalizedDescription of
@@ -208,7 +208,7 @@ def series_from_csv(
             "StudyInstanceUID",
             "SeriesInstanceUID",
             "SeriesDescription",
-            "dicoms",
+            "Dicoms",
         ]
 
         check_required_columns(df, required_columns)
@@ -242,7 +242,7 @@ def series_from_csv(
             df = pd.merge(df, prediction_df, how="outer")
             df = (
                 df.drop_duplicates(subset="SeriesInstanceUID")
-                .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                .sort_values(["AnonPatientID", "AnonStudyID"])
                 .reset_index(drop=True)
             )
             df.to_csv(csv, index=False)
@@ -251,7 +251,7 @@ def series_from_csv(
     df = (
         pd.read_csv(csv, dtype=str)
         .drop_duplicates(subset="SeriesInstanceUID")
-        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .sort_values(["AnonPatientID", "AnonStudyID"])
         .reset_index(drop=True)
     )
     df.to_csv(csv, index=False)

@@ -15,7 +15,7 @@ from preprocessing.utils import check_required_columns
 def vol_plot_patient(
     patient_df: pd.DataFrame, plot_dir: Path | str, pipeline_key: str = "preprocessed"
 ) -> pd.DataFrame:
-    patient_id = patient_df.loc[patient_df.index[0], "Anon_PatientID"]
+    patient_id = patient_df.loc[patient_df.index[0], "AnonPatientID"]
 
     keys = list(
         filter(
@@ -29,7 +29,7 @@ def vol_plot_patient(
 
         filtered_df = patient_df.dropna(subset=key)
 
-        study_uids = patient_df["Anon_StudyID"]
+        study_uids = patient_df["AnonStudyID"]
 
         arrays = [GetArrayFromImage(ReadImage(file)) for file in filtered_df[key]]
 
@@ -48,8 +48,8 @@ def vol_plot_patient(
 
                 rows.append(
                     {
-                        "Anon_PatientID": patient_id,
-                        "Anon_StudyID": study_uid,
+                        "AnonPatientID": patient_id,
+                        "AnonStudyID": study_uid,
                         "Label": label,
                         "Tumor ID": f"{i:03d}",
                         "Volume": volume,
@@ -97,7 +97,7 @@ def vol_plot_csv(
     __________
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following columns:
-        'Anon_PatientID', 'Anon_StudyID', 'SeriesType', and f'{pipeline_key}_seg'. Additionally,
+        'AnonPatientID', 'AnonStudyID', 'SeriesType', and f'{pipeline_key}Seg'. Additionally,
         the previous preprocessing is assumed to have been registered longitudinally or to an
         atlas.
 
@@ -105,7 +105,7 @@ def vol_plot_csv(
         The directory that will contain the tumor id mask files.
 
     patients: Sequence[str] | None
-        A sequence of patients to select from the 'Anon_PatientID' column of the CSV. If 'None'
+        A sequence of patients to select from the 'AnonPatientID' column of the CSV. If 'None'
         is provided, all patients will be preprocessed.
 
     pipeline_key: str
@@ -126,10 +126,10 @@ def vol_plot_csv(
     df = pd.read_csv(csv, dtype=str)
 
     required_columns = [
-        "Anon_PatientID",
-        "Anon_StudyID",
+        "AnonPatientID",
+        "AnonStudyID",
         "SeriesType",
-        f"{pipeline_key}_seg"
+        f"{pipeline_key}Seg"
     ]
 
     check_required_columns(df, required_columns)
@@ -140,14 +140,14 @@ def vol_plot_csv(
     if summary_csv.exists():
         os.remove(summary_csv)
 
-    filtered_df = df.dropna(subset=[f"{pipeline_key}_seg"])
+    filtered_df = df.dropna(subset=[f"{pipeline_key}Seg"])
 
     if patients is None:
-        patients = list(filtered_df["Anon_PatientID"].unique())
+        patients = list(filtered_df["AnonPatientID"].unique())
 
     kwargs_list = [
         {
-            "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
+            "patient_df": filtered_df[filtered_df["AnonPatientID"] == patient].copy(),
             "plot_dir": plot_dir,
             "pipeline_key": pipeline_key,
         }
@@ -171,7 +171,7 @@ def vol_plot_csv(
                     pd.read_csv(summary_csv, dtype=str)
                     .drop_duplicates(
                         subset=[
-                            "Anon_PatientID",
+                            "AnonPatientID",
                             "Label",
                             "Tumor ID",
                             "Relative Date [Y]",
@@ -186,7 +186,7 @@ def vol_plot_csv(
 
             df = (
                 df 
-                .sort_values(["Anon_PatientID", "Label", "Tumor ID", "Relative Date [Y]"])
+                .sort_values(["AnonPatientID", "Label", "Tumor ID", "Relative Date [Y]"])
                 .reset_index(drop=True)
             )
             df.to_csv(summary_csv, index=False)
@@ -196,14 +196,14 @@ def vol_plot_csv(
         pd.read_csv(summary_csv, dtype=str)
         .drop_duplicates(
             subset=[
-                "Anon_PatientID",
+                "AnonPatientID",
                 "Label",
                 "Tumor ID",
                 "Relative Date [Y]",
             ]
         )
 
-        .sort_values(["Anon_PatientID", "Label", "Tumor ID", "Relative Date [Y]"])
+        .sort_values(["AnonPatientID", "Label", "Tumor ID", "Relative Date [Y]"])
         .reset_index(drop=True)
     )
     df.to_csv(summary_csv, index=False)

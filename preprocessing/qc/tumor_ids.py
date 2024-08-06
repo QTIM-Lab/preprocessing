@@ -93,7 +93,7 @@ def track_patient_tumors(
     patient_df: pd.DataFrame
         A DataFrame containing preprocessed segmentation locations and information required
         for the output file names for a single patient. It must contain the columns:
-        'Anon_PatientID', 'Anon_StudyID', 'SeriesType', and f'{pipeline_key}_seg'. Additionally,
+        'AnonPatientID', 'AnonStudyID', 'SeriesType', and f'{pipeline_key}Seg'. Additionally,
         the previous preprocessing is assumed to have been registered longitudinally or to an
         atlas.
 
@@ -113,10 +113,10 @@ def track_patient_tumors(
         label.
     """
     required_columns = [
-        "Anon_PatientID",
-        "Anon_StudyID",
+        "AnonPatientID",
+        "AnonStudyID",
         "SeriesType",
-        f"{pipeline_key}_seg",
+        f"{pipeline_key}Seg",
     ]
 
     check_required_columns(patient_df, required_columns)
@@ -129,11 +129,11 @@ def track_patient_tumors(
     for label in labels:
         cc_arrays[label] = {}
         for i in range(len(rows)):
-            seg_file = rows[i][f"{pipeline_key}_seg"]
+            seg_file = rows[i][f"{pipeline_key}Seg"]
             array = (GetArrayFromImage(ReadImage(seg_file)) == label).astype(int)
 
-            patient_id = rows[i]["Anon_PatientID"]
-            study_id = rows[i]["Anon_StudyID"]
+            patient_id = rows[i]["AnonPatientID"]
+            study_id = rows[i]["AnonStudyID"]
             series_type = rows[i]["SeriesType"]
 
             basename = f"{patient_id}_{study_id}_ids_label{label}.nii.gz"
@@ -150,7 +150,7 @@ def track_patient_tumors(
 
     for label in labels:
         for i, tumor_id_file in enumerate(cc_arrays[label].keys()):
-            seg_file = rows[i][f"{pipeline_key}_seg"]
+            seg_file = rows[i][f"{pipeline_key}Seg"]
             seg = ReadImage(seg_file)
 
             tumor_id_array = cc_arrays[label][tumor_id_file]
@@ -182,7 +182,7 @@ def track_tumors_csv(
     __________
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following columns:
-        'Anon_PatientID', 'Anon_StudyID', 'SeriesType', and f'{pipeline_key}_seg'. Additionally,
+        'AnonPatientID', 'AnonStudyID', 'SeriesType', and f'{pipeline_key}Seg'. Additionally,
         the previous preprocessing is assumed to have been registered longitudinally or to an
         atlas.
 
@@ -190,7 +190,7 @@ def track_tumors_csv(
         The directory that will contain the tumor id mask files.
 
     patients: Sequence[str] | None
-        A sequence of patients to select from the 'Anon_PatientID' column of the CSV. If 'None'
+        A sequence of patients to select from the 'AnonPatientID' column of the CSV. If 'None'
         is provided, all patients will be preprocessed.
 
     pipeline_key: str
@@ -211,22 +211,22 @@ def track_tumors_csv(
     df = pd.read_csv(csv, dtype=str)
 
     required_columns = [
-        "Anon_PatientID",
-        "Anon_StudyID",
+        "AnonPatientID",
+        "AnonStudyID",
         "SeriesType",
-        f"{pipeline_key}_seg",
+        f"{pipeline_key}Seg",
     ]
 
     check_required_columns(df, required_columns)
 
-    filtered_df = df.dropna(subset=[f"{pipeline_key}_seg"])
+    filtered_df = df.dropna(subset=[f"{pipeline_key}Seg"])
 
     if patients is None:
-        patients = list(filtered_df["Anon_PatientID"].unique())
+        patients = list(filtered_df["AnonPatientID"].unique())
 
     kwargs_list = [
         {
-            "patient_df": filtered_df[filtered_df["Anon_PatientID"] == patient].copy(),
+            "patient_df": filtered_df[filtered_df["AnonPatientID"] == patient].copy(),
             "tracking_dir": tracking_dir,
             "pipeline_key": pipeline_key,
             "labels": labels,
@@ -250,7 +250,7 @@ def track_tumors_csv(
             df = pd.merge(df, tracked_df, how="outer")
             df = (
                 df.drop_duplicates(subset="SeriesInstanceUID")
-                .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                .sort_values(["AnonPatientID", "AnonStudyID"])
                 .reset_index(drop=True)
             )
             df.to_csv(csv, index=False)
@@ -259,7 +259,7 @@ def track_tumors_csv(
     df = (
         pd.read_csv(csv, dtype=str)
         .drop_duplicates(subset="SeriesInstanceUID")
-        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .sort_values(["AnonPatientID", "AnonStudyID"])
         .reset_index(drop=True)
     )
 

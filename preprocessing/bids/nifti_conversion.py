@@ -173,7 +173,7 @@ def convert_to_nifti(
 
     if not dicom_integrity_checks(dicom_dir):
         print(
-            f"{dicom_dir} does not pass integrity checks and will not be converted to nifti"
+            f"{dicom_dir} does not pass integrity checks and will not be converted to NIfTI"
         )
         return None
 
@@ -214,7 +214,7 @@ def convert_study(
     __________
     study_df: pd.DataFrame
         A DataFrame containing data for a single study. It must contain the following
-        columns: ['dicoms', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID',
+        columns: ['Dicoms', 'AnonPatientID', 'AnonStudyID', 'StudyInstanceUID',
         'Manufacturer', 'NormalizedSeriesDescription', 'SeriesType'].
 
     nifti_dir: Path | str
@@ -235,16 +235,16 @@ def convert_study(
     Returns
     _______
     pd.DataFrame
-        A DataFrame that contains the new column: 'nifti'
+        A DataFrame that contains the new column: 'Nifti'
     """
     if source_software:
         source_external_software()
 
     if check_columns:
         required_columns = [
-            "dicoms",
-            "Anon_PatientID",
-            "Anon_StudyID",
+            "Dicoms",
+            "AnonPatientID",
+            "AnonStudyID",
             "StudyInstanceUID",
             "Manufacturer",
             "NormalizedSeriesDescription",
@@ -264,10 +264,10 @@ def convert_study(
 
         for i in range(series_df.shape[0]):
             output_nifti = convert_to_nifti(
-                dicom_dir=series_df.loc[series_df.index[i], "dicoms"],
+                dicom_dir=series_df.loc[series_df.index[i], "Dicoms"],
                 nifti_dir=nifti_dir,
-                anon_patient_id=series_df.loc[series_df.index[i], "Anon_PatientID"],
-                anon_study_id=series_df.loc[series_df.index[i], "Anon_StudyID"],
+                anon_patient_id=series_df.loc[series_df.index[i], "AnonPatientID"],
+                anon_study_id=series_df.loc[series_df.index[i], "AnonStudyID"],
                 manufacturer=series_df.loc[series_df.index[i], "Manufacturer"],
                 normalized_series_description=series_description,
                 subdir=series_df.loc[series_df.index[i], "SeriesType"],
@@ -276,7 +276,7 @@ def convert_study(
             )
             output_niftis.append(output_nifti)
 
-        series_df["nifti"] = output_niftis
+        series_df["Nifti"] = output_niftis
         series_dfs.append(series_df)
 
     df = pd.concat(series_dfs)
@@ -302,7 +302,7 @@ def convert_batch_to_nifti(
 
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following
-        columns: ['dicoms', 'Anon_PatientID', 'Anon_StudyID', 'StudyInstanceUID',
+        columns: ['Dicoms', 'AnonPatientID', 'AnonStudyID', 'StudyInstanceUID',
         'SeriesInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription', 'SeriesType'].
 
     overwrite: bool
@@ -322,7 +322,7 @@ def convert_batch_to_nifti(
     Returns
     _______
     pd.DataFrame
-        A DataFrame that contains the new column: 'nifti'. This DataFrame will be used to overwrite
+        A DataFrame that contains the new column: 'Nifti'. This DataFrame will be used to overwrite
         the CSV.
     """
 
@@ -332,9 +332,9 @@ def convert_batch_to_nifti(
 
     if check_columns:
         required_columns = [
-            "dicoms",
-            "Anon_PatientID",
-            "Anon_StudyID",
+            "Dicoms",
+            "AnonPatientID",
+            "AnonStudyID",
             "StudyInstanceUID",
             "SeriesInstanceUID",
             "Manufacturer",
@@ -375,7 +375,7 @@ def convert_batch_to_nifti(
             df = pd.merge(df, nifti_df, how="outer")
             df = (
                 df.drop_duplicates(subset="SeriesInstanceUID")
-                .sort_values(["Anon_PatientID", "Anon_StudyID"])
+                .sort_values(["AnonPatientID", "AnonStudyID"])
                 .reset_index(drop=True)
             )
             df.to_csv(csv, index=False)
@@ -384,7 +384,7 @@ def convert_batch_to_nifti(
     df = (
         pd.read_csv(csv, dtype=str)
         .drop_duplicates(subset="SeriesInstanceUID")
-        .sort_values(["Anon_PatientID", "Anon_StudyID"])
+        .sort_values(["AnonPatientID", "AnonStudyID"])
         .reset_index(drop=True)
     )
     df.to_csv(csv, index=False)
