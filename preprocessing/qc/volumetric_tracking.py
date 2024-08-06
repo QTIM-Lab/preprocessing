@@ -29,6 +29,8 @@ def vol_plot_patient(
 
         filtered_df = patient_df.dropna(subset=key)
 
+        study_uids = patient_df["Anon_StudyID"]
+
         arrays = [GetArrayFromImage(ReadImage(file)) for file in filtered_df[key]]
 
         total_tumors = max([array.max() for array in arrays])
@@ -39,7 +41,7 @@ def vol_plot_patient(
 
         max_volumes = {}
 
-        for array, date in zip(arrays, normalized_dates):
+        for array, date, study_uid in zip(arrays, normalized_dates, study_uids):
             for i in range(1, total_tumors + 1):
                 volume = (array == i).astype(int).sum()
                 max_volumes[i] = max(volume, max_volumes.get(i, 0))
@@ -47,6 +49,7 @@ def vol_plot_patient(
                 rows.append(
                     {
                         "Anon_PatientID": patient_id,
+                        "Anon_StudyID": study_uid,
                         "Label": label,
                         "Tumor ID": f"{i:03d}",
                         "Volume": volume,
