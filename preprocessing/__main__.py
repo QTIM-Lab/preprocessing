@@ -71,19 +71,19 @@ The following commands are available:
                                 'NormalizedSeriesDescription's must be obtained externally before
                                 the NIfTI dataset can be reorganized.
 
-    reorganize-dicoms           Reorganize DICOMs to follow the BIDS convention. Any DICOMs found
+    reorganize-dicoms           Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found
                                 recursively within this directory will be reorganized (at least
                                 one level of subdirectories is assumed). Anonomyzation keys for
                                 PatientIDs and StudyIDs are provided within a CSV.
 
-    reorganize-niftis           Reorganize a NIfTI dataset to follow BIDS convention. As NIfTI files
+    reorganize-niftis           Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files
                                 lack metadata, anonymization keys must be provided in the form of a
                                 CSV, such as one obtained with `nifti-dataset-anon-keys`.
 
     dataset-to-nifti            Convert DICOMs to NIfTI file format. A CSV is required to map a
                                 DICOM series to the resulting .nii.gz file and to provide
-                                the context for filenames. The outputs will comply with the BIDS
-                                conventions.
+                                the context for filenames. The outputs will follow a BIDS inspired
+                                convention.
 
     predict-series              Predict the sequence type for every series in your dataset. A CSV
                                 is required to indicate the location of the corresponding DICOMs.
@@ -93,7 +93,7 @@ The following commands are available:
 
     brain-preprocessing         Preprocess NIfTI files for deep learning. A CSV is required to
                                 indicate the location of source files and to procide the context
-                                for filenames. The outputs will comply with BIDS conventions.
+                                for filenames. The outputs will follow a BIDS inspired convention.
 
     track-tumors                Longitudinal tracking of individual tumors. Each connected component
                                 for a given label within a segmentation mask is assigned a unique ID
@@ -188,7 +188,7 @@ reorganize_d = subparsers.add_parser(
     "reorganize-dicoms",
     description=(
         """
-        Reorganize DICOMs to follow the BIDS convention. Any DICOMs found
+        Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found
         recursively within this directory will be reorganized (at least
         one level of subdirectories is assumed). Anonomyzation keys for
         PatientIDs and StudyIDs are provided within a CSV.
@@ -210,7 +210,7 @@ reorganize_d.add_argument(
     help=(
         """
         The directory that will contain the same DICOM files reorganized to 
-        follow the BIDS convention.
+        follow a BIDS inspired convention.
         """
     ),
 )
@@ -250,7 +250,7 @@ reorganize_n = subparsers.add_parser(
     "reorganize-niftis",
     description=(
         """
-        Reorganize a NIfTI dataset to follow BIDS convention. As NIfTI files
+        Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files
         lack metadata, anonymization keys must be provided in the form of a
         CSV, such as one obtained with `nifti-dataset-anon-keys`.
         """
@@ -296,8 +296,8 @@ dataset_to_nifti = subparsers.add_parser(
         """
         Convert DICOMs to NIfTI file format. A CSV is required to map a
         DICOM series to the resulting .nii.gz file and to provide
-        the context for filenames. The outputs will comply with the BIDS
-        conventions.
+        the context for filenames. The outputs will follow a BIDS
+        inspired convention.
         """
     ),
 )
@@ -408,7 +408,7 @@ brain_preprocessing = subparsers.add_parser(
         """
         Preprocess NIfTI files for deep learning. A CSV is required to
         indicate the location of source files and to procide the context
-        for filenames. The outputs will comply with BIDS conventions.
+        for filenames. The outputs will follow a BIDS inspired convention.
         """
     ),
 )
@@ -769,14 +769,14 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "old-project-anon-keys":
-        from preprocessing.bids import find_anon_keys
+        from preprocessing.data import find_anon_keys
 
         kwargs = {"input_dir": args.input_dir, "output_dir": args.output_dir}
 
         tracked_command(find_anon_keys, kwargs=kwargs, record_dir=args.output_dir)
 
     elif args.command == "nifti-dataset-anon-keys":
-        from preprocessing.bids import nifti_anon_csv
+        from preprocessing.data import nifti_anon_csv
 
         kwargs = {
             "nifti_dir": args.nifti_dir,
@@ -787,7 +787,7 @@ def main() -> None:
         tracked_command(nifti_anon_csv, kwargs=kwargs, record_dir=args.output_dir)
 
     elif args.command == "reorganize-dicoms":
-        from preprocessing.bids import reorganize_dicoms
+        from preprocessing.data import reorganize_dicoms
 
         kwargs = {
             "original_dicom_dir": args.original_dicom_dir,
@@ -800,7 +800,7 @@ def main() -> None:
         tracked_command(reorganize_dicoms, kwargs=kwargs, record_dir=args.new_dicom_dir)
 
     elif args.command == "reorganize-niftis":
-        from preprocessing.bids import reorganize_niftis
+        from preprocessing.data import reorganize_niftis
 
         kwargs = {
             "nifti_dir": args.nifti_dir,
@@ -811,7 +811,7 @@ def main() -> None:
         tracked_command(reorganize_niftis, kwargs=kwargs, record_dir=args.nifti_dir)
 
     elif args.command == "dataset-to-nifti":
-        from preprocessing.bids import convert_batch_to_nifti
+        from preprocessing.data import convert_batch_to_nifti
 
         kwargs = {
             "nifti_dir": args.nifti_dir,

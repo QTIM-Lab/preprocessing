@@ -311,7 +311,7 @@ The following flags are optional for all commands:
 The following commands are available: 
     brain-preprocessing         Preprocess NIfTI files for deep learning. A CSV is required to
                                 indicate the location of source files and to procide the context
-                                for filenames. The outputs will comply with BIDS conventions. 
+                                for filenames. The outputs will follow a BIDS inspired convention. 
 
 Run `spreprocessing <command> --help` for more details about how to use each individual command.
 
@@ -381,7 +381,7 @@ brain_preprocessing = subparsers.add_parser(
         """
         Preprocess NIfTI files for deep learning. A CSV is required to
         indicate the location of source files and to procide the context
-        for filenames. The outputs will comply with BIDS conventions.
+        for filenames. The outputs will follow a BIDS inspired convention.
         """
     ),
 )

@@ -16,13 +16,13 @@ nifti_anon_csv
     obtained externally before the NIfTI dataset can be reorganized.
 
 reorganize_dicoms
-    Reorganize DICOMs to follow the BIDS convention. Any DICOMs found recursively
+    Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found recursively
     within this directory will be reorganized (at least one level of subdirectories
     is assumed). Anonomyzation keys for PatientIDs and StudyIDs are provided within
     a CSV.
 
 reorganize_niftis
-    Reorganize a NIfTI dataset to follow BIDS convention. As NIfTI files lack metadata,
+    Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files lack metadata,
     anonymization keys must be provided in the form of a CSV, such as one obtained with
     `nifti_anon_csv`.
 """
@@ -293,7 +293,7 @@ def reorganize_dicoms(
     drop_incomplete_series: bool = True,
 ) -> pd.DataFrame:
     """
-    Reorganize DICOMs to follow the BIDS convention. Any DICOMs found recursively
+    Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found recursively
     within this directory will be reorganized (at least one level of subdirectories
     is assumed). Anonomyzation keys for PatientIDs and StudyIDs are provided within
     a CSV.
@@ -485,7 +485,7 @@ def reorganize_niftis(
     cpus: int = 1,
 ) -> pd.DataFrame:
     """
-    Reorganize a NIfTI dataset to follow BIDS convention. As NIfTI files lack metadata,
+    Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files lack metadata,
     anonymization keys must be provided in the form of a CSV, such as one obtained with
     `nifti_anon_csv`.
 

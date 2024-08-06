@@ -119,7 +119,7 @@ def convert_to_nifti(
 
     nifti_dir: Path | str
         The root directory under which the converted NIfTI files will be written. Subdirectories
-        will be created to follow BIDS convention.
+        will be created to follow a BIDS inspired convention.
 
     anon_patient_id: str
         The anonymized PatientID for the series being converted (e.g., 'sub-01').
@@ -219,7 +219,7 @@ def convert_study(
 
     nifti_dir: Path | str
         The root directory under which the converted NIfTI files will be written. Subdirectories
-        will be created to follow BIDS convention.
+        will be created to follow a BIDS inspired convention.
 
     overwrite: bool
         Whether to overwrite the NIfTI file if there is already one with the same output name.
@@ -298,7 +298,7 @@ def convert_batch_to_nifti(
     __________
     nifti_dir: Path | str
         The root directory under which the converted NIfTI files will be written. Subdirectories
-        will be created to follow BIDS convention.
+        will be created to follow a BIDS inspired convention.
 
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following

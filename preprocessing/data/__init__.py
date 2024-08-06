@@ -1,6 +1,6 @@
 """
-The `bids` package contains tools for organizing DICOM and NIfTI datasets into the
-BIDS organizational scheme and converting files from DICOM to NIfTI format.
+The `data` package contains tools for organizing DICOM and NIfTI datasets into a
+BIDS inspired organizational scheme and converting files from DICOM to NIfTI format.
 
 Public Functions
 ________________
@@ -24,13 +24,13 @@ nifti_anon_csv
     obtained externally before the NIfTI dataset can be reorganized.
 
 reorganize_dicoms
-    Reorganize DICOMs to follow the BIDS convention. Any DICOMs found recursively
+    Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found recursively
     within this directory will be reorganized (at least one level of subdirectories
     is assumed). Anonomyzation keys for PatientIDs and StudyIDs are provided within
     a CSV.
 
 reorganize_niftis
-    Reorganize a NIfTI dataset to follow BIDS convention. As NIfTI files lack metadata,
+    Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files lack metadata,
     anonymization keys must be provided in the form of a CSV, such as one obtained with
     `nifti_anon_csv`.
 """
@@ -43,8 +43,6 @@ from .reorganize import (
 )
 from .nifti_conversion import convert_to_nifti, convert_study, convert_batch_to_nifti
 
-# from .validator import validate
-
 
 __all__ = [
     "convert_to_nifti",
@@ -54,5 +52,4 @@ __all__ = [
     "nifti_anon_csv",
     "reorganize_dicoms",
     "reorganize_niftis",
-    # "validate",
 ]
