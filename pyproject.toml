@@ -7,12 +7,11 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">3.10,<3.12"
+numpy = "<2.0"
 pydicom = "^2.4.3"
 pandas = "^2.1.3"
 visidata = "^2.11.1"
 tqdm = "^4.57.0"
-bids-validator = "^1.14.0"
-pybids = "^0.16.4"
 dicom2nifti = "^2.4.9"
 surfa = {git = "https://github.com/freesurfer/surfa.git", branch = "master"} # rev = "026cabec14bb03d9dfbc6b5bdf14baec7bd51c7f"}
 voxelmorph = {git = "https://github.com/voxelmorph/voxelmorph.git", branch = "dev"} # rev = "ca3d47a2c254aae9a0c0e1b30c24c324c211ebc8"}
@@ -25,6 +24,7 @@ highdicom = "^0.22.0"
 tensorflow = "2.14"
 torch = "^2.2.1"
 seaborn = "^0.13.2"
+psutil = "6.0.0"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.2"

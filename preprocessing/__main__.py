@@ -804,7 +804,7 @@ def main() -> None:
             print("`preprocessing` installation is valid.")
 
         except Exception as error:
-            print(f"`preprocessing` installation is invalid. Encountered the folloowing exception during validation: {error}")
+            print(f"`preprocessing` installation is invalid. Encountered the following exception during validation: {error}")
         
 
     elif args.command == "old-project-anon-keys":
