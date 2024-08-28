@@ -129,7 +129,7 @@ old_project_anon_keys = subparsers.add_parser(
     description=(
         """
         Create anonymization keys for anonymous PatientID and StudyID
-        from the previous QTIM organizational scheme. Is compatible 
+        from the previous QTIM organizational scheme. Is compatible
         with data following a following <Patient_ID>/<Study_ID> directory
         hierarchy.
         """
@@ -222,7 +222,7 @@ reorganize_d.add_argument(
     type=Path,
     help=(
         """
-        The directory that will contain the same DICOM files reorganized to 
+        The directory that will contain the same DICOM files reorganized to
         follow a BIDS inspired convention.
         """
     ),
@@ -284,7 +284,7 @@ reorganize_n.add_argument(
     help=(
         """
         A CSV containing the original location of NIfTI files and metadata
-        required for preprocessing commands. It must contain the columns: 
+        required for preprocessing commands. It must contain the columns:
         'AnonPatientID', 'AnonStudyID', 'PatientID', 'StudyDate',
         'SeriesInstanceUID', 'StudyInstanceUID', 'SeriesDescription',
         'OriginalNifti', and 'NormalizedSeriesDescription'. 'SeriesType'
@@ -328,7 +328,7 @@ dataset_to_nifti.add_argument(
     help=(
         """
         A CSV containing dicom location and information required for the nifti file
-        names. It must contain the columns: ['Dicoms', 'AnonPatientID', 
+        names. It must contain the columns: ['Dicoms', 'AnonPatientID',
         'AnonStudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription',
         'SeriesType'].
         """
@@ -395,7 +395,7 @@ predict_series.add_argument(
         """
         Key for combining 'NormalizedDescription's defined by mr_series_selection into desired
         categories. This information is provided by using a path to a json file containing this
-        information. If nothing is provided, the description_key will default to: 
+        information. If nothing is provided, the description_key will default to:
 
         DEFAULT_SERIES_KEY = {
             "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
@@ -439,7 +439,7 @@ brain_preprocessing.add_argument(
     help=(
         """
         A CSV containing NIfTI location and information required for the output file names.
-        It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID', 
+        It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID',
         'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
         """
     ),
@@ -478,7 +478,7 @@ brain_preprocessing.add_argument(
     default="T1Post",
     help=(
         """
-        The value that will be used to select the fixed image during registration. This 
+        The value that will be used to select the fixed image during registration. This
         should correspond to a value within the 'NormalizedSeriesDescription' column in
         the CSV. If you have segmentation files in your data. They should correspond to
         this same series. Defaults to 'T1Post'.
@@ -514,11 +514,11 @@ brain_preprocessing.add_argument(
 brain_preprocessing.add_argument(
     "-m",
     "--model",
-    choices=["rigid", "affine", "joint", "deform"],
+    choices=["rigid", "affine", "affine_crop", "joint", "deform"],
     default="affine",
     help=(
         """
-        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'affine_crop', 'joint',
         and 'deform'. Defaults to 'affine'.
         """
     ),
@@ -773,7 +773,7 @@ def main() -> None:
     if len(sys.argv) == 1:
         parser.print_usage()
         exit(0)
-    
+
     assert not any(["SLURM" in var for var in os.environ.keys()]), (
         "This is an incorrect use of the `preprocessing` library's CLI. To use with slurm, "
         "please switch to the `spreprocessing` CLI. Run `spreprocessing -h` for additional help."
@@ -791,7 +791,7 @@ def main() -> None:
             from preprocessing import dcm_tools
             from preprocessing import synthmorph
             from preprocessing import utils
-            
+
             utils.source_external_software()
 
             if "PREPROCESSING_MODELS_PATH" in os.environ:
@@ -805,7 +805,7 @@ def main() -> None:
 
         except Exception as error:
             raise Exception(f"`preprocessing` installation is invalid. Encountered the following exception during validation: {error}")
-        
+
 
     elif args.command == "old-project-anon-keys":
         from preprocessing.data import find_anon_keys
@@ -860,7 +860,7 @@ def main() -> None:
 
         tracked_command(
             convert_batch_to_nifti, kwargs=kwargs, record_dir=args.nifti_dir
-        ) 
+        )
 
     elif args.command == "brain-preprocessing":
         from preprocessing.brain import preprocess_from_csv

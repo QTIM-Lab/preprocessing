@@ -231,7 +231,7 @@ def local_reg(
     pipeline_key: str,
     fixed_image_path: str,
     sitk_im_cache: Dict[str, Image],
-    model: Literal["rigid", "affine", "joint", "deform"] = "affine",
+    model: Literal["rigid", "affine", "affine_crop", "joint", "deform"] = "affine",
     verbose: bool = False,
     debug: bool = False,
 ) -> Tuple[Dict[str, Any], Dict[str, Image]]:
@@ -255,7 +255,7 @@ def local_reg(
         format: {path: Image}.
 
     model: str
-        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'affine_crop', 'joint',
         and 'deform'. Defaults to 'affine'.
 
     verbose: bool
@@ -353,7 +353,7 @@ def long_reg(
     fixed_image_path: str,
     study_SS_mask_file: str,
     sitk_im_cache: Dict[str, Image],
-    model: Literal["rigid", "affine", "joint", "deform"] = "affine",
+    model: Literal["rigid", "affine", "affine_crop", "joint", "deform"] = "affine",
     verbose: bool = False,
     debug: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Image]]:
@@ -375,7 +375,7 @@ def long_reg(
         The cache used to store intermediate files within the registration pipeline following this
         format: {path: Image}.
     model: str
-        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'affine_crop', 'joint',
         and 'deform'. Defaults to 'affine'.
     verbose: bool
         Whether to print additional information related like commands and their arguments are printed. Defaults
@@ -531,7 +531,7 @@ def preprocess_study(
     pipeline_key: str,
     registration_key: str = "T1Post",
     registration_target: Path | str | None = None,
-    registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
+    registration_model: Literal["rigid", "affine", "affine_crop", "joint", "deform"] = "affine",
     orientation: str = "RAS",
     spacing: Sequence[float | int] = [1, 1, 1],
     skullstrip: bool = True,
@@ -1095,7 +1095,7 @@ def preprocess_patient(
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
     atlas_target: Path | str | None = None,
-    registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
+    registration_model: Literal["rigid", "affine", "affine_crop", "joint", "deform"] = "affine",
     orientation: str = "RAS",
     spacing: Sequence[float | int] = [1, 1, 1],
     skullstrip: bool = True,
@@ -1136,7 +1136,7 @@ def preprocess_patient(
         will be disabled.
 
     registration_model: str
-        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'affine_crop', 'joint',
         and 'deform'. Defaults to 'affine'.
 
     orientation: str
@@ -1331,7 +1331,7 @@ def preprocess_from_csv(
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
     atlas_target: Path | str | None = None,
-    registration_model: Literal["rigid", "affine", "joint", "deform"] = "affine",
+    registration_model: Literal["rigid", "affine", "affine_crop", "joint", "deform"] = "affine",
     orientation: str = "RAS",
     spacing: Sequence[float | int] = [1, 1, 1],
     skullstrip: bool = True,
@@ -1376,7 +1376,7 @@ def preprocess_from_csv(
         will be disabled.
 
     registration_model: str
-        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'joint',
+        The Synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'affine_crop', 'joint',
         and 'deform'. Defaults to 'affine'.
 
     orientation: str

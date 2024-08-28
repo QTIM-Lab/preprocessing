@@ -26,8 +26,9 @@ weights = {
         "synthmorph.affine.2.h5",
         "synthmorph.deform.2.h5",
     ),
-    "deform": ("synthmorph.deform.2.h5",),
+    "deform": ("synthmorph.deform.3.h5",),
     "affine": ("synthmorph.affine.2.h5",),
+    "affine_crop": ("synthmorph.affine.crop.h5",),
     "rigid": ("synthmorph.rigid.1.h5",),
 }
 
@@ -223,7 +224,7 @@ def synthmorph_registration(
     sitk_out: bool = True,
     sitk_im_cache: Dict[str, Image] = {},
     accompanying_in_cache: bool = False,
-    m: Literal["joint", "deform", "affine", "rigid"] = "joint",
+    m: Literal["joint", "deform", "affine", "affine_crop", "rigid"] = "joint",
     o: str | None = None,
     O: str | None = None,
     H: bool = False,
@@ -280,7 +281,7 @@ def synthmorph_registration(
         Whether all of the paths within `accompanying_images` are stored within `sitk_im_cache`.
         Defaults to False.
 
-    m: Literal["joint", "deform", "affine", "rigid"]
+    m: Literal["joint", "deform", "affine", "affine_crop", "rigid"]
         Model weights used for registration. Defaults to "joint".
 
     o: str | None
@@ -336,7 +337,7 @@ def synthmorph_registration(
         images if `sitk_out` is True.
     """
     in_shape = (e,) * 3
-    is_mat = m in ("affine", "rigid")
+    is_mat = m in ("affine", "affine_crop", "rigid")
 
     if H and not is_mat:
         print("Error: -H is not compatible with deformable registration")

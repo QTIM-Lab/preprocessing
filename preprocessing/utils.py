@@ -332,7 +332,7 @@ def check_for_models(models_dir: str) -> None:
     os.makedirs(models_dir, exist_ok=True)
 
     if not os.path.exists(f"{models_dir}/synthmorph.affine.2.h5"):
-        command = f"wget -O {models_dir}/synthmorph.affine.2.h5 https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/repo/annex.git/annex/objects/66d/dba/SHA256E-s51455312--1ac5304b683036e5177f5b4ad38fa09fcbbe7883e742d6fa5bdaedd0e619ced6.2.h5/SHA256E-s51455312--1ac5304b683036e5177f5b4ad38fa09fcbbe7883e742d6fa5bdaedd0e619ced6.2.h5"
+        command = f"wget -O {models_dir}/synthmorph.affine.2.h5 https://surfer.nmr.mgh.harvard.edu/docs/synthmorph/synthmorph.affine.2.h5"
         print(command)
         result = run(command.split(" "))
 
@@ -343,8 +343,21 @@ def check_for_models(models_dir: str) -> None:
             print(f"synthmorph.affine.2.h5 could not be downloaded due to {error}")
             quit()
 
-    if not os.path.exists(f"{models_dir}/synthmorph.deform.2.h5"):
-        command = f"wget -O {models_dir}/synthmorph.deform.2.h5 https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/repo/annex.git/annex/objects/b6d/a4d/SHA256E-s3508630384--0cfb8f7a5073f15efba6e2108c3c6e05cc2ef28d21a94822150df7a760afe156.2.h5/SHA256E-s3508630384--0cfb8f7a5073f15efba6e2108c3c6e05cc2ef28d21a94822150df7a760afe156.2.h5"
+    if not os.path.exists(f"{models_dir}/synthmorph.affine.crop.h5"):
+        command = f"wget -O {models_dir}/synthmorph.affine.crop.h5 https://surfer.nmr.mgh.harvard.edu/docs/synthmorph/synthmorph.affine.crop.h5"
+        print(command)
+        result = run(command.split(" "))
+
+        try:
+            result.check_returncode()
+
+        except Exception as error:
+            print(f"synthmorph.affine.crop.h5 could not be downloaded due to {error}")
+            quit()
+
+
+    if not os.path.exists(f"{models_dir}/synthmorph.deform.3.h5"):
+        command = f"wget -O {models_dir}/synthmorph.deform.3.h5 https://surfer.nmr.mgh.harvard.edu/docs/synthmorph/synthmorph.deform.3.h5"
         print(command)
         result = run(command.split(" "))
 
@@ -356,7 +369,7 @@ def check_for_models(models_dir: str) -> None:
             quit()
 
     if not os.path.exists(f"{models_dir}/synthmorph.rigid.1.h5"):
-        command = f"wget -O {models_dir}/synthmorph.rigid.1.h5 https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/repo/annex.git/annex/objects/b6d/a4d/SHA256E-s3508630384--0cfb8f7a5073f15efba6e2108c3c6e05cc2ef28d21a94822150df7a760afe156.2.h5/SHA256E-s3508630384--0cfb8f7a5073f15efba6e2108c3c6e05cc2ef28d21a94822150df7a760afe156.2.h5"
+        command = f"wget -O {models_dir}/synthmorph.rigid.1.h5 https://surfer.nmr.mgh.harvard.edu/docs/synthmorph/synthmorph.rigid.1.h5"
         print(command)
         result = run(command.split(" "))
 
@@ -368,7 +381,7 @@ def check_for_models(models_dir: str) -> None:
             quit()
 
     if not os.path.exists(f"{models_dir}/synthstrip.1.pt"):
-        command = f"wget -O {models_dir}/synthstrip.1.pt https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/repo/annex.git/annex/objects/fdd/51c/SHA256E-s30851709--37417f802196186441aae3e7f385d94f8a98c64a88acaeaa2723af995c653e33.1.pt/SHA256E-s30851709--37417f802196186441aae3e7f385d94f8a98c64a88acaeaa2723af995c653e33.1.pt"
+        command = f"wget -O {models_dir}/synthstrip.1.pt https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/requirements/synthstrip.1.pt"
         print(command)
         result = run(command.split(" "))
 
@@ -380,7 +393,7 @@ def check_for_models(models_dir: str) -> None:
             quit()
 
     if not os.path.exists(f"{models_dir}/synthstrip.nocsf.1.pt"):
-        command = f"wget -O {models_dir}/synthstrip.nocsf.1.pt https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/repo/annex.git/annex/objects/ae1/f00/SHA256E-s30851709--62bf01137c45b5f0cc04d59dbaed5b9ac138b3f25b766c062a7c1a0d696ecb28.1.pt/SHA256E-s30851709--62bf01137c45b5f0cc04d59dbaed5b9ac138b3f25b766c062a7c1a0d696ecb28.1.pt"
+        command = f"wget -O {models_dir}/synthstrip.nocsf.1.pt https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/requirements/synthstrip.nocsf.1.pt"
         print(command)
         result = run(command.split(" "))
 
@@ -390,6 +403,19 @@ def check_for_models(models_dir: str) -> None:
         except Exception as error:
             print(f"synthstrip.nocsf.1.pt could not be downloaded due to {error}")
             quit()
+
+    if not os.path.exists(f"{models_dir}/synthstrip.infant.1.pt"):
+        command = f"wget -O {models_dir}/synthstrip.infant.1.pt https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/requirements/synthstrip.infant.1.pt"
+        print(command)
+        result = run(command.split(" "))
+
+        try:
+            result.check_returncode()
+
+        except Exception as error:
+            print(f"synthstrip.infant.1.pt could not be downloaded due to {error}")
+            quit()
+
 
 def cpu_adjust(
     max_process_mem: int | float,
