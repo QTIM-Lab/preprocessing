@@ -8,53 +8,6 @@ import sys
 import os
 
 from pathlib import Path
-from typing import Callable, Dict, Any
-from pycrumbs import tracked
-from git import Repo, InvalidGitRepositoryError
-
-try:
-    Repo(__file__, search_parent_directories=True)
-    disable_git_tracking = False
-
-except InvalidGitRepositoryError:
-    disable_git_tracking = True
-
-
-@tracked(
-    directory_parameter="record_dir",
-    record_filename="preprocessing_cli_record.json",
-    chain_records=True,
-    disable_git_tracking=disable_git_tracking,
-    seed_numpy=False,
-    seed_tensorflow=False,
-    seed_torch=False,
-)
-def tracked_command(
-    func: Callable, kwargs: Dict[str, Any], record_dir: Path | str
-) -> Any:
-    """
-    A standardized command format that runs a function from the `preprocessing` library
-    and tracks useful information with pycrumbs.
-
-    Parameters
-    __________
-    func: Callable
-        The function that will be used for the command.
-
-    kwargs: Dict[str, Any]
-        The key-word arguments that will be passed to `func`.
-
-    record_dir: Path | str
-        The directory in which the pycrumbs tracking json will be stored (should be the
-        same as the directory containing `func`'s outputs').
-
-    Returns
-    _______
-    output: Any
-        Whatever is returned by `func(**kwargs)`.
-    """
-    return func(**kwargs)
-
 
 USAGE_STR = """
 preprocessing <command> [<args>]
@@ -699,6 +652,8 @@ def main() -> None:
     """
     The CLI for the `preprocessing` library. Run 'preprocessing -h' for additional help.
     """
+    args = parser.parse_args()
+
     if len(sys.argv) == 1:
         parser.print_usage()
         exit(0)
@@ -708,7 +663,52 @@ def main() -> None:
         "please switch to the `spreprocessing` CLI. Run `spreprocessing -h` for additional help."
     )
 
-    args = parser.parse_args()
+    from typing import Callable, Dict, Any
+    from pycrumbs import tracked
+    from git import Repo, InvalidGitRepositoryError
+
+    try:
+        Repo(__file__, search_parent_directories=True)
+        disable_git_tracking = False
+
+    except InvalidGitRepositoryError:
+        disable_git_tracking = True
+
+
+    @tracked(
+        directory_parameter="record_dir",
+        record_filename="preprocessing_cli_record.json",
+        chain_records=True,
+        disable_git_tracking=disable_git_tracking,
+        seed_numpy=False,
+        seed_tensorflow=False,
+        seed_torch=False,
+    )
+    def tracked_command(
+        func: Callable, kwargs: Dict[str, Any], record_dir: Path | str
+    ) -> Any:
+        """
+        A standardized command format that runs a function from the `preprocessing` library
+        and tracks useful information with pycrumbs.
+
+        Parameters
+        __________
+        func: Callable
+            The function that will be used for the command.
+
+        kwargs: Dict[str, Any]
+            The key-word arguments that will be passed to `func`.
+
+        record_dir: Path | str
+            The directory in which the pycrumbs tracking json will be stored (should be the
+            same as the directory containing `func`'s outputs').
+
+        Returns
+        _______
+        output: Any
+            Whatever is returned by `func(**kwargs)`.
+        """
+        return func(**kwargs)
 
     if args.command == "validate-installation":
         try:

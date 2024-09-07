@@ -777,7 +777,7 @@ if len(suboptimal_mounts) > 0:
     if not mount_override:
         sys.exit(1)
 
-docker_binds = " ".join([f"-v {mount}:{mount}"for mount in mounts])
+docker_binds = " ".join([f"-v {mount}:{mount}" for mount in mounts])
 
 
 command = (
