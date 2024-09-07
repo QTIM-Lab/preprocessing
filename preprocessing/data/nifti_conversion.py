@@ -187,7 +187,7 @@ def convert_to_nifti(
     command = f"dcm2niix -z y -f {output_nifti.name} -o {output_dir} -b y -w {int(overwrite)} {dicom_dir}"
     print(command)
 
-    run(command.split(" "))
+    run(command, shell=True)
 
     if "hitachi" in manufacturer.lower():
         # reconvert the cases from hitachi to avoid GEIR, but use dcm2niix originally to generate json

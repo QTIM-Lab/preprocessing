@@ -339,7 +339,7 @@ def check_for_models(models_dir: str) -> None:
     if not os.path.exists(f"{models_dir}/synthmorph.affine.2.h5"):
         command = f"wget -O {models_dir}/synthmorph.affine.2.h5 https://surfer.nmr.mgh.harvard.edu/docs/synthmorph/synthmorph.affine.2.h5"
         print(command)
-        result = run(command.split(" "))
+        result = run(command, shell=True)
 
         try:
             result.check_returncode()
@@ -351,7 +351,7 @@ def check_for_models(models_dir: str) -> None:
     if not os.path.exists(f"{models_dir}/synthmorph.affine.crop.h5"):
         command = f"wget -O {models_dir}/synthmorph.affine.crop.h5 https://surfer.nmr.mgh.harvard.edu/docs/synthmorph/synthmorph.affine.crop.h5"
         print(command)
-        result = run(command.split(" "))
+        result = run(command, shell=True)
 
         try:
             result.check_returncode()
@@ -364,7 +364,7 @@ def check_for_models(models_dir: str) -> None:
     if not os.path.exists(f"{models_dir}/synthmorph.deform.3.h5"):
         command = f"wget -O {models_dir}/synthmorph.deform.3.h5 https://surfer.nmr.mgh.harvard.edu/docs/synthmorph/synthmorph.deform.3.h5"
         print(command)
-        result = run(command.split(" "))
+        result = run(command, shell=True)
 
         try:
             result.check_returncode()
@@ -376,7 +376,7 @@ def check_for_models(models_dir: str) -> None:
     if not os.path.exists(f"{models_dir}/synthmorph.rigid.1.h5"):
         command = f"wget -O {models_dir}/synthmorph.rigid.1.h5 https://surfer.nmr.mgh.harvard.edu/docs/synthmorph/synthmorph.rigid.1.h5"
         print(command)
-        result = run(command.split(" "))
+        result = run(command, shell=True)
 
         try:
             result.check_returncode()
@@ -388,7 +388,7 @@ def check_for_models(models_dir: str) -> None:
     if not os.path.exists(f"{models_dir}/synthstrip.1.pt"):
         command = f"wget -O {models_dir}/synthstrip.1.pt https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/requirements/synthstrip.1.pt"
         print(command)
-        result = run(command.split(" "))
+        result = run(command, shell=True)
 
         try:
             result.check_returncode()
@@ -400,7 +400,7 @@ def check_for_models(models_dir: str) -> None:
     if not os.path.exists(f"{models_dir}/synthstrip.nocsf.1.pt"):
         command = f"wget -O {models_dir}/synthstrip.nocsf.1.pt https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/requirements/synthstrip.nocsf.1.pt"
         print(command)
-        result = run(command.split(" "))
+        result = run(command, shell=True)
 
         try:
             result.check_returncode()
@@ -412,7 +412,7 @@ def check_for_models(models_dir: str) -> None:
     if not os.path.exists(f"{models_dir}/synthstrip.infant.1.pt"):
         command = f"wget -O {models_dir}/synthstrip.infant.1.pt https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/requirements/synthstrip.infant.1.pt"
         print(command)
-        result = run(command.split(" "))
+        result = run(command, shell=True)
 
         try:
             result.check_returncode()

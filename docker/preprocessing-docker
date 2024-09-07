@@ -787,4 +787,4 @@ command = (
 
 print(f"\n\nLaunching docker with the following command:\n\n{command}\n\n")
 
-run(command.split(" "))
+run(command, shell=True)
