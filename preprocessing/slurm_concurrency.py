@@ -32,7 +32,7 @@ def generate_array_template(
     Generate a script that can be used to launch an array of slurm jobs with `sbatch`.
 
     Parameters
-    __________
+    ----------
     command: str
         The command you wish to run through the preprocessing cli, complete with its own flags.
         Do not include the flags associated with concurrency within the command itself. Only the
@@ -66,10 +66,10 @@ def generate_array_template(
         The number of concurrent jobs to run within the slurm array. Defaults to 50.
 
     Returns
-    _______
+    -------
     Path:
-        The path to the generated array script. 
-    """ 
+        The path to the generated array script.
+    """
     if patients is None:
         df = pd.read_csv(csv, dtype=str)
         patients = list(df["AnonPatientID"].unique())
@@ -82,13 +82,13 @@ def generate_array_template(
     slurm_dir.mkdir(parents=True, exist_ok=True)
 
     script = "#!/bin/bash"
-    
+
     if cpus > 1:
         script += f"\n#SBATCH --array={0}-{num_patients-1}%{min(cpus, num_patients)}"
         script += f"\n#SBATCH --output={slurm_dir}/%A_%a.out"
     else:
         script += f"\n#SBATCH --output={slurm_dir}/%j.out"
-    
+
     script += f"\n#SBATCH --account={account}" if account != "" else ""
     script += f"\n#SBATCH --partition={partition}" if partition != "" else ""
     script += f"\n#SBATCH --time={time}" if time != "" else ""
@@ -99,7 +99,7 @@ def generate_array_template(
 
     if mail_update:
         script += "\n#SBATCH --mail-type=END,FAIL"
- 
+
     script += (
         f"\n\nexport PYENV_VERSION={os.environ['PYENV_VERSION']}"
         if "PYENV_VERSION" in os.environ
@@ -125,9 +125,9 @@ def aggregate_slurm_results(slurm_dir: Path | str, csv: Path | str) -> None:
     """
     Update the primary CSV with the results from the slurm array jobs. Do not run on directly
     on the cluster's login node.
-    
+
     Parameters
-    __________
+    ----------
     slurm_dir: Path | str
         The directory that containing the job array script and its outputs.
 
@@ -135,7 +135,7 @@ def aggregate_slurm_results(slurm_dir: Path | str, csv: Path | str) -> None:
         The path to the primary CSV that you wish to update.
 
     Returns
-    _______
+    -------
     pd.DataFrame
         A DataFrame updated to reflect the results of the slurm array jobs.
     """
@@ -187,7 +187,7 @@ def launch_slurm(
     Launch a primary job array and aggregation job for a supported funciton using slurm.
 
     Parameters
-    __________
+    ----------
     function_name: Literal['brain_preprocessing']
         The basename of the function that will be called.
 
@@ -225,7 +225,7 @@ def launch_slurm(
         The number of concurrent jobs to run within the slurm array. Defaults to 50.
 
     Returns
-    _______
+    -------
     None
     """
     def quotewrap(s):
@@ -308,10 +308,10 @@ The following flags are optional for all commands:
                                 Defaults to 50.
 
 
-The following commands are available: 
+The following commands are available:
     brain-preprocessing         Preprocess NIfTI files for deep learning. A CSV is required to
                                 indicate the location of source files and to procide the context
-                                for filenames. The outputs will follow a BIDS inspired convention. 
+                                for filenames. The outputs will follow a BIDS inspired convention.
 
 Run `spreprocessing <command> --help` for more details about how to use each individual command.
 
@@ -399,7 +399,7 @@ brain_preprocessing.add_argument(
     help=(
         """
         A CSV containing NIfTI location and information required for the output file names.
-        It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID', 
+        It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID',
         'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
         """
     ),
@@ -438,7 +438,7 @@ brain_preprocessing.add_argument(
     default="T1Post",
     help=(
         """
-        The value that will be used to select the fixed image during registration. This 
+        The value that will be used to select the fixed image during registration. This
         should correspond to a value within the 'NormalizedSeriesDescription' column in
         the CSV. If you have segmentation files in your data. They should correspond to
         this same series. Defaults to 'T1Post'.

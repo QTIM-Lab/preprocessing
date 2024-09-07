@@ -3,7 +3,7 @@ The `utils` module contains custom exceptions and useful functions that are refe
 frequently throughout the rest of the library.
 
 Public Classes
-______________
+--------------
 MissingColumnsError
     Exception to be raised in the cases where a DataFrame doesn't have the necessary
     columns to run a function.
@@ -13,7 +13,7 @@ MissingSoftwareError
     that software has not been properly sourced.
 
 Public Functions
-________________
+----------------
 check_required_columns
     Checks DataFrames for the presence of required columns.
 
@@ -36,6 +36,10 @@ check_for_models
 cpu_adjust
     Confirms that the number of parallel processes will fit into the current amount of allowed
     memory and adjusts to an appropriate number if necessary.
+
+update_errorfile
+    Updates an errorfile with the full traceback of an encountered exception and
+    records the corresponding function and arguments.
 """
 
 import os
@@ -43,6 +47,7 @@ import pandas as pd
 import numpy as np
 import psutil
 import warnings
+import traceback
 
 from shutil import which
 from typing import Sequence
@@ -53,7 +58,7 @@ from SimpleITK import (
 )
 from surfa import Volume, ImageGeometry
 from subprocess import run
-
+from pathlib import Path
 
 class MissingSoftwareError(Exception):
     """
@@ -64,14 +69,14 @@ class MissingSoftwareError(Exception):
     def __init__(self, software: str, required_software: Sequence[str]):
         """
         Parameters
-        __________
+        ----------
         software: str
             The name of the software that is required but cannot be found.
         required_software: Sequence[str]
             A sequence of the names of all of the required software that must be installed.
 
         Returns
-        _______
+        -------
         None:
             If raised, a message indicating the software that cannot be found and the list of all required
             software will be printed.
@@ -88,11 +93,11 @@ def source_external_software():
     the required software is checked using 'shutil.which'.
 
     Parameters
-    __________
+    ----------
     None
 
     Returns
-    _______
+    -------
     None
         'MissingSoftwareError' is raised if any software is not available.
     """
@@ -124,7 +129,7 @@ class MissingColumnsError(Exception):
     ):
         """
         Parameters
-        __________
+        ----------
         missing_column: str
             The name of a required column that is not in the DataFrame.
 
@@ -136,7 +141,7 @@ class MissingColumnsError(Exception):
             provided.
 
         Returns
-        _______
+        -------
         None:
             If raised, a message indicating the column that cannot be found, the list of all required
             columns, and any optional columns will be printed.
@@ -163,7 +168,7 @@ def check_required_columns(
     Checks DataFrames for the presence of required columns.
 
     Parameters
-    __________
+    ----------
     df: pd.DataFrame
         A DataFrame that must contain all od the columns in 'required_columns'.
 
@@ -175,7 +180,7 @@ def check_required_columns(
         Defaults to None.
 
     Returns
-    _______
+    -------
     None
         'MissingColumnsError' is raised if any required columns are not in the DataFrame.
     """
@@ -195,12 +200,12 @@ def sitk_to_surfa(sitk_im: Image) -> Volume:
     Convert a SimpleITK.Image to a surfa.Volume.
 
     Parameters
-    __________
+    ----------
     sitk_im: Image
         A SimpleITK.Image to convert.
 
     Returns
-    _______
+    -------
     sf_im: Volume
         The corresponding surfa.Volume.
     """
@@ -226,12 +231,12 @@ def surfa_to_sitk(sf_im: Volume) -> Image:
     Convert a surfa.Volume to a SimpleITK.Image.
 
     Parameters
-    __________
+    ----------
     sf_im: Volume
         A surfa.Volume to convert.
 
     Returns
-    _______
+    -------
     sitk_im: Image
         The corresponding SimpleITK.Image.
     """
@@ -264,7 +269,7 @@ def initialize_models() -> str:
     Set the path to the locations where the preprocessing models are (or will be stored).
 
     Returns
-    _______
+    -------
     models_dir: str
         The directory specified by user input to store the models.
     """
@@ -317,12 +322,12 @@ def check_for_models(models_dir: str) -> None:
     Checks that all of the Synthmorph and Synthstrip models have been successfully installed.
 
     Parameters
-    __________
+    ----------
     models_dir: str
         The directory that should (or will) contain the preprocessing models.
 
     Returns
-    _______
+    -------
     None
         If the models are already installed, nothing will happen. Otherwise, they will be installed.
         If the installation process encounters an error, this function prints the error to the console
@@ -427,7 +432,7 @@ def cpu_adjust(
     memory and adjusts to an appropriate number if necessary.
 
     Parameters
-    __________
+    ----------
     max_process_mem: int | float
         The expected maximum memory (expressed in bytes) that will be consumed by each process.
 
@@ -438,12 +443,12 @@ def cpu_adjust(
         The proportion of the available memory that can be used for the task. Defaults to 0.8.
 
     Returns
-    _______
+    -------
     cpus: int
-        A potentially adjusted number of cpus that should fit into memory for a given task
+        A potentially adjusted number of cpus that should fit into memory for a given task.
 
-    Raises
-    ______
+    Warnings
+    --------
     UserWarning
         A warning is raised notifying the user that too many cpus were requested for a task
         and that the allowed amount has been lowered to a new value.
@@ -464,6 +469,47 @@ def cpu_adjust(
     return max_cpus
 
 
+def update_errorfile(
+    func_name: str,
+    kwargs: dict,
+    errorfile: Path | str,
+    error: Exception
+) -> None:
+    """
+    Updates an errorfile with the full traceback of an encountered exception and
+    records the corresponding function and arguments.
+
+    Parameters
+    ----------
+    func_name: str
+        The name of the function that encountered an exception.
+
+    kwargs: dict
+        The key word arguments used when executing the function.
+
+    errorfile: Path | str
+        The file in which errors will be recorded.
+
+    error: Exception
+        The exception that was encountered.
+
+    """
+    full_trace = "".join(
+        traceback.TracebackException.from_exception(error).format()
+    )
+
+    args = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
+    log = f"{func_name}({args}) encountered the following exception:\n{full_trace}"
+
+    errorfile = Path(errorfile)
+
+    if errorfile.exists():
+        log = f"\n\n\n\n{log}"
+
+    with errorfile.open("a") as ef:
+        ef.write(log)
+
+
 __all__ = [
     "MissingColumnsError",
     "MissingSoftwareError",
@@ -473,5 +519,6 @@ __all__ = [
     "surfa_to_sitk",
     "initialize_models",
     "check_for_models",
-    "cpu_adjust"
+    "cpu_adjust",
+    "update_errorfile"
 ]

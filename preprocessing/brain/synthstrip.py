@@ -2,7 +2,7 @@
 The `synthmstrip` module uses the Synthmorph models to perform image registration.
 
 Public Functions
-________________
+----------------
 synthstrip_skullstrip
     Adaptation of Freesurfer's mri_synthstrip command. One of `out`, `m`, or `d` must
     be specified.
@@ -219,7 +219,7 @@ def synthstrip_skullstrip(
     be specified.
 
     Parameters
-    __________
+    ----------
     image: str | Image
         The image that will be used for skullstripping. Will accept a string indicating
         the location of the moving image NIfTI file or the corresponding SimpleITK.Image.
@@ -251,7 +251,7 @@ def synthstrip_skullstrip(
         Alternative weights for the skullstrip model.
 
     Returns
-    _______
+    -------
     sitk_im_cache: Dict[str, Image]
         A potentially updated version of the input `sitk_im_cache`, which contains the registered
         images if `sitk_out` is True.

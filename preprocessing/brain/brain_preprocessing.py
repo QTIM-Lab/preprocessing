@@ -3,7 +3,7 @@ The `brain_preprocessing` module defines the tools for processing MRI data
 with a pipeline designed specifically for brain data.
 
 Public Functions
-________________
+----------------
 preprocess_study
     Preprocess a single study from a DataFrame.
 
@@ -18,6 +18,7 @@ import pandas as pd
 import numpy as np
 import json
 import warnings
+import datetime
 
 from SimpleITK import (
     DICOMOrientImageFilter,
@@ -39,7 +40,11 @@ from SimpleITK import (
 
 from pathlib import Path
 from tqdm import tqdm
-from preprocessing.utils import check_required_columns, cpu_adjust
+from preprocessing.utils import (
+    check_required_columns,
+    cpu_adjust,
+    update_errorfile
+)
 
 from preprocessing.synthmorph import synthmorph_registration
 from .synthstrip import synthstrip_skullstrip
@@ -56,7 +61,7 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
     to be paired with the preprocessing outputs.
 
     Parameters
-    __________
+    ----------
     row: dict
         A row of a DataFrame represented as a dictionary. It is expected to have a 'Nifti'
         key and optionally 'Seg'.
@@ -66,7 +71,7 @@ def copy_metadata(row: Dict[str, Any], preprocessing_args: Dict[str, Any]) -> No
         'preprocess_from_csv'.
 
     Returns
-    _______
+    -------
     None
         A metadata json is saved out to be paired with the preprocessed outputs.
 
@@ -160,7 +165,7 @@ def verify_reg(
     but alignment is not guaranteed.
 
     Parameters
-    __________
+    ----------
     fixed_image_path: str
         The path to the fixed image, which must be a key within `sitk_im_cache`.
 
@@ -178,7 +183,7 @@ def verify_reg(
         Whether to print additional information related like commands and their arguments are printed.
 
     Returns
-    _______
+    -------
     good_registrations: bool
         Whether the registration was of good quality and did not required resampling.
 
@@ -239,7 +244,7 @@ def local_reg(
     Perform registration on a series using Synthmorph. Meant for registration of images within the same study.
 
     Parameters
-    __________
+    ----------
     row: Dict[str, Any]
         A dictionary representing a series row from the study DataFrame / CSV.
 
@@ -267,7 +272,7 @@ def local_reg(
         files are not deleted. Dafaults to False.
 
     Returns
-    _______
+    -------
     row: Dict[str, Any]
         An updated version of the input `row`, which contains the updated path for the moved image.
 
@@ -361,7 +366,7 @@ def long_reg(
     Perform longitudinal registration on a study using synthmorph.
 
     Parameters
-    __________
+    ----------
     row: List[Dict[str, Any]]
         A list of dictionaries with each representing a series row from the study DataFrame / CSV.
     pipeline_key:
@@ -385,7 +390,7 @@ def long_reg(
         files are not deleted. Dafaults to False.
 
     Returns
-    _______
+    -------
     rows: List[Dict[str, Any]]
         An updated version of the input `rows`, which contains the updated paths for the moved images.
     sitk_im_cache: Dict[str, Image]
@@ -487,12 +492,12 @@ def fill_foreground_mask(initial_foreground: np.ndarray) -> np.ndarray:
     Fill the initial foreground mask so that it will include the entire foreground.
 
     Parameters
-    __________
+    ----------
     initial_foreground: np.ndarray
         The initial foreground mask that represents the border of the foreground but is not filled.
 
     Returns
-    _______
+    -------
     foreground: np.ndarray
         The filled foreground mask.
 
@@ -545,7 +550,7 @@ def preprocess_study(
     Preprocess a single study from a DataFrame.
 
     Parameters
-    __________
+    ----------
     study_df: pd.DataFrame
         A DataFrame containing NIfTI location and information required for the output file names
         for a single study. It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID',
@@ -594,7 +599,7 @@ def preprocess_study(
         files are not deleted. Dafaults to False.
 
     Returns
-    _______
+    -------
     pd.DataFrame:
         A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}Seg' to indicate
         the locations of the preprocessing outputs.
@@ -647,16 +652,7 @@ def preprocess_study(
 
         rows[i][pipeline_key] = str(preprocessed_file)
 
-        try:
-            sitk_im_cache[str(preprocessed_file)] = ReadImage(input_file)
-
-        except Exception:
-            error = f"Could not create {preprocessed_file}"
-            print(error)
-            e = open(f"{preprocessed_dir}/errors.txt", "a")
-            e.write(f"{error}\n")
-            setattr(study_df, "failed_preprocessing", True)
-            return study_df
+        sitk_im_cache[str(preprocessed_file)] = ReadImage(input_file)
 
         if "Seg" in rows[i] and not pd.isna(rows[i]["Seg"]):
             input_seg = rows[i]["Seg"]
@@ -664,16 +660,7 @@ def preprocess_study(
 
             rows[i][f"{pipeline_key}Seg"] = str(preprocessed_seg)
 
-            try:
-                sitk_im_cache[str(preprocessed_seg)] = ReadImage(input_seg)
-
-            except Exception:
-                error = f"Could not create {preprocessed_seg}"
-                print(error)
-                e = open(f"{preprocessed_dir}/errors.txt", "a")
-                e.write(f"{error}\n")
-                setattr(study_df, "failed_preprocessing", True)
-                return study_df
+            sitk_im_cache[str(preprocessed_seg)] = ReadImage(input_seg)
 
     ### Optionally enforce binary segmentations
     if binarize_seg:
@@ -727,7 +714,7 @@ def preprocess_study(
             preprocessed_seg = rows[i][f"{pipeline_key}Seg"]
 
             if debug:
-                output_seg = preprocessed_seg.replace(".nii.gz", "_RAS.nii.gz")
+                output_seg = preprocessed_seg.replace(".nii.gz", f"_{orientation}.nii.gz")
                 rows[i][f"{pipeline_key}Seg"] = output_seg
 
             else:
@@ -1083,8 +1070,6 @@ def preprocess_study(
     preprocessed_df = pd.DataFrame(rows)
     out_df = pd.merge(study_df, preprocessed_df, "outer")
 
-    setattr(out_df, "failed_preprocessing", False)
-
     return out_df
 
 
@@ -1109,7 +1094,7 @@ def preprocess_patient(
     Preprocess all of the studies for a patient in a DataFrame.
 
     Parameters
-    __________
+    ----------
     patient_df: pd.DataFrame
         A DataFrame containing nifti location and information required for the output file names
         for a single patient. It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID',
@@ -1167,7 +1152,7 @@ def preprocess_patient(
         files are not deleted. Dafaults to False.
 
     Returns
-    _______
+    -------
     pd.DataFrame:
         A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}Seg' to indicate
         the locations of the preprocessing outputs.
@@ -1345,7 +1330,7 @@ def preprocess_from_csv(
     Preprocess all of the studies within a dataset.
 
     Parameters
-    __________
+    ----------
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following columns:  'Nifti',
         'AnonPatientID', 'AnonStudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription',
@@ -1408,7 +1393,7 @@ def preprocess_from_csv(
         to False.
 
     Returns
-    _______
+    -------
     pd.DataFrame:
         A Dataframe with added column f'{pipeline_key}' and optionally f'{pipeline_key}Seg' to indicate
         the locations of the preprocessing outputs. This function will also overwrite the input CSV with
@@ -1446,6 +1431,7 @@ def preprocess_from_csv(
     check_required_columns(df, required_columns, optional_columns)
 
     preprocessed_dir = Path(preprocessed_dir).resolve()
+    errorfile = preprocessed_dir / f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
 
     df = df.drop_duplicates(subset="SeriesInstanceUID").reset_index(drop=True)
 
@@ -1497,11 +1483,26 @@ def preprocess_from_csv(
     with tqdm(
         total=len(kwargs_list), desc="Preprocessing patients"
     ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
-        futures = [
-            executor.submit(preprocess_patient, **kwargs) for kwargs in kwargs_list
-        ]
-        for future in as_completed(futures):
-            preprocessed_df = future.result()
+        futures = {
+            executor.submit(preprocess_patient, **kwargs): kwargs
+            for kwargs in kwargs_list
+        }
+
+        for future in as_completed(futures.keys()):
+            try:
+                preprocessed_df = future.result()
+
+            except Exception as error:
+                update_errorfile(
+                    func_name="preprocessing.brain.preprocess_patient",
+                    kwargs=futures[future],
+                    errorfile=errorfile,
+                    error=error
+                )
+
+                pbar.update(1)
+                continue
+
             df = (
                 pd.read_csv(csv, dtype=str)
                 .drop_duplicates(subset="SeriesInstanceUID")
@@ -1514,6 +1515,8 @@ def preprocess_from_csv(
                 .reset_index(drop=True)
             )
             df.to_csv(csv, index=False)
+
+
             pbar.update(1)
 
     df = (

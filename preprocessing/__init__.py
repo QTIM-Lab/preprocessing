@@ -5,7 +5,7 @@ a BIDS inspired convention, DICOM to NIfTI conversion, and preprocessing for bra
 outputs are also intended to follow a BIDS inspired organizational scheme.
 
 Public Packages
-_______________
+---------------
 data
     The `data` package contains tools for organizing DICOM and NIfTI datasets into
     a BIDS inspired organizational scheme and converting files from DICOM to NIfTI format.
@@ -18,7 +18,7 @@ qc
     The `qc` package contains tools related to data quality control.
 
 Public Modules
-______________
+--------------
 constants
     The `constants` module contains important constants that are referenced frequently
     throughout the rest of the library.

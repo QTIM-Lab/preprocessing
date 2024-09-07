@@ -3,7 +3,7 @@ The `data` package contains tools for organizing DICOM and NIfTI datasets into a
 BIDS inspired organizational scheme and converting files from DICOM to NIfTI format.
 
 Public Functions
-________________
+----------------
 convert_to_nifti
     Convert a DICOM series to a NIfTI file.
 

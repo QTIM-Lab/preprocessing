@@ -4,7 +4,7 @@ to follow the BIDS naming conventions. These outputs yield datasets that are
 compatible with the rest of the `preprocessing` library.
 
 Public Functions
-________________
+----------------
 find_anon_keys
     Create anonymization keys for anonymous PatientID and StudyID from previous
     QTIM organizational scheme. Is compatible with data following a following
@@ -31,14 +31,15 @@ import glob
 import os
 import shutil
 import numpy as np
+import datetime
 
 from preprocessing.constants import META_KEYS
-from preprocessing.utils import check_required_columns
+from preprocessing.utils import check_required_columns, update_errorfile
 from pydicom import dcmread
 from pydicom.uid import generate_uid
 from pathlib import Path
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 def find_anon_keys(input_dir: Path | str, output_dir: Path | str) -> pd.DataFrame:
@@ -133,7 +134,7 @@ def copy_dicoms(
     <new_dicom_dir>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm.
 
     Parameters
-    __________
+    ----------
     sub_dir: Path | str
         A directory containing DICOM files. Intended to be a subdirectory of within
         the root directory of a DICOM dataset.
@@ -146,7 +147,7 @@ def copy_dicoms(
         Visit_ID to the StudyInstanceUID of the DICOMs.
 
     Returns
-    _______
+    -------
     pd.DataFrame:
         A DataFrame containing the location and metadata of the DICOM data at the
         series level.
@@ -195,15 +196,8 @@ def copy_dicoms(
 
         os.makedirs(save_path, exist_ok=True)
 
-        try:
-            shutil.copy(file, out_file)
-        except Exception as error:
-            error = f"{file} encountered: {error}\n"
-            print(error)
-            errorfile = open(new_dicom_dir / "reorganization_errors.txt", "a")
-            errorfile.write(error)
-            incomplete_series.append(dcm.SeriesInstanceUID)
-            continue
+
+        shutil.copy(file, out_file)
 
         rows.append(row)
 
@@ -229,7 +223,7 @@ def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
     to derive AnonPatientID = 'sub_{i:02d}' and AnonStudyID = 'ses_{i:02d}'.
 
     Parameters
-    __________
+    ----------
     df: pd.DataFrame
         A DataFrame for which you wish to provide anonymized patient and study
         identifiers. It must contain the columns: 'PatientID' and 'StudyDate'.
@@ -238,7 +232,7 @@ def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
         Whether to check `df` for required columns. Defaults to True.
 
     Returns
-    _______
+    -------
     pd.DataFrame
         `df` with added or corrected columns 'AnonPatientID' and
         'AnonStudyID'.
@@ -299,7 +293,7 @@ def reorganize_dicoms(
     a CSV.
 
     Parameters
-    __________
+    ----------
     original_dicom_dir: Path | str
         The original root directory containing all of the DICOM files for a dataset.
 
@@ -315,13 +309,14 @@ def reorganize_dicoms(
         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
 
     Returns
-    _______
+    -------
     pd.DataFrame:
         A DataFrame containing the location and metadata of the DICOM data at the
         series level.
     """
     original_dicom_dir = Path(original_dicom_dir).resolve()
     new_dicom_dir = Path(new_dicom_dir).resolve()
+    errorfile = new_dicom_dir / f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
     dataset_csv = new_dicom_dir / "dataset.csv"
 
     if isinstance(anon_csv, (Path, str)):
@@ -347,13 +342,33 @@ def reorganize_dicoms(
 
     with tqdm(
         total=len(kwargs_list), desc="Copying DICOMs"
-    ) as pbar, ThreadPoolExecutor(cpus if cpus >= 1 else 1) as executor:
-        futures = [executor.submit(copy_dicoms, **kwargs) for kwargs in kwargs_list]
-        for future in as_completed(futures):
-            dicom_df = future.result()
+    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+        futures = {
+            executor.submit(copy_dicoms, **kwargs): kwargs
+            for kwargs in kwargs_list
+        }
+
+        for future in as_completed(futures.keys()):
+            try:
+                dicom_df = future.result()
+
+            except Exception as error:
+                update_errorfile(
+                    func_name="preprocessing.data.copy_dicoms",
+                    kwargs=futures[future],
+                    errorfile=errorfile,
+                    error=error
+                )
+
+                pbar.update(1)
+                continue
 
             if dataset_csv.exists():
                 df = pd.read_csv(dataset_csv, dtype=str)
+                if dicom_df.empty:
+                    pbar.update(1)
+                    continue
+
                 df = pd.merge(df, dicom_df, "outer")
 
             else:
@@ -400,7 +415,7 @@ def nifti_anon_csv(
     obtained externally before the NIfTI dataset can be reorganized.
 
     Parameters
-    __________
+    ----------
     nifti_dir: Path | str
         The directory containing all of the NIfTI files you wish to anonymize.
 
@@ -412,7 +427,7 @@ def nifti_anon_csv(
         Defaults to False.
 
     Returns
-    _______
+    -------
         A DataFrame containing the key to match simulated DICOM metadata to the original
         NIfTI files. Also saved as a CSV within the 'output_dir'.
     """
@@ -490,7 +505,7 @@ def reorganize_niftis(
     `nifti_anon_csv`.
 
     Parameters
-    __________
+    ----------
     nifti_dir: Path | str
         The new root directory under which the copied NIfTIs will be stored.
 
@@ -505,7 +520,7 @@ def reorganize_niftis(
          Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
 
     Returns
-    _______
+    -------
     pd.DataFrame:
         A DataFrame containing the location and simulated metadata of the NIfTI data at the
         series level. Also saved as a CSV within the 'nifti_dir'.
@@ -533,6 +548,7 @@ def reorganize_niftis(
     check_required_columns(anon_df, required_columns, optional_columns)
 
     nifti_dir = Path(nifti_dir).resolve()
+    errorfile = nifti_dir / f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
     dataset_csv = nifti_dir / "dataset.csv"
 
     def copy_nifti(anon_row: dict) -> pd.DataFrame:
@@ -580,10 +596,26 @@ def reorganize_niftis(
 
     with tqdm(
         total=len(kwargs_list), desc="Copying NIfTIs"
-    ) as pbar, ThreadPoolExecutor(cpus if cpus >= 1 else 1) as executor:
-        futures = [executor.submit(copy_nifti, **kwargs) for kwargs in kwargs_list]
-        for future in as_completed(futures):
-            nifti_df = future.result()
+    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+        futures = {
+            executor.submit(copy_nifti, **kwargs): kwargs
+            for kwargs in kwargs_list
+        }
+
+        for future in as_completed(futures.keys()):
+            try:
+                nifti_df = future.result()
+
+            except Exception as error:
+                update_errorfile(
+                    func_name="preprocessing.data.copy_nifti",
+                    kwargs=futures[future],
+                    errorfile=errorfile,
+                    error=error
+                )
+
+                pbar.update(1)
+                continue
 
             if dataset_csv.exists():
                 df = pd.read_csv(dataset_csv, dtype=str)

@@ -3,7 +3,7 @@ The `brain` package contains tools specific to preprocessing brain data, such as
 skullstripping and the brain preprocessing pipeline.
 
 Public Functions
-________________
+----------------
 preprocess_study
     Preprocess a single study from a DataFrame.
 

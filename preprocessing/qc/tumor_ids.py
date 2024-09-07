@@ -6,7 +6,7 @@ to the same patient patient. This code assumes that the longitudinal or atlas re
 was used when preprocessing the data.
 
 Public Functions
-________________
+----------------
 track_patient_tumors
     Assign tumor IDs in all of the segmentations masks for a single patient.
 
@@ -16,8 +16,9 @@ track_tumors_csv
 import pandas as pd
 import numpy as np
 import os
+import datetime
 
-from preprocessing.utils import check_required_columns
+from preprocessing.utils import check_required_columns, update_errorfile
 from SimpleITK import ReadImage, WriteImage, GetArrayFromImage, GetImageFromArray
 from pathlib import Path
 from typing import Dict, Sequence
@@ -33,14 +34,14 @@ def assign_tumor_ids(
     Assign unique IDs to the provided connected component arrays.
 
     Parameters
-    __________
+    ----------
     cc_arrays: Dict[str, Dict[str, np.array]]
         A nested dictionary mapping the current label and corresponding file path to an
         array containing connected components.
 
 
     Returns
-    _______
+    -------
     cc_arrays: Dict[str, Dict[str,np.array]]
         An updated version of the input `cc_arrays`, which contains the assigned tumor IDs.
 
@@ -89,7 +90,7 @@ def track_patient_tumors(
     Assign tumor IDs in all of the segmentations masks for a single patient.
 
     Parameters
-    __________
+    ----------
     patient_df: pd.DataFrame
         A DataFrame containing preprocessed segmentation locations and information required
         for the output file names for a single patient. It must contain the columns:
@@ -107,7 +108,7 @@ def track_patient_tumors(
         A sequence of the labels included in the segmentation masks.
 
     Returns
-    _______
+    -------
     pd.DataFrame
         A Dataframe with added columns f'{pipeline_key}_label{label}_ids' for each provided
         label.
@@ -179,7 +180,7 @@ def track_tumors_csv(
     within a dataset.
 
     Parameters
-    __________
+    ----------
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following columns:
         'AnonPatientID', 'AnonStudyID', 'SeriesType', and f'{pipeline_key}Seg'. Additionally,
@@ -203,7 +204,7 @@ def track_tumors_csv(
         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
 
     Returns
-    _______
+    -------
     pd.DataFrame
         A Dataframe with added columns f'{pipeline_key}_label{label}_ids' for each provided
         label. This function will also overwrite the input CSV with this DataFrame.
@@ -218,6 +219,9 @@ def track_tumors_csv(
     ]
 
     check_required_columns(df, required_columns)
+
+    tracking_dir = Path(tracking_dir)
+    errorfile = tracking_dir / f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
 
     filtered_df = df.dropna(subset=[f"{pipeline_key}Seg"])
 
@@ -237,11 +241,26 @@ def track_tumors_csv(
     with tqdm(
         total=len(kwargs_list), desc="Assigning Tumor IDs"
     ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
-        futures = [
-            executor.submit(track_patient_tumors, **kwargs) for kwargs in kwargs_list
-        ]
-        for future in as_completed(futures):
-            tracked_df = future.result()
+        futures = {
+            executor.submit(track_patient_tumors, **kwargs): kwargs
+            for kwargs in kwargs_list
+        }
+
+        for future in as_completed(futures.keys()):
+            try:
+                tracked_df = future.result()
+
+            except Exception as error:
+                update_errorfile(
+                    func_name="preprocessing.qc.track_patient_tumors",
+                    kwargs=futures[future],
+                    errorfile=errorfile,
+                    error=error
+                )
+
+                pbar.update(1)
+                continue
+
             df = (
                 pd.read_csv(csv, dtype=str)
                 .drop_duplicates(subset="SeriesInstanceUID")

@@ -2,7 +2,7 @@
 The `qc` package contains tools related to data quality control.
 
 Public Functions
-________________
+----------------
 track_patient_tumors
     Assign tumor IDs in all of the segmentations masks for a single patient.
 

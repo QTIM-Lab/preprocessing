@@ -2,7 +2,7 @@
 The `nifti_conversion` module contains tools for converting from DICOM to NIfTI format.
 
 Public Functions
-________________
+----------------
 convert_to_nifti
     Convert a DICOM series to a NIfTI file.
 
@@ -15,12 +15,17 @@ convert_batch_to_nifti
 import os
 import pandas as pd
 import numpy as np
+import datetime
 
 from subprocess import run
 from typing import Literal
 from tqdm import tqdm
 from pathlib import Path
-from preprocessing.utils import source_external_software, check_required_columns
+from preprocessing.utils import (
+    source_external_software,
+    check_required_columns,
+    update_errorfile
+)
 from preprocessing.dcm_tools import sort_slices, calc_slice_distance
 from dicom2nifti import convert_directory
 from pydicom import dcmread
@@ -35,7 +40,7 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
     tags. 'ImageOrientationPatient' must also form an orthonormal basis.
 
     Parameters
-    __________
+    ----------
     series_dir: Path | str
         The path to a directory containing a DICOM series. All of the DICOM instances
         are assumed to have the .dcm file extension.
@@ -44,7 +49,7 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
         The absolute error tolerance allowed to pass the integrity checks. Defaults to 1e-3.
 
     Returns
-    _______
+    -------
     bool
         The success or failure of the integrity checks are represented as True or False
         respectively.
@@ -113,7 +118,7 @@ def convert_to_nifti(
     Convert a DICOM series to a NIfTI file.
 
     Parameters
-    __________
+    ----------
     dicom_dir: Path | str
         The path to a directory containing all of the DICOM instances in a single series.
 
@@ -146,7 +151,7 @@ def convert_to_nifti(
         to True.
 
     Returns
-    _______
+    -------
     str | None
         The output name of the NIfTI file if it is successfully created, else None.
     """
@@ -211,7 +216,7 @@ def convert_study(
     Convert a DICOM study to NIfTI files representing each series.
 
     Parameters
-    __________
+    ----------
     study_df: pd.DataFrame
         A DataFrame containing data for a single study. It must contain the following
         columns: ['Dicoms', 'AnonPatientID', 'AnonStudyID', 'StudyInstanceUID',
@@ -233,7 +238,7 @@ def convert_study(
         Whether to check 'study_df' for the required columns. Defaults to True.
 
     Returns
-    _______
+    -------
     pd.DataFrame
         A DataFrame that contains the new column: 'Nifti'
     """
@@ -295,7 +300,7 @@ def convert_batch_to_nifti(
     Convert a DICOM dataset to NIfTI files representing each series.
 
     Parameters
-    __________
+    ----------
     nifti_dir: Path | str
         The root directory under which the converted NIfTI files will be written. Subdirectories
         will be created to follow a BIDS inspired convention.
@@ -320,7 +325,7 @@ def convert_batch_to_nifti(
         Whether to check the CSV for the required columns. Defaults to True.
 
     Returns
-    _______
+    -------
     pd.DataFrame
         A DataFrame that contains the new column: 'Nifti'. This DataFrame will be used to overwrite
         the CSV.
@@ -348,6 +353,9 @@ def convert_batch_to_nifti(
 
     study_uids = filtered_df["StudyInstanceUID"].unique()
 
+    nifti_dir = Path(nifti_dir).resolve()
+    errorfile = nifti_dir / f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
+
     kwargs_list = [
         {
             "study_df": filtered_df[
@@ -364,9 +372,26 @@ def convert_batch_to_nifti(
     with tqdm(
         total=len(kwargs_list), desc="Converting to NIfTI"
     ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
-        futures = [executor.submit(convert_study, **kwargs) for kwargs in kwargs_list]
-        for future in as_completed(futures):
-            nifti_df = future.result()
+        futures = {
+            executor.submit(convert_study, **kwargs): kwargs
+            for kwargs in kwargs_list
+        }
+
+        for future in as_completed(futures.keys()):
+            try:
+                nifti_df = future.result()
+
+            except Exception as error:
+                update_errorfile(
+                    func_name="preprocessing.data.convert_study",
+                    kwargs=futures[future],
+                    errorfile=errorfile,
+                    error=error
+                )
+
+                pbar.update(1)
+                continue
+
             df = (
                 pd.read_csv(csv, dtype=str)
                 .drop_duplicates(subset="SeriesInstanceUID")

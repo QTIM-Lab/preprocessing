@@ -692,7 +692,7 @@ def main() -> None:
         and tracks useful information with pycrumbs.
 
         Parameters
-        __________
+        ----------
         func: Callable
             The function that will be used for the command.
 
@@ -704,7 +704,7 @@ def main() -> None:
             same as the directory containing `func`'s outputs').
 
         Returns
-        _______
+        -------
         output: Any
             Whatever is returned by `func(**kwargs)`.
         """

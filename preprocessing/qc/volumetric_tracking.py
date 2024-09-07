@@ -3,13 +3,14 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import re
+import datetime
 
 from pathlib import Path
 from SimpleITK import ReadImage, GetArrayFromImage
 from tqdm import tqdm
 from typing import Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from preprocessing.utils import check_required_columns
+from preprocessing.utils import check_required_columns, update_errorfile
 
 
 def vol_plot_patient(
@@ -63,7 +64,7 @@ def vol_plot_patient(
             rows[i]["Normalized Volume"] = volume / max_volumes[tumor_id]
 
     out_df = pd.DataFrame(rows)
-    
+
     if out_df.empty:
         return out_df
 
@@ -94,7 +95,7 @@ def vol_plot_csv(
     within a dataset.
 
     Parameters
-    __________
+    ----------
     csv: Path | str
         The path to a CSV containing an entire dataset. It must contain the following columns:
         'AnonPatientID', 'AnonStudyID', 'SeriesType', and f'{pipeline_key}Seg'. Additionally,
@@ -118,7 +119,7 @@ def vol_plot_csv(
         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
 
     Returns
-    _______
+    -------
     pd.DataFrame
         A Dataframe with added columns f'{pipeline_key}_label{label}_ids' for each provided
         label. This function will also overwrite the input CSV with this DataFrame.
@@ -135,6 +136,7 @@ def vol_plot_csv(
     check_required_columns(df, required_columns)
 
     plot_dir = Path(plot_dir).resolve()
+    errorfile = plot_dir / f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
     summary_csv = plot_dir / "summary.csv"
 
     if summary_csv.exists():
@@ -157,11 +159,26 @@ def vol_plot_csv(
     with tqdm(
         total=len(kwargs_list), desc="Plotting Volumetric Change"
     ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
-        futures = [
-            executor.submit(vol_plot_patient, **kwargs) for kwargs in kwargs_list
-        ]
-        for future in as_completed(futures):
-            plotted_df = future.result()
+        futures = {
+            executor.submit(vol_plot_patient, **kwargs): kwargs
+            for kwargs in kwargs_list
+        }
+
+        for future in as_completed(futures.keys()):
+            try:
+                plotted_df = future.result()
+
+            except Exception as error:
+                update_errorfile(
+                    func_name="preprocessing.qc.vol_plot_patient",
+                    kwargs=futures[future],
+                    errorfile=errorfile,
+                    error=error
+                )
+
+                pbar.update(1)
+                continue
+
             if plotted_df.empty:
                 pbar.update(1)
                 continue
@@ -185,7 +202,7 @@ def vol_plot_csv(
                 df = plotted_df
 
             df = (
-                df 
+                df
                 .sort_values(["AnonPatientID", "Label", "Tumor ID", "Relative Date [Y]"])
                 .reset_index(drop=True)
             )

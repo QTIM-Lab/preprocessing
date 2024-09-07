@@ -2,8 +2,7 @@
 The `synthmorph` module uses the Synthmorph models to perform image registration.
 
 Public Functions
-________________
-
+----------------
 synthmorph_registration
 """
 import os
@@ -243,7 +242,7 @@ def synthmorph_registration(
     multiple files at once.
 
     Parameters
-    __________
+    ----------
     moving: str | Image
         The moving image to be used in registration. Will accept a string indicating
         the location of the moving image NIfTI file or the corresponding SimpleITK.Image.
@@ -331,7 +330,7 @@ def synthmorph_registration(
         "inp1.mgz" and "inp2.mgz".
 
     Returns
-    _______
+    -------
     sitk_im_cache: Dict[str, Image]
         A potentially updated version of the input `sitk_im_cache`, which contains the registered
         images if `sitk_out` is True.
