@@ -1,0 +1,790 @@
+#!/usr/bin/python3
+import argparse
+import sys
+import csv
+import os
+import logging
+
+from pathlib import Path
+from subprocess import run
+# from itertools import combinations
+
+logging.basicConfig(
+    format="\n%(filename)s:%(lineno)d %(message)s",
+    level=logging.WARNING
+)
+
+#Same as main parser
+USAGE_STR = """
+preprocessing_docker <command> [<args>]
+
+The following commands are available:
+    validate-installation       Check that the `preprocessing` library is installed correctly along
+                                with all of its dependencies.
+
+    old-project-anon-keys       Create anonymization keys for anonymous PatientID and VisitID
+                                from previous QTIM organizational scheme. Should be compatible
+                                with data following a following <Patient_ID>/<Study_ID> directory
+                                hierarchy.
+
+    nifti-dataset-anon-keys     Create anonymization keys for a dataset that starts within NIfTI
+                                format. If the 'SeriesDescription's are not normalized,
+                                'NormalizedSeriesDescription's must be obtained externally before
+                                the NIfTI dataset can be reorganized.
+
+    reorganize-dicoms           Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found
+                                recursively within this directory will be reorganized (at least
+                                one level of subdirectories is assumed). Anonomyzation keys for
+                                PatientIDs and StudyIDs are provided within a CSV.
+
+    reorganize-niftis           Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files
+                                lack metadata, anonymization keys must be provided in the form of a
+                                CSV, such as one obtained with `nifti-dataset-anon-keys`.
+
+    dataset-to-nifti            Convert DICOMs to NIfTI file format. A CSV is required to map a
+                                DICOM series to the resulting .nii.gz file and to provide
+                                the context for filenames. The outputs will follow a BIDS inspired
+                                convention.
+
+    brain-preprocessing         Preprocess NIfTI files for deep learning. A CSV is required to
+                                indicate the location of source files and to procide the context
+                                for filenames. The outputs will follow a BIDS inspired convention.
+
+    track-tumors                Longitudinal tracking of individual tumors. Each connected component
+                                for a given label within a segmentation mask is assigned a unique ID
+                                that will remain consistent across all scans belonging to the same
+                                patient. This command assumes that longitudinal or atlas registration
+                                was used when preprocessing the data.
+
+
+Run `preprocessing_docker <command> --help` for more details about how to use each individual command.
+
+"""
+
+
+parser = argparse.ArgumentParser(usage=USAGE_STR)
+
+subparsers = parser.add_subparsers(dest="command")
+
+validate_installation = subparsers.add_parser(
+    "validate-installation",
+    description=(
+        """
+        Check that the `preprocessing` library is installed correctly
+        along with all of its dependencies.
+        """
+    )
+)
+
+old_project_anon_keys = subparsers.add_parser(
+    "old-project-anon-keys",
+    description=(
+        """
+        Create anonymization keys for anonymous PatientID and StudyID
+        from the previous QTIM organizational scheme. Is compatible
+        with data following a following <Patient_ID>/<Study_ID> directory
+        hierarchy.
+        """
+    ),
+)
+
+
+old_project_anon_keys.add_argument(
+    "input_dir",
+    metavar="input-dir",
+    type=str,
+    help=(
+        """
+        The directory containing all of the dicom files for a project.
+        It is expected to follow the <Patient_ID>/<Study_ID> convention.
+        """
+    ),
+)
+
+old_project_anon_keys.add_argument(
+    "output_dir",
+    metavar="output-dir",
+    type=str,
+    help=(
+        """
+        The directory that will contain the output CSV and potentially
+        an error file.
+        """
+    ),
+)
+
+nifti_dataset_anon_keys = subparsers.add_parser(
+    "nifti-dataset-anon-keys",
+    description=(
+        """
+        Create anonymization keys for a dataset that starts within NIfTI
+        format. If the 'SeriesDescription's are not normalized,
+        'NormalizedSeriesDescription's must be obtained externally before
+        the NIfTI dataset can be reorganized.
+        """
+    ),
+)
+
+nifti_dataset_anon_keys.add_argument(
+    "nifti_dir",
+    metavar="nifti-dir",
+    type=Path,
+    help=("The directory containing all of the NIfTI files you wish to anonymize."),
+)
+
+nifti_dataset_anon_keys.add_argument(
+    "output_dir",
+    metavar="output-dir",
+    type=Path,
+    help=(
+        "The directory that will contain the output CSV and potentially an error file."
+    ),
+)
+
+nifti_dataset_anon_keys.add_argument(
+    "--normalized-descriptions",
+    action="store_true",
+    help=(
+        "Whether the 'SeriesDescription' in the NIfTI file name is already normalized."
+    ),
+)
+
+reorganize_d = subparsers.add_parser(
+    "reorganize-dicoms",
+    description=(
+        """
+        Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found
+        recursively within this directory will be reorganized (at least
+        one level of subdirectories is assumed). Anonomyzation keys for
+        PatientIDs and StudyIDs are provided within a CSV.
+        """
+    ),
+)
+
+reorganize_d.add_argument(
+    "original_dicom_dir",
+    metavar="original-dicom-dir",
+    type=Path,
+    help=("The directory containing all of the DICOM files you wish to reorganize."),
+)
+
+reorganize_d.add_argument(
+    "new_dicom_dir",
+    metavar="new-dicom-dir",
+    type=Path,
+    help=(
+        """
+        The directory that will contain the same DICOM files reorganized to
+        follow a BIDS inspired convention.
+        """
+    ),
+)
+
+reorganize_d.add_argument(
+    "--anon-csv",
+    type=Path,
+    default=None,
+    help=(
+        """
+        A CSV mapping PatientID and StudyInstanceUID to anonymous values. If None is
+        provided, the anonymization will be inferred from the DICOM headers.
+        """
+    ),
+)
+
+reorganize_d.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
+reorganize_d.add_argument(
+    "--include-incomplete",
+    action="store_true",
+    help=(
+        "Whether to keep other instances in a series after some instances have failed to be "
+        "copied."
+    )
+)
+
+reorganize_n = subparsers.add_parser(
+    "reorganize-niftis",
+    description=(
+        """
+        Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files
+        lack metadata, anonymization keys must be provided in the form of a
+        CSV, such as one obtained with `nifti-dataset-anon-keys`.
+        """
+    ),
+)
+
+reorganize_n.add_argument(
+    "nifti_dir",
+    metavar="nifti-dir",
+    type=Path,
+    help=("The directory in which the reorganized NIfTIs will be stored."),
+)
+
+reorganize_n.add_argument(
+    "anon_csv",
+    metavar="anon-csv",
+    type=Path,
+    help=(
+        """
+        A CSV containing the original location of NIfTI files and metadata
+        required for preprocessing commands. It must contain the columns:
+        'AnonPatientID', 'AnonStudyID', 'PatientID', 'StudyDate',
+        'SeriesInstanceUID', 'StudyInstanceUID', 'SeriesDescription',
+        'OriginalNifti', and 'NormalizedSeriesDescription'. 'SeriesType'
+        can also be provided, otherwise "anat" will be assumed.
+        """
+    ),
+)
+
+reorganize_n.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
+dataset_to_nifti = subparsers.add_parser(
+    "dataset-to-nifti",
+    description=(
+        """
+        Convert DICOMs to NIfTI file format. A CSV is required to map a
+        DICOM series to the resulting .nii.gz file and to provide
+        the context for filenames. The outputs will follow a BIDS
+        inspired convention.
+        """
+    ),
+)
+
+dataset_to_nifti.add_argument(
+    "nifti_dir",
+    metavar="nifti-dir",
+    type=Path,
+    help=("The directory that will contain the converted NIfTI files."),
+)
+
+dataset_to_nifti.add_argument(
+    "csv",
+    type=Path,
+    help=(
+        """
+        A CSV containing dicom location and information required for the nifti file
+        names. It must contain the columns: ['Dicoms', 'AnonPatientID',
+        'AnonStudyID', 'StudyInstanceUID', 'SeriesInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription',
+        'SeriesType'].
+        """
+    ),
+)
+
+dataset_to_nifti.add_argument(
+    "--overwrite",
+    action="store_true",
+    help="Whether to overwrite the .nii.gz files. False if not specified.",
+)
+
+dataset_to_nifti.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
+brain_preprocessing = subparsers.add_parser(
+    "brain-preprocessing",
+    description=(
+        """
+        Preprocess NIfTI files for deep learning. A CSV is required to
+        indicate the location of source files and to procide the context
+        for filenames. The outputs will follow a BIDS inspired convention.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "preprocessed_dir",
+    metavar="preprocessed-dir",
+    type=Path,
+    help=("The directory that will contain the preprocessed NIfTI files."),
+)
+
+brain_preprocessing.add_argument(
+    "csv",
+    type=Path,
+    help=(
+        """
+        A CSV containing NIfTI location and information required for the output file names.
+        It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID',
+        'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-p",
+    "--patients",
+    type=str,
+    default=None,
+    help=(
+        """
+        A comma delimited list of patients to select from the 'AnonPatientID' column
+        of the CSV
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-pk",
+    "--pipeline-key",
+    type=str,
+    default="preprocessed",
+    help=(
+        """
+        The key that will be used in the CSV to indicate the new locations of preprocessed
+        files. Defaults to 'preprocessed'.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-rk",
+    "--registration-key",
+    type=str,
+    default="T1Post",
+    help=(
+        """
+        The value that will be used to select the fixed image during registration. This
+        should correspond to a value within the 'NormalizedSeriesDescription' column in
+        the CSV. If you have segmentation files in your data. They should correspond to
+        this same series. Defaults to 'T1Post'.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-l",
+    "--longitudinal-registration",
+    action="store_true",
+    help=(
+        """
+        Whether to use longitudinal registration. Additional studies for the same patient
+        will be registered to the first study (chronologically). False if not specified.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-a",
+    "--atlas-target",
+    type=Path,
+    default=None,
+    help=(
+        """
+        The path to an atlas file if using using an atlas for the registration. If provided,
+        `--longitudinal-registration` will be ignored.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-m",
+    "--model",
+    choices=["rigid", "affine", "affine_crop", "joint", "deform"],
+    default="affine",
+    help=(
+        """
+        The synthmorph model that will be used to perform registration. Choices are: 'rigid', 'affine', 'affine_crop', 'joint',
+        and 'deform'. Defaults to 'affine'.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-o",
+    "--orientation",
+    type=str,
+    default="RAS",
+    help=(
+        "The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-s",
+    "--spacing",
+    type=str,
+    default="1,1,1",
+    help=(
+        """
+        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
+        are in mm. Defaults to '1,1,1'.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-ns",
+    "--no-skullstrip",
+    action="store_true",
+    help=(
+        """
+        Whether to not apply skullstripping to preprocessed data. Skullstripping will be
+        applied if not specified.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-ps",
+    "--pre-skullstripped",
+    action="store_true",
+    help=(
+        """
+        Whether the input data is already skullstripped. Skullstripping will not be applied
+        if specified.
+        """
+    ),
+)
+
+
+brain_preprocessing.add_argument(
+    "-b",
+    "--binarize-seg",
+    action="store_true",
+    help=(
+        """
+        Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
+        applied by default.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-v",
+    "--verbose",
+    action="store_true",
+    help=(
+        """
+        If specified, the commands that are called and their outputs will be printed to
+        the console.
+        """
+    ),
+)
+
+brain_preprocessing.add_argument(
+    "-d",
+    "--debug",
+    action="store_true",
+    help=(
+        """
+        Whether to run in debug mode. Each intermediate step will be saved using a suffix
+        for differentiation. The input CSV will not be altered. Instead, a new copy will
+        be saved to the output directory.
+        """
+    ),
+)
+
+tumor_tracking = subparsers.add_parser(
+    "track-tumors",
+    description=(
+        """
+        Longitudinal tracking of individual tumors. Each connected component for a given
+        label within a segmentation mask is assigned a unique ID that will remain consistent
+        across all scans belonging to the same patient. This command assumes that
+        longitudinal or atlas registration was used when preprocessing the data.
+        """
+    ),
+)
+
+tumor_tracking.add_argument(
+    "tracking_dir",
+    metavar="tracking-dir",
+    type=Path,
+    help=("The directory that will contain the tumor id mask files."),
+)
+
+tumor_tracking.add_argument(
+    "csv",
+    type=Path,
+    help=(
+        """
+        A CSV containing NIfTI location and information required for the output file names.
+        It must contain the columns: 'AnonPatientID', 'AnonStudyID', and 'SeriesType'.
+        Additionally, '<pipeline_key>Seg' must be present with the assumption that the
+        corresponding segmentation masks have been preprocessed.
+        """
+    ),
+)
+
+tumor_tracking.add_argument(
+    "-p",
+    "--patients",
+    type=str,
+    default=None,
+    help=(
+        """
+        A comma delimited list of patients to select from the 'AnonPatientID' column
+        of the CSV
+        """
+    ),
+)
+
+tumor_tracking.add_argument(
+    "-pk",
+    "--pipeline-key",
+    type=str,
+    default="preprocessed",
+    help=(
+        """
+        The key used in the CSV when preprocessing was performed. Defaults to 'preprocessed'.
+        """
+    ),
+)
+
+tumor_tracking.add_argument(
+    "-l",
+    "--labels",
+    type=str,
+    default="1",
+    help=(
+        """
+        A comma delimited list of the labels included in the segmentation masks.
+        """
+    ),
+)
+
+tumor_tracking.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
+volume_tracking = subparsers.add_parser(
+    "track-volume",
+    description=(
+        """
+        Longitudinal tracking of individual tumor volumes. Each connected component for a given
+        label within a segmentation mask is assigned a unique ID that will remain consistent
+        across all scans belonging to the same patient. This command assumes that
+        longitudinal or atlas registration was used when preprocessing the data.
+        """
+    ),
+)
+
+volume_tracking.add_argument(
+    "plot_dir",
+    metavar="plot-dir",
+    type=Path,
+    help=("The directory that will contain the tumor id mask files."),
+)
+
+volume_tracking.add_argument(
+    "csv",
+    type=Path,
+    help=(
+        """
+        A CSV containing NIfTI location and information required for the output file names.
+        It must contain the columns: 'AnonPatientID', 'AnonStudyID', and 'SeriesType'.
+        Additionally, '<pipeline_key>Seg' must be present with the assumption that the
+        corresponding segmentation masks have been preprocessed.
+        """
+    ),
+)
+
+volume_tracking.add_argument(
+    "-p",
+    "--patients",
+    type=str,
+    default=None,
+    help=(
+        """
+        A comma delimited list of patients to select from the 'AnonPatientID' column
+        of the CSV
+        """
+    ),
+)
+
+volume_tracking.add_argument(
+    "-pk",
+    "--pipeline-key",
+    type=str,
+    default="preprocessed",
+    help=(
+        """
+        The key used in the CSV when preprocessing was performed. Defaults to 'preprocessed'.
+        """
+    ),
+)
+
+volume_tracking.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
+
+if len(sys.argv) == 1:
+    parser.print_usage()
+    exit(0)
+
+
+args = parser.parse_args()
+
+mounts = [
+    getattr(args, arg) for arg in [
+        "input_dir",
+        "output_dir",
+        "nifti_dir",
+        "original_dicom_dir",
+        "new_dicom_dir",
+        "anon_csv",
+        "preprocessed_dir",
+        "csv",
+    ] if hasattr(args, arg)
+]
+
+ignored_columns = [
+    "AnonPatientID",
+    "AnonStudyID",
+    "SeriesInstanceUID",
+    "StudyInstanceUID",
+    "PatientID",
+    "AccessionNumber",
+    "Manufacturer",
+    "StudyDate",
+    "StudyDescription",
+    "SeriesDescription",
+    "Modality",
+]
+
+for csv_path in filter(lambda x: ".csv" in str(x), mounts):
+    # create a "DataFrame" without pandas dependency
+    df = {}
+
+    with open(csv_path) as csvfile:
+        reader = csv.DictReader(csvfile)
+
+        for i, row in enumerate(reader):
+            for k, v in row.items():
+                if k not in df.keys():
+                    df[k] = {}
+
+                df[k][i] = v
+
+    for k in df.keys():
+        if k not in ignored_columns:
+            # ".dropna()""
+            unique_paths = [p for p in df[k].values() if p != ""]
+            if all([Path(p).is_absolute() for p in unique_paths]):
+                mounts.append(os.path.commonpath(unique_paths))
+
+    # too slow to practically support datasets with split
+    # optimum mount points / source directories
+    #
+    # for k in df.keys():
+    #     if k not in ignored_columns:
+    #         study_common = set()
+    #
+    #         print(len(set(df["StudyInstanceUID"].values())))
+    #
+    #         for study in set(df["StudyInstanceUID"].values()):
+    #             study_idx = [i for i, v in df["StudyInstanceUID"].items() if v == study]
+    #             study_paths = [df[k][i] for i in study_idx if df[k][i] != ""]
+    #             #print(k, study_paths, os.path.commonpath(study_paths))
+    #
+    #             study_common.add(os.path.commonpath(study_paths))
+    #
+    #         most_common = {}
+    #
+    #         for p1, p2 in combinations(study_common, 2):
+    #             common = os.path.commonpath([p1, p2])
+    #
+    #             if common not in most_common.keys():
+    #                 most_common[common] = 0
+    #
+    #             most_common[common] += 1
+    #
+    #
+    #         print(most_common)
+
+
+mounts = [str(mount) for mount in mounts]
+
+suboptimal_mounts = []
+
+for mount in mounts:
+    if mount == "/":
+        suboptimal_mounts.append(mount)
+
+    elif str(mount).startswith("/mnt") or str(mount).startswith("/autofs"):
+        if len(mount.split("/")) <= 3:
+            suboptimal_mounts.append(mount)
+
+if len(suboptimal_mounts) > 0:
+    message = (
+        f"""
+
+    WARNING: The following resolved bind mounts are considered suboptimal:
+
+    {suboptimal_mounts}
+
+    This is likely to occur if any columns in an input CSV contain data spread
+    across multiple source directories. If this behavior is unexpected, you
+    may consider reorganizing your data and correcting your CSV accordingly.
+    Otherwise, verify that you wish to proceed.
+        """
+    )
+
+    # warn(message, UserWarning)
+    logging.warning(message)
+
+    mount_override = input(
+        f"\nDo you wish to proceed with {len(suboptimal_mounts)} potentially "
+        "suboptimal bind mount(s)? [y/N]: "
+    ).lower() == "y"
+
+    if not mount_override:
+        sys.exit(1)
+
+docker_binds = " ".join([f"-v {mount}:{mount}"for mount in mounts])
+
+
+command = (
+    f"docker run --rm {docker_binds} "
+    f"qtim/preprocessing:0.1.0 preprocessing {' '.join(sys.argv[1:])}"
+)
+
+print(f"\n\nLaunching docker with the following command:\n\n{command}\n\n")
+
+run(command.split(" "))
