@@ -4,7 +4,6 @@ functions intended for use in the Python API. Run 'preprocessing -h' in the term
 for a command usage guide.
 """
 import argparse
-import json
 import sys
 import os
 
@@ -87,12 +86,6 @@ The following commands are available:
                                 DICOM series to the resulting .nii.gz file and to provide
                                 the context for filenames. The outputs will follow a BIDS inspired
                                 convention.
-
-    predict-series              Predict the sequence type for every series in your dataset. A CSV
-                                is required to indicate the location of the corresponding DICOMs.
-                                Predictions are made using the mr_series_selection repo's analysis
-                                of the DICOM header. A json can be provided to combine multiple
-                                NormalizedDescriptions into a single category.
 
     brain-preprocessing         Preprocess NIfTI files for deep learning. A CSV is required to
                                 indicate the location of source files and to procide the context
@@ -342,70 +335,6 @@ dataset_to_nifti.add_argument(
 )
 
 dataset_to_nifti.add_argument(
-    "-c",
-    "--cpus",
-    type=int,
-    default=1,
-    help=(
-        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
-    ),
-)
-
-predict_series = subparsers.add_parser(
-    "predict-series",
-    description=(
-        """
-        Predict the sequence type for every series in your dataset. A CSV
-        is required to indicate the location of the corresponding DICOMs.
-        Predictions are made using the mr_series_selection repo's analysis
-        of the DICOM header. A json can be provided to combine multiple
-        NormalizedDescriptions into a single category.
-        """
-    ),
-)
-
-predict_series.add_argument(
-    "csv",
-    type=Path,
-    help=(
-        """
-        The path to a CSV containing an entire dataset. It must contain the following
-        columns: ['StudyInstanceUID', 'SeriesInstanceUID', 'SeriesDescription', 'Dicoms'].
-        """
-    ),
-)
-
-predict_series.add_argument(
-    "--ruleset",
-    type=str,
-    default="brain",
-    help=(
-        """
-        Ruleset used within mr_series_selection to predict the NormalizedDescription of
-        each series. Options include 'brain', 'lumbar', and 'prostate'. Defaults to 'brain'.
-        """
-    ),
-)
-
-predict_series.add_argument(
-    "--description-key",
-    type=str,
-    default=None,
-    help=(
-        """
-        Key for combining 'NormalizedDescription's defined by mr_series_selection into desired
-        categories. This information is provided by using a path to a json file containing this
-        information. If nothing is provided, the description_key will default to:
-
-        DEFAULT_SERIES_KEY = {
-            "T1Pre": [["iso3D AX T1 NonContrast", "iso3D AX T1 NonContrast RFMT"], "anat"],
-            "T1Post": [["iso3D AX T1 WithContrast", "iso3D AX T1 WithContrast RFMT"], "anat"],
-        }
-        """
-    ),
-)
-
-predict_series.add_argument(
     "-c",
     "--cpus",
     type=int,

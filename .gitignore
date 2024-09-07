@@ -1,3 +1,2 @@
 .python-version
-**/*.pyc
-preprocessing/__pycache__
+**/*__pycache__
