@@ -16,25 +16,6 @@ The following commands are available:
     validate-installation       Check that the `preprocessing` library is installed correctly along
                                 with all of its dependencies.
 
-    old-project-anon-keys       Create anonymization keys for anonymous PatientID and VisitID
-                                from previous QTIM organizational scheme. Should be compatible
-                                with data following a following <Patient_ID>/<Study_ID> directory
-                                hierarchy.
-
-    nifti-dataset-anon-keys     Create anonymization keys for a dataset that starts within NIfTI
-                                format. If the 'SeriesDescription's are not normalized,
-                                'NormalizedSeriesDescription's must be obtained externally before
-                                the NIfTI dataset can be reorganized.
-
-    reorganize-dicoms           Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found
-                                recursively within this directory will be reorganized (at least
-                                one level of subdirectories is assumed). Anonomyzation keys for
-                                PatientIDs and StudyIDs are provided within a CSV.
-
-    reorganize-niftis           Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files
-                                lack metadata, anonymization keys must be provided in the form of a
-                                CSV, such as one obtained with `nifti-dataset-anon-keys`.
-
     dataset-to-nifti            Convert DICOMs to NIfTI file format. A CSV is required to map a
                                 DICOM series to the resulting .nii.gz file and to provide
                                 the context for filenames. The outputs will follow a BIDS inspired
@@ -70,176 +51,68 @@ validate_installation = subparsers.add_parser(
     )
 )
 
-old_project_anon_keys = subparsers.add_parser(
-    "old-project-anon-keys",
+nifti_dataset = subparsers.add_parser(
+    "nifti-dataset",
     description=(
         """
-        Create anonymization keys for anonymous PatientID and StudyID
-        from the previous QTIM organizational scheme. Is compatible
-        with data following a following <Patient_ID>/<Study_ID> directory
-        hierarchy.
+        Create a NIfTI dataset
         """
-    ),
-)
-
-
-old_project_anon_keys.add_argument(
-    "input_dir",
-    metavar="input-dir",
-    type=str,
-    help=(
-        """
-        The directory containing all of the dicom files for a project.
-        It is expected to follow the <Patient_ID>/<Study_ID> convention.
-        """
-    ),
-)
-
-old_project_anon_keys.add_argument(
-    "output_dir",
-    metavar="output-dir",
-    type=str,
-    help=(
-        """
-        The directory that will contain the output CSV and potentially
-        an error file.
-        """
-    ),
-)
-
-nifti_dataset_anon_keys = subparsers.add_parser(
-    "nifti-dataset-anon-keys",
-    description=(
-        """
-        Create anonymization keys for a dataset that starts within NIfTI
-        format. If the 'SeriesDescription's are not normalized,
-        'NormalizedSeriesDescription's must be obtained externally before
-        the NIfTI dataset can be reorganized.
-        """
-    ),
-)
-
-nifti_dataset_anon_keys.add_argument(
-    "nifti_dir",
-    metavar="nifti-dir",
-    type=Path,
-    help=("The directory containing all of the NIfTI files you wish to anonymize."),
-)
-
-nifti_dataset_anon_keys.add_argument(
-    "output_dir",
-    metavar="output-dir",
-    type=Path,
-    help=(
-        "The directory that will contain the output CSV and potentially an error file."
-    ),
-)
-
-nifti_dataset_anon_keys.add_argument(
-    "--normalized-descriptions",
-    action="store_true",
-    help=(
-        "Whether the 'SeriesDescription' in the NIfTI file name is already normalized."
-    ),
-)
-
-reorganize_d = subparsers.add_parser(
-    "reorganize-dicoms",
-    description=(
-        """
-        Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found
-        recursively within this directory will be reorganized (at least
-        one level of subdirectories is assumed). Anonomyzation keys for
-        PatientIDs and StudyIDs are provided within a CSV.
-        """
-    ),
-)
-
-reorganize_d.add_argument(
-    "original_dicom_dir",
-    metavar="original-dicom-dir",
-    type=Path,
-    help=("The directory containing all of the DICOM files you wish to reorganize."),
-)
-
-reorganize_d.add_argument(
-    "new_dicom_dir",
-    metavar="new-dicom-dir",
-    type=Path,
-    help=(
-        """
-        The directory that will contain the same DICOM files reorganized to
-        follow a BIDS inspired convention.
-        """
-    ),
-)
-
-reorganize_d.add_argument(
-    "--anon-csv",
-    type=Path,
-    default=None,
-    help=(
-        """
-        A CSV mapping PatientID and StudyInstanceUID to anonymous values. If None is
-        provided, the anonymization will be inferred from the DICOM headers.
-        """
-    ),
-)
-
-reorganize_d.add_argument(
-    "-c",
-    "--cpus",
-    type=int,
-    default=1,
-    help=(
-        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
-    ),
-)
-
-reorganize_d.add_argument(
-    "--include-incomplete",
-    action="store_true",
-    help=(
-        "Whether to keep other instances in a series after some instances have failed to be "
-        "copied."
     )
 )
 
-reorganize_n = subparsers.add_parser(
-    "reorganize-niftis",
-    description=(
-        """
-        Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files
-        lack metadata, anonymization keys must be provided in the form of a
-        CSV, such as one obtained with `nifti-dataset-anon-keys`.
-        """
-    ),
-)
-
-reorganize_n.add_argument(
+nifti_dataset.add_argument(
     "nifti_dir",
     metavar="nifti-dir",
     type=Path,
-    help=("The directory in which the reorganized NIfTIs will be stored."),
+    help=("")
 )
 
-reorganize_n.add_argument(
-    "anon_csv",
-    metavar="anon-csv",
+nifti_dataset.add_argument(
+    "csv",
     type=Path,
-    help=(
-        """
-        A CSV containing the original location of NIfTI files and metadata
-        required for preprocessing commands. It must contain the columns:
-        'AnonPatientID', 'AnonStudyID', 'PatientID', 'StudyDate',
-        'SeriesInstanceUID', 'StudyInstanceUID', 'SeriesDescription',
-        'OriginalNifti', and 'NormalizedSeriesDescription'. 'SeriesType'
-        can also be provided, otherwise "anat" will be assumed.
-        """
-    ),
+    help=("")
 )
 
-reorganize_n.add_argument(
+nifti_dataset.add_argument(
+    "file_pattern",
+    metavar="file-pattern",
+    type=str,
+    help=("")
+)
+
+nifti_dataset.add_argument(
+    "-a",
+    "--anon",
+    choices=["is_anon", "auto", "deferred"],
+    default="auto",
+    help=("")
+)
+
+nifti_dataset.add_argument(
+    "-b",
+    "--batch",
+    type=int,
+    default=20,
+    help=("")
+)
+
+nifti_dataset.add_argument(
+    "-ss",
+    "--seg-series",
+    type=str,
+    default=None,
+    help=("")
+)
+
+nifti_dataset.add_argument(
+    "-st",
+    "--seg-target",
+    type=str,
+    default=None,
+    help=("")
+)
+
+nifti_dataset.add_argument(
     "-c",
     "--cpus",
     type=int,
@@ -736,47 +609,25 @@ def main() -> None:
             raise Exception(f"`preprocessing` installation is invalid. Encountered the following exception during validation: {error}")
 
 
-    elif args.command == "old-project-anon-keys":
-        from preprocessing.data import find_anon_keys
-
-        kwargs = {"input_dir": args.input_dir, "output_dir": args.output_dir}
-
-        tracked_command(find_anon_keys, kwargs=kwargs, record_dir=args.output_dir)
-
-    elif args.command == "nifti-dataset-anon-keys":
-        from preprocessing.data import nifti_anon_csv
+    elif args.command == "nifti-dataset":
+        from preprocessing.data import create_nifti_dataset
 
         kwargs = {
             "nifti_dir": args.nifti_dir,
-            "output_dir": args.output_dir,
-            "normalized_descriptions": args.normalized_descriptions,
+            "dataset_csv": args.csv,
+            "anon": args.anon,
+            "batch_size": args.batch,
+            "processor_kwargs": {
+                "file_pattern": args.file_pattern,
+                "seg_series": args.seg_series,
+                "seg_target": args.seg_target
+            },
+            "cpus": args.cpus
         }
 
-        tracked_command(nifti_anon_csv, kwargs=kwargs, record_dir=args.output_dir)
-
-    elif args.command == "reorganize-dicoms":
-        from preprocessing.data import reorganize_dicoms
-
-        kwargs = {
-            "original_dicom_dir": args.original_dicom_dir,
-            "new_dicom_dir": args.new_dicom_dir,
-            "anon_csv": args.anon_csv,
-            "cpus": args.cpus,
-            "drop_incomplete_series": not args.include_incomplete,
-        }
-
-        tracked_command(reorganize_dicoms, kwargs=kwargs, record_dir=args.new_dicom_dir)
-
-    elif args.command == "reorganize-niftis":
-        from preprocessing.data import reorganize_niftis
-
-        kwargs = {
-            "nifti_dir": args.nifti_dir,
-            "anon_csv": args.anon_csv,
-            "cpus": args.cpus,
-        }
-
-        tracked_command(reorganize_niftis, kwargs=kwargs, record_dir=args.nifti_dir)
+        tracked_command(
+            create_nifti_dataset, kwargs=kwargs, record_dir=args.csv.parent
+        )
 
     elif args.command == "dataset-to-nifti":
         from preprocessing.data import convert_batch_to_nifti

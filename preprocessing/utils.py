@@ -40,6 +40,10 @@ cpu_adjust
 update_errorfile
     Updates an errorfile with the full traceback of an encountered exception and
     records the corresponding function and arguments.
+
+parse_string
+    Extracts variables from a string following a consistent pattern indicated using
+    '{}'. Returns a dictionary with keys corresponding to the variable names.
 """
 
 import os
@@ -48,9 +52,10 @@ import numpy as np
 import psutil
 import warnings
 import traceback
+import re
 
 from shutil import which
-from typing import Sequence
+from typing import Sequence, Dict, Any
 from SimpleITK import (
     Image,
     GetImageFromArray,
@@ -471,7 +476,7 @@ def cpu_adjust(
 
 def update_errorfile(
     func_name: str,
-    kwargs: dict,
+    kwargs: Dict[str, Any],
     errorfile: Path | str,
     error: Exception
 ) -> None:
@@ -484,7 +489,7 @@ def update_errorfile(
     func_name: str
         The name of the function that encountered an exception.
 
-    kwargs: dict
+    kwargs: Dict[str, Any]
         The key word arguments used when executing the function.
 
     errorfile: Path | str
@@ -510,6 +515,58 @@ def update_errorfile(
         ef.write(log)
 
 
+def parse_string(s: str, pattern: str) -> Dict[str, str]:
+    """
+    Extracts variables from a string following a consistent pattern indicated using
+    '{}'. Returns a dictionary with keys corresponding to the variable names.
+
+    Parameters
+    ----------
+    s: str
+        The string from which to extract variables
+
+    pattern: str
+        The string defining the search pattern. Variable names are encoded using '{}'
+        (e.g. `pattern`='{patient}_{study}_{series}') would find values for the
+        `patient`, `study`, and `series` variables.
+
+    Returns
+    -------
+    Dict[str, str]
+        A dictionary mapping variables provided in `pattern` to the values obtained
+        from 's'.
+
+    Raises
+    ------
+    ValueError
+        An exception is raised if there are no variables encoded in `pattern` or if
+        `s` is not in the format assumed by `pattern`.
+    """
+    variables = re.findall(r"\{(\w+)\}", pattern)
+
+    if len(variables) == 0:
+        raise ValueError(
+            "pattern must contain at least one placeholder "
+            "(e.g. pattern='{patient}_{study}_{series}') "
+            f"but received pattern='{pattern}'."
+        )
+
+    regex = pattern
+
+    for v in variables:
+        regex = regex.replace(f"{{{v}}}", f"(?P<{v}>[^{{}}]+)")
+
+    regex = re.compile(regex)
+
+    match = regex.match(s)
+
+    if match:
+        return {v: match.group(v) for v in variables}
+
+    else:
+        raise ValueError(f"s='{s}' does not match the provided pattern='{pattern}'.")
+
+
 __all__ = [
     "MissingColumnsError",
     "MissingSoftwareError",
@@ -520,5 +577,6 @@ __all__ = [
     "initialize_models",
     "check_for_models",
     "cpu_adjust",
-    "update_errorfile"
+    "update_errorfile",
+    "parse_string"
 ]

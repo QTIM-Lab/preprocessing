@@ -43,6 +43,7 @@ from .reorganize import (
 )
 from .nifti_conversion import convert_to_nifti, convert_study, convert_batch_to_nifti
 from .anonymization import anonymize_df
+from .datasets import create_nifti_dataset
 
 
 __all__ = [
@@ -53,5 +54,6 @@ __all__ = [
     "nifti_anon_csv",
     "reorganize_dicoms",
     "reorganize_niftis",
-    "anonymize_df"
+    "anonymize_df",
+    "create_nifti_dataset"
 ]
