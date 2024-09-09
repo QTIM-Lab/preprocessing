@@ -35,25 +35,26 @@ reorganize_niftis
     `nifti_anon_csv`.
 """
 
-from .reorganize import (
-    find_anon_keys,
-    reorganize_dicoms,
-    nifti_anon_csv,
-    reorganize_niftis,
-)
+# from .reorganize import (
+#     find_anon_keys,
+#     reorganize_dicoms,
+#     nifti_anon_csv,
+#     reorganize_niftis,
+# )
 from .nifti_conversion import convert_to_nifti, convert_study, convert_batch_to_nifti
-from .anonymization import anonymize_df
-from .datasets import create_nifti_dataset
+#from .anonymization import anonymize_df
+from .datasets import create_nifti_dataset, create_dicom_dataset
 
 
 __all__ = [
     "convert_to_nifti",
     "convert_study",
     "convert_batch_to_nifti",
-    "find_anon_keys",
-    "nifti_anon_csv",
-    "reorganize_dicoms",
-    "reorganize_niftis",
+    # "find_anon_keys",
+    # "nifti_anon_csv",
+    # "reorganize_dicoms",
+    # "reorganize_niftis",
     "anonymize_df",
-    "create_nifti_dataset"
+    "create_nifti_dataset",
+    "create_dicom_dataset"
 ]

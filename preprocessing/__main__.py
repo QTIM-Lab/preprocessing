@@ -51,6 +51,67 @@ validate_installation = subparsers.add_parser(
     )
 )
 
+dicom_dataset = subparsers.add_parser(
+    "dicom-dataset",
+    description=(
+        """
+        Create a DICOM dataset
+        """
+    )
+)
+
+dicom_dataset.add_argument(
+    "dicom_dir",
+    metavar="dicom-dir",
+    type=Path,
+    help=("")
+)
+
+dicom_dataset.add_argument(
+    "csv",
+    type=Path,
+    help=("")
+)
+
+dicom_dataset.add_argument(
+    "reorg_dir",
+    metavar="reorg-dir",
+    type=Path,
+    help=("")
+)
+
+dicom_dataset.add_argument(
+    "-a",
+    "--anon",
+    choices=["is_anon", "auto", "deferred"],
+    default="auto",
+    help=("")
+)
+
+dicom_dataset.add_argument(
+    "-b",
+    "--batch",
+    type=int,
+    default=20,
+    help=("")
+)
+
+dicom_dataset.add_argument(
+    "--assume-extension",
+    action="store_true",
+    help=("")
+)
+
+dicom_dataset.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
 nifti_dataset = subparsers.add_parser(
     "nifti-dataset",
     description=(
@@ -608,6 +669,22 @@ def main() -> None:
         except Exception as error:
             raise Exception(f"`preprocessing` installation is invalid. Encountered the following exception during validation: {error}")
 
+    elif args.command == "dicom-dataset":
+        from preprocessing.data import create_dicom_dataset
+
+        kwargs = {
+            "dicom_dir": args.dicom_dir,
+            "dataset_csv": args.csv,
+            "reorg_dir": args.reorg_dir,
+            "anon": args.anon,
+            "batch_size": args.batch,
+            "file_extension": "*.dcm" if args.assume_extension else "*",
+            "cpus": args.cpus
+        }
+
+        tracked_command(
+            create_dicom_dataset, kwargs=kwargs, record_dir=args.csv.parent
+        )
 
     elif args.command == "nifti-dataset":
         from preprocessing.data import create_nifti_dataset
