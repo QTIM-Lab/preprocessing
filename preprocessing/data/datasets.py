@@ -6,7 +6,7 @@ from itertools import islice
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import as_completed, ProcessPoolExecutor
-from typing import Literal, Callable, Sequence, Tuple, Dict, final
+from typing import Literal, Callable, Sequence, Tuple, Dict
 from preprocessing.utils import (
     parse_string,
     update_errorfile,
@@ -51,7 +51,11 @@ def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
     anon_patient_dict = {}
     anon_study_dict = {}
     patients = df["PatientID"].dropna().unique()
-    for i, patient in tqdm(enumerate(patients), desc="Anonymizing dataset"):
+    for i, patient in tqdm(
+        enumerate(patients),
+        desc="Anonymizing dataset",
+        total=len(patients)
+    ):
         anon_patient_dict[patient] = f"sub-{i+1:02d}"
 
         patient_df = df[df["PatientID"] == patient].copy()
@@ -90,13 +94,16 @@ def generate_batch(generator, size):
         yield batch
 
 
-def dcm_batch_processor(batch: Sequence[Path]):
+def dcm_batch_processor(
+    batch: Sequence[Path],
+    reorg_dir: Path | str | None = None
+):
     rows = []
     for file in batch:
         row = {}
 
         try:
-            dcm = dcmread(file, stop_before_pixels=True)
+            dcm = dcmread(file, stop_before_pixels=reorg_dir is None)
 
             for key in META_KEYS + ["SOPInstanceUID"]:
                 # fail on essential meta
@@ -110,29 +117,17 @@ def dcm_batch_processor(batch: Sequence[Path]):
         except Exception:
             continue
 
+        if reorg_dir is not None:
+            series_dir = Path(reorg_dir) / str(dcm.SeriesInstanceUID)
+            series_dir.mkdir(parents=True, exist_ok=True)
+
+            file = series_dir / f"{dcm.SOPInstanceUID}.dcm"
+            dcm.save_as(file)
+
         row["Dicoms"] = file
         rows.append(row)
 
     return pd.DataFrame(rows)
-
-
-def reorganize_instances(
-    instance_df: pd.DataFrame,
-    reorg_dir: Path | str,
-    cpus: int = 1,
-    check_columns: bool = True,
-) -> pd.DataFrame:
-    if check_columns:
-        required_columns = [
-            "PatientID",
-            "SeriesInstanceUID",
-            "SOPInstanceUID", # demonstrate instance_df
-            "Dicoms"
-        ]
-
-        check_required_columns(instance_df, required_columns)
-
-    return instance_df
 
 
 def create_dicom_dataset(
@@ -161,7 +156,7 @@ def create_dicom_dataset(
         future_map = {}
 
         for batch in generate_batch(path_generator, batch_size):
-            future = executor.submit(dcm_batch_processor, batch)
+            future = executor.submit(dcm_batch_processor, batch, reorg_dir)
             futures.add(future)
             future_map[future] = batch
 
@@ -217,12 +212,6 @@ def create_dicom_dataset(
     instance_df.to_csv(instance_csv, index=False)
     print(f"Dataset of DICOM instances saved to {instance_csv}")
 
-    if reorg_dir is not None:
-        instance_df = reorganize_instances(instance_df, reorg_dir, cpus, False)
-        instance_df.to_csv(instance_csv, index=False)
-
-        print(f"Updating {instance_csv} with reorganized locations")
-
 
     final_df = (
         instance_df
@@ -230,7 +219,7 @@ def create_dicom_dataset(
         .drop(columns=["SOPInstanceUID"])
     )
 
-    final_df["Dicoms"] = final_df.apply(lambda x: Path(x).parent)
+    final_df["Dicoms"] = final_df["Dicoms"].apply(lambda x: Path(x).parent)
 
 
     if anon == "is_anon":
@@ -249,15 +238,10 @@ def create_dicom_dataset(
         )
 
     final_df.to_csv(dataset_csv, index=False)
-    print("Dataset written to {dataset_csv}")
+    print(f"Dataset written to {dataset_csv}")
 
-
-
-
-
-
-
-
+    if Path(errorfile).exists():
+        print(f"Errors were encountered while running this script. Refer to {errorfile}")
 
 
 def nifti_batch_processor(
@@ -454,4 +438,4 @@ def create_nifti_dataset(
         )
 
     if Path(errorfile).exists():
-        print(f"Errors encountered while running this script and are recorded in {errorfile}")
+        print(f"Errors were encountered while running this script. Refer to {errorfile}")

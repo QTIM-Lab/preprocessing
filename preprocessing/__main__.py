@@ -74,9 +74,9 @@ dicom_dataset.add_argument(
 )
 
 dicom_dataset.add_argument(
-    "reorg_dir",
-    metavar="reorg-dir",
+    "--reorg-dir",
     type=Path,
+    default=None,
     help=("")
 )
 
