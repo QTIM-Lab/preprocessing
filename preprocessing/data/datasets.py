@@ -1,6 +1,5 @@
 import pandas as pd
 import datetime
-import os
 
 from itertools import islice
 from pathlib import Path
@@ -10,7 +9,8 @@ from typing import Literal, Callable, Sequence, Tuple, Dict
 from preprocessing.utils import (
     parse_string,
     update_errorfile,
-    check_required_columns
+    check_required_columns,
+    cglob
 )
 from preprocessing.constants import META_KEYS
 from pydicom.uid import generate_uid
@@ -83,16 +83,6 @@ def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
     )
     return df
 
-def generate_batch(generator, size):
-    generator = iter(generator)
-    while True:
-        batch = list(islice(generator, size))
-
-        if not batch:
-            break
-
-        yield batch
-
 
 def dcm_batch_processor(
     batch: Sequence[Path],
@@ -135,7 +125,7 @@ def create_dicom_dataset(
     dataset_csv: Path | str,
     reorg_dir: Path | str | None = None,
     anon: Literal["is_anon", "auto", "deferred"] = "auto",
-    batch_size: int = 20,
+    batch_size: int = 1000,
     file_extension: Literal["*", "*.dcm"] = "*",
     cpus: int = 1
 ):
@@ -145,23 +135,30 @@ def create_dicom_dataset(
     instance_csv = str(dataset_csv).replace(".csv", "_instances.csv")
     errorfile = dataset_csv.parent /  f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
 
-    path_generator = dicom_dir.glob(f"**/{file_extension}")
+    glob_cpus = min(cpus // 4, 4)
+    process_cpus = cpus - glob_cpus
 
+    # instance_df = pd.DataFrame()
     dfs = []
 
     with tqdm(
         total=0, desc="Constructing DICOM dataset", dynamic_ncols=True
-    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+    ) as pbar, ProcessPoolExecutor(max(process_cpus, 1)) as executor:
         futures = set()
         future_map = {}
 
-        for batch in generate_batch(path_generator, batch_size):
+        for batch in cglob(
+            root=dicom_dir,
+            pattern=file_extension,
+            batch_size=batch_size,
+            cpus=max(process_cpus, 1)
+        ):
             future = executor.submit(dcm_batch_processor, batch, reorg_dir)
             futures.add(future)
             future_map[future] = batch
 
 
-            pbar.total += 1
+            pbar.total += len(batch)
             pbar.refresh()
 
             completed_futures = set()
@@ -180,12 +177,12 @@ def create_dicom_dataset(
                         )
 
                         completed_futures.add(future)
-                        pbar.update(1)
+                        pbar.update(len(batch))
                         continue
 
                     dfs.append(df)
                     completed_futures.add(future)
-                    pbar.update(1)
+                    pbar.update(len(batch))
 
             futures.difference_update(completed_futures)
 
@@ -202,11 +199,11 @@ def create_dicom_dataset(
                     error=error
                 )
 
-                pbar.update(1)
+                pbar.update(len(future_map[future]))
                 continue
 
             dfs.append(df)
-            pbar.update(1)
+            pbar.update(len(future_map[future]))
 
     instance_df = pd.concat(dfs)
     instance_df.to_csv(instance_csv, index=False)
@@ -319,17 +316,25 @@ def create_nifti_dataset(
     rejection_csv = str(dataset_csv).replace(".csv", "_rejections.csv")
     errorfile = dataset_csv.parent /  f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
 
-    path_generator = nifti_dir.glob("**/*.nii*")
     accepted_dfs = []
     rejected_dfs = []
 
+    glob_cpus = min(cpus // 4, 4)
+    process_cpus = cpus - glob_cpus
+
+
     with tqdm(
         total=0, desc="Constructing NIfTI dataset", dynamic_ncols=True
-    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+    ) as pbar, ProcessPoolExecutor(max(process_cpus, 1)) as executor:
         futures = set()
         future_map = {}
 
-        for batch in generate_batch(path_generator, batch_size):
+        for batch in cglob(
+            root=nifti_dir,
+            pattern="*.nii*",
+            batch_size=batch_size,
+            cpus=max(process_cpus, 1)
+        ):
             kwargs = {"batch": batch, **processor_kwargs}
             future = executor.submit(batch_processor, **kwargs)
             futures.add(future)

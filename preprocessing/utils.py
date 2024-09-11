@@ -64,6 +64,10 @@ from SimpleITK import (
 from surfa import Volume, ImageGeometry
 from subprocess import run
 from pathlib import Path
+from multiprocessing import Process, Queue
+from itertools import islice
+from time import sleep
+
 
 class MissingSoftwareError(Exception):
     """
@@ -567,6 +571,82 @@ def parse_string(s: str, pattern: str) -> Dict[str, str]:
         raise ValueError(f"s='{s}' does not match the provided pattern='{pattern}'.")
 
 
+
+def queue_batch(
+    subdir: Path, queue: Queue, pattern: str = "*", batch_size: int | None = None
+):
+    """
+    Processes a subdir by recursively globbing and placing batches of files into the queue.
+    """
+    generator = subdir.glob(f"**/{pattern}")
+
+    if batch_size is not None:
+        generator = iter(generator)
+
+        while True:
+            batch = list(islice(generator, batch_size))
+
+            if not batch:
+                break
+
+            queue.put(batch)
+
+    else:
+        for file in generator:
+            queue.put(file)
+
+
+def cglob(
+    root: Path | str,
+    pattern: str = "*",
+    batch_size: int | None = None,
+    cpus: int = 1
+):
+    """
+    Uses multiprocessing to parallelize the processing of top-level subdirectories,
+    each handled by a separate process, while recursively globbing inside each subdirectory.
+    """
+    root = Path(root)
+    sub_dirs = list(root.glob("*/"))
+    files = list(root.glob(pattern))
+
+    if pattern != "*":
+        batch = list(set(files))
+
+    else:
+        batch = list(set(files + sub_dirs))
+
+    if batch_size is None:
+        for file in batch:
+            yield file
+
+    else:
+        yield batch
+
+    queue = Queue()
+    processes = []
+    remaining_subdirs = sub_dirs.copy()
+    while remaining_subdirs or processes:
+        while remaining_subdirs and len(processes) < cpus:
+            subdir = remaining_subdirs.pop(0)
+            p = Process(target=queue_batch, args=(subdir, queue, pattern, batch_size))
+            p.start()
+            processes.append(p)
+
+        try:
+            batch = queue.get_nowait()
+            if batch is not None:
+                yield batch
+
+        except Exception:
+            pass
+
+        processes = [p for p in processes if p.is_alive()]
+
+    for p in processes:
+        p.join()
+
+
 __all__ = [
     "MissingColumnsError",
     "MissingSoftwareError",
@@ -578,5 +658,6 @@ __all__ = [
     "check_for_models",
     "cpu_adjust",
     "update_errorfile",
-    "parse_string"
+    "parse_string",
+    "cglob"
 ]

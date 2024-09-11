@@ -92,7 +92,7 @@ dicom_dataset.add_argument(
     "-b",
     "--batch",
     type=int,
-    default=20,
+    default=1,
     help=("")
 )
 
