@@ -131,19 +131,17 @@ def create_dicom_dataset(
 ):
     dicom_dir = Path(dicom_dir)
     dataset_csv = Path(dataset_csv)
+    cpus = max(cpus, 1)
     dataset_csv.parent.mkdir(parents=True, exist_ok=True)
     instance_csv = str(dataset_csv).replace(".csv", "_instances.csv")
     errorfile = dataset_csv.parent /  f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
-
-    glob_cpus = min(cpus // 4, 4)
-    process_cpus = cpus - glob_cpus
 
     # instance_df = pd.DataFrame()
     dfs = []
 
     with tqdm(
         total=0, desc="Constructing DICOM dataset", dynamic_ncols=True
-    ) as pbar, ProcessPoolExecutor(max(process_cpus, 1)) as executor:
+    ) as pbar, ProcessPoolExecutor(cpus) as executor:
         futures = set()
         future_map = {}
 
@@ -151,7 +149,7 @@ def create_dicom_dataset(
             root=dicom_dir,
             pattern=file_extension,
             batch_size=batch_size,
-            cpus=max(process_cpus, 1)
+            queue_size=2 * cpus
         ):
             future = executor.submit(dcm_batch_processor, batch, reorg_dir)
             futures.add(future)
@@ -312,6 +310,7 @@ def create_nifti_dataset(
 
     nifti_dir = Path(nifti_dir)
     dataset_csv = Path(dataset_csv)
+    cpus = max(cpus, 1)
     dataset_csv.parent.mkdir(parents=True, exist_ok=True)
     rejection_csv = str(dataset_csv).replace(".csv", "_rejections.csv")
     errorfile = dataset_csv.parent /  f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
@@ -319,13 +318,10 @@ def create_nifti_dataset(
     accepted_dfs = []
     rejected_dfs = []
 
-    glob_cpus = min(cpus // 4, 4)
-    process_cpus = cpus - glob_cpus
-
 
     with tqdm(
         total=0, desc="Constructing NIfTI dataset", dynamic_ncols=True
-    ) as pbar, ProcessPoolExecutor(max(process_cpus, 1)) as executor:
+    ) as pbar, ProcessPoolExecutor(cpus) as executor:
         futures = set()
         future_map = {}
 
@@ -333,7 +329,7 @@ def create_nifti_dataset(
             root=nifti_dir,
             pattern="*.nii*",
             batch_size=batch_size,
-            cpus=max(process_cpus, 1)
+            queue_size=2 * cpus
         ):
             kwargs = {"batch": batch, **processor_kwargs}
             future = executor.submit(batch_processor, **kwargs)

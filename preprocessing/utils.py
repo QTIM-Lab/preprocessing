@@ -597,16 +597,18 @@ def queue_batch(
 
 
 def cglob(
-    root: Path | str,
+    root: Path | str = Path("."),
     pattern: str = "*",
     batch_size: int | None = None,
-    cpus: int = 1
+    queue_size: int = 20,
+    cpus: int = 6,
 ):
     """
     Uses multiprocessing to parallelize the processing of top-level subdirectories,
     each handled by a separate process, while recursively globbing inside each subdirectory.
     """
     root = Path(root)
+    cpus = max(cpus, 1)
     sub_dirs = list(root.glob("*/"))
     files = list(root.glob(pattern))
 
@@ -623,7 +625,7 @@ def cglob(
     else:
         yield batch
 
-    queue = Queue()
+    queue = Queue(queue_size)
     processes = []
     remaining_subdirs = sub_dirs.copy()
     while remaining_subdirs or processes:
