@@ -123,6 +123,23 @@ def dcm_batch_processor(
     return rows # pd.DataFrame(rows)
 
 
+def get_meta(patient, file_extension):
+    rows = []
+    for series in patient.glob("*/*/*/"):
+        try:
+            dcm = dcmread(list(series.glob(file_extension))[0], stop_before_pixels=True)
+
+        except Exception:
+            continue
+
+        row = {k: getattr(dcm, k, None) for k in META_KEYS}
+        row["Dicoms"] = series
+
+        rows.append(row)
+
+    return rows
+
+
 def create_dicom_dataset(
     dicom_dir: Path | str,
     dataset_csv: Path | str,
@@ -235,24 +252,9 @@ def create_dicom_dataset(
         patients = list(dicom_dir.glob("*/"))
 
         dicts = []
-        def get_meta(patient):
-            rows = []
-            for series in patient.glob("*/*/*/"):
-                try:
-                    dcm = dcmread(list(series.glob(file_extension))[0], stop_before_pixels=True)
-
-                except Exception:
-                    continue
-
-                row = {k: getattr(dcm, k, None) for k in META_KEYS}
-                row["Dicoms"] = series
-
-                rows.append(row)
-
-            return rows
 
         with ProcessPoolExecutor(cpus) as executor:
-            futures = [executor.submit(get_meta, patient) for patient in patients]
+            futures = [executor.submit(get_meta, patient, file_extension) for patient in patients]
             for future in tqdm(as_completed(futures), desc="Extracting metadata", total=len(patients)):
                 dicts += future.result()
 
