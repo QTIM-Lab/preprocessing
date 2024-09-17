@@ -689,6 +689,7 @@ def main() -> None:
             "anon": args.anon,
             "batch_size": args.batch,
             "file_extension": "*.dcm" if args.assume_extension else "*",
+            "mode": args.mode,
             "cpus": args.cpus
         }
 
