@@ -1,7 +1,7 @@
 import pandas as pd
 import datetime
+import csv
 
-from itertools import islice
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import as_completed, ProcessPoolExecutor
@@ -14,7 +14,7 @@ from preprocessing.utils import (
 )
 from preprocessing.constants import META_KEYS
 from pydicom.uid import generate_uid
-from pydicom import dcmread
+from pydicom import dcmread, config
 
 
 def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
@@ -89,6 +89,9 @@ def dcm_batch_processor(
     reorg_dir: Path | str | None = None
 ):
     rows = []
+
+    config.settings.reading_validation_mode = config.IGNORE
+
     for file in batch:
         row = {}
 
@@ -117,7 +120,7 @@ def dcm_batch_processor(
         row["Dicoms"] = file
         rows.append(row)
 
-    return pd.DataFrame(rows)
+    return rows # pd.DataFrame(rows)
 
 
 def create_dicom_dataset(
@@ -127,103 +130,142 @@ def create_dicom_dataset(
     anon: Literal["is_anon", "auto", "deferred"] = "auto",
     batch_size: int = 1000,
     file_extension: Literal["*", "*.dcm"] = "*",
+    mode: Literal["arbitrary", "midas"] = "arbitrary",
     cpus: int = 1
 ):
     dicom_dir = Path(dicom_dir)
     dataset_csv = Path(dataset_csv)
     cpus = max(cpus, 1)
     dataset_csv.parent.mkdir(parents=True, exist_ok=True)
-    instance_csv = str(dataset_csv).replace(".csv", "_instances.csv")
     errorfile = dataset_csv.parent /  f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
 
-    # instance_df = pd.DataFrame()
-    dfs = []
+    if mode == "arbitrary":
+        instance_csv = Path(str(dataset_csv).replace(".csv", "_instances.csv"))
 
-    with tqdm(
-        total=0, desc="Constructing DICOM dataset", dynamic_ncols=True
-    ) as pbar, ProcessPoolExecutor(cpus) as executor:
-        futures = set()
-        future_map = {}
-
-        for batch in cglob(
-            root=dicom_dir,
-            pattern=file_extension,
-            batch_size=batch_size,
-            queue_size=2 * cpus
+        with (
+            tqdm(total=0, desc="Constructing DICOM dataset", dynamic_ncols=True) as pbar,
+            ProcessPoolExecutor(cpus) as executor,
+            instance_csv.open("w", newline="") as instance_csv_io
         ):
-            future = executor.submit(dcm_batch_processor, batch, reorg_dir)
-            futures.add(future)
-            future_map[future] = batch
+            writer = csv.DictWriter(
+                instance_csv_io,
+                fieldnames=META_KEYS + ["SOPInstanceUID", "Dicoms"],
+            )
+            writer.writeheader()
+
+            futures = set()
+            future_map = {}
+
+            for batch in cglob(
+                root=dicom_dir,
+                pattern=file_extension,
+                batch_size=batch_size,
+                queue_size=2 * cpus
+            ):
+                future = executor.submit(dcm_batch_processor, batch, reorg_dir)
+                futures.add(future)
+                future_map[future] = batch
 
 
-            pbar.total += len(batch)
-            pbar.refresh()
+                pbar.total += len(batch)
+                pbar.refresh()
 
-            completed_futures = set()
+                completed_futures = set()
 
-            for future in futures:
-                if future.done():
-                    try:
-                        df = future.result()
+                for future in futures:
+                    if future.done():
+                        try:
+                            rows = future.result()
 
-                    except Exception as error:
-                        update_errorfile(
-                            func_name="preprocessing.data.datasets.dcm_batch_processor",
-                            kwargs=future_map[future],
-                            errorfile=errorfile,
-                            error=error
-                        )
+                            for row in rows:
+                                writer.writerow(row)
+
+                        except Exception as error:
+                            update_errorfile(
+                                func_name="preprocessing.data.datasets.dcm_batch_processor",
+                                kwargs={"batch": future_map[future]},
+                                errorfile=errorfile,
+                                error=error
+                            )
+
+                            completed_futures.add(future)
+                            pbar.update(len(batch))
+                            continue
 
                         completed_futures.add(future)
                         pbar.update(len(batch))
-                        continue
 
-                    dfs.append(df)
-                    completed_futures.add(future)
-                    pbar.update(len(batch))
-
-            futures.difference_update(completed_futures)
+                futures.difference_update(completed_futures)
 
 
-        for future in as_completed(futures):
-            try:
-                df = future.result()
+            for future in as_completed(futures):
+                try:
+                    rows = future.result()
 
-            except Exception as error:
-                update_errorfile(
-                    func_name="preprocessing.data.datasets.dcm_batch_processor",
-                    kwargs=future_map[future],
-                    errorfile=errorfile,
-                    error=error
-                )
+                    for row in rows:
+                        writer.writerow(row)
+
+                except Exception as error:
+                    update_errorfile(
+                        func_name="preprocessing.data.datasets.dcm_batch_processor",
+                        kwargs={"batch": future_map[future]},
+                        errorfile=errorfile,
+                        error=error
+                    )
+
+                    pbar.update(len(future_map[future]))
+                    continue
 
                 pbar.update(len(future_map[future]))
-                continue
 
-            dfs.append(df)
-            pbar.update(len(future_map[future]))
+        print(f"Dataset of DICOM instances saved to {instance_csv}")
 
-    instance_df = pd.concat(dfs)
-    instance_df.to_csv(instance_csv, index=False)
-    print(f"Dataset of DICOM instances saved to {instance_csv}")
+        instance_df = pd.read_csv(instance_csv)
+
+        df = (
+            instance_df
+            .drop_duplicates(subset=["SeriesInstanceUID"])
+            .drop(columns=["SOPInstanceUID"])
+        )
+
+        df["Dicoms"] = df["Dicoms"].apply(lambda x: Path(x).parent)
 
 
-    final_df = (
-        instance_df
-        .drop_duplicates(subset=["SeriesInstanceUID"])
-        .drop(columns=["SOPInstanceUID"])
-    )
+    elif mode == "midas":
+        patients = list(dicom_dir.glob("*/"))
 
-    final_df["Dicoms"] = final_df["Dicoms"].apply(lambda x: Path(x).parent)
+        dicts = []
+        def get_meta(patient):
+            rows = []
+            for series in patient.glob("*/*/*/"):
+                try:
+                    dcm = dcmread(list(series.glob(file_extension))[0], stop_before_pixels=True)
+
+                except Exception:
+                    continue
+
+                row = {k: getattr(dcm, k, None) for k in META_KEYS}
+                row["Dicoms"] = series
+
+                rows.append(row)
+
+            return rows
+
+        with ProcessPoolExecutor(cpus) as executor:
+            futures = [executor.submit(get_meta, patient) for patient in patients]
+            for future in tqdm(as_completed(futures), desc="Extracting metadata", total=len(patients)):
+                dicts += future.result()
+
+        df = pd.DataFrame(dicts)
 
 
     if anon == "is_anon":
-        final_df["AnonPatientID"] = final_df["PatientID"]
-        final_df["AnonStudyID"] = final_df["StudyDate"]
+        df["AnonPatientID"] = df["PatientID"]
+        df["AnonStudyID"] = df["StudyDate"]
         print("Anonymization completed")
 
     elif anon == "auto":
-        final_df = anonymize_df(final_df)
+        df = anonymize_df(df)
         print("Anonymization completed")
 
     else:
@@ -232,7 +274,7 @@ def create_dicom_dataset(
             "'AnonPatientID' manually before running subsequent commands."
         )
 
-    final_df.to_csv(dataset_csv, index=False)
+    df.to_csv(dataset_csv, index=False)
     print(f"Dataset written to {dataset_csv}")
 
     if Path(errorfile).exists():

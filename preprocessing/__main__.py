@@ -103,6 +103,16 @@ dicom_dataset.add_argument(
 )
 
 dicom_dataset.add_argument(
+    "-m",
+    "--mode",
+    choices=["arbitrary", "midas"],
+    default="arbitrary",
+    help=(
+        "Mode"
+    ),
+)
+
+dicom_dataset.add_argument(
     "-c",
     "--cpus",
     type=int,
