@@ -27,10 +27,18 @@ META_KEYS = [
     "Modality",
 ]
 
+REQUIRED_KEYS = [
+    "SeriesInstanceUID",
+    "StudyInstanceUID",
+    "PatientID",
+    "StudyDate",
+]
+
+
 PREPROCESSING_MODELS_PATH = (
     os.environ["PREPROCESSING_MODELS_PATH"]
     if "PREPROCESSING_MODELS_PATH" in os.environ
     else initialize_models()
 )
 
-__all__ = ["DEFAULT_SERIES_KEY", "META_KEYS", "PREPROCESSING_MODELS_PATH"]
+__all__ = ["META_KEYS", "REQUIRED_KEYS", "PREPROCESSING_MODELS_PATH"]

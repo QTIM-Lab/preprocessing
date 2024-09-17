@@ -12,7 +12,7 @@ from preprocessing.utils import (
     check_required_columns,
     cglob
 )
-from preprocessing.constants import META_KEYS
+from preprocessing.constants import META_KEYS, REQUIRED_KEYS
 from pydicom.uid import generate_uid
 from pydicom import dcmread, config
 
@@ -100,7 +100,7 @@ def dcm_batch_processor(
 
             for key in META_KEYS + ["SOPInstanceUID"]:
                 # fail on essential meta
-                if "uid" in key.lower():
+                if key in REQUIRED_KEYS:
                     row[key] = getattr(dcm, key)
 
                 else:
@@ -123,19 +123,33 @@ def dcm_batch_processor(
     return rows # pd.DataFrame(rows)
 
 
-def get_meta(patient, file_extension):
+def series_meta(patient, file_extension):
     rows = []
+
+    config.settings.reading_validation_mode = config.IGNORE
+
     for series in patient.glob("*/*/*/"):
-        try:
-            dcm = dcmread(list(series.glob(file_extension))[0], stop_before_pixels=True)
+        row = {}
 
-        except Exception:
-            continue
+        for file in list(series.glob(file_extension)):
+            try:
+                dcm = dcmread(file, stop_before_pixels=True)
 
-        row = {k: getattr(dcm, k, None) for k in META_KEYS}
-        row["Dicoms"] = series
+                for key in META_KEYS + ["SOPInstanceUID"]:
+                    # fail on essential meta
+                    if key in REQUIRED_KEYS:
+                        row[key] = getattr(dcm, key)
 
-        rows.append(row)
+                    else:
+                        row[key] = getattr(dcm, key, None)
+
+                row["Dicoms"] = series
+                rows.append(row)
+
+                break
+
+            except Exception:
+                continue
 
     return rows
 
@@ -254,7 +268,7 @@ def create_dicom_dataset(
         dicts = []
 
         with ProcessPoolExecutor(cpus) as executor:
-            futures = [executor.submit(get_meta, patient, file_extension) for patient in patients]
+            futures = [executor.submit(series_meta, patient, file_extension) for patient in patients]
             for future in tqdm(as_completed(futures), desc="Extracting metadata", total=len(patients)):
                 dicts += future.result()
 
