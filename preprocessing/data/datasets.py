@@ -101,7 +101,7 @@ def dcm_batch_processor(
             for key in META_KEYS + ["SOPInstanceUID"]:
                 # fail on essential meta
                 if key in REQUIRED_KEYS:
-                    row[key] = getattr(dcm, key)
+                    row[key] = str(getattr(dcm, key))
 
                 else:
                     row[key] = getattr(dcm, key, None)
@@ -138,7 +138,7 @@ def series_meta(patient, file_extension):
                 for key in META_KEYS + ["SOPInstanceUID"]:
                     # fail on essential meta
                     if key in REQUIRED_KEYS:
-                        row[key] = getattr(dcm, key)
+                        row[key] = str(getattr(dcm, key))
 
                     else:
                         row[key] = getattr(dcm, key, None)
