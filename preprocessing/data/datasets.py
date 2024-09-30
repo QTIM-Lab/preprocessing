@@ -251,7 +251,7 @@ def create_dicom_dataset(
 
         print(f"Dataset of DICOM instances saved to {instance_csv}")
 
-        instance_df = pd.read_csv(instance_csv)
+        instance_df = pd.read_csv(instance_csv, dtype=str)
 
         df = (
             instance_df
