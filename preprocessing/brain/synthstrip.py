@@ -285,7 +285,7 @@ def synthstrip_skullstrip(
             modelfile = os.path.join(
                 PREPROCESSING_MODELS_PATH, f"synthstrip.{version}.pt"
             )
-    checkpoint = torch.load(modelfile, map_location=device)
+    checkpoint = torch.load(modelfile, map_location=device, weights_only=True)
     model.load_state_dict(checkpoint["model_state_dict"])
 
     # load input volume
