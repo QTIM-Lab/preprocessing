@@ -252,12 +252,12 @@ def launch_slurm(
         cpus=cpus,
     )
 
-    primary_job = run(f"sbatch {ptimary_jobfile}", capture_output=True, shell=True)
+    primary_job = run(f"sbatch {primary_jobfile}", capture_output=True, shell=True)
     primary_job_id = primary_job.stdout.strip().split()[-1].decode()
 
     aggregation_command = (
         "python -c 'from preprocessing.slurm_concurrency import aggregate_slurm_results; "
-        f"aggregate_slurm_results({quotewrap(slurm_dir)}, {quotewrap(csv)})'"
+        f"aggregate_slurm_results({quotewrap(Path(slurm_dir).resolve())}, {quotewrap(Path(csv).resolve())})'"
     )
 
     aggregation_jobfile = generate_array_template(
@@ -274,7 +274,7 @@ def launch_slurm(
         dependency=primary_job_id
     )
 
-    aggregation_job = run(f"sbatch {primary_jobfile}", capture_output=True, shell=True)
+    aggregation_job = run(f"sbatch {aggregation_jobfile}", capture_output=True, shell=True)
     aggregation_job_id = aggregation_job.stdout.strip().split()[-1].decode()
 
     print(f"Submitted primary job: {primary_job_id} followed by aggregation job: {aggregation_job_id}")
