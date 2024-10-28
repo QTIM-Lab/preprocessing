@@ -13,48 +13,38 @@ convert_study
 convert_batch_to_nifti
     Convert a DICOM dataset to NIfTI files representing each series.
 
-find_anon_keys
-    Create anonymization keys for anonymous PatientID and StudyID from previous
-    QTIM organizational scheme. Is compatible with data following a following
-    <Patient_ID>/<Study_ID> directory hierarchy.
+anonymize_df
+    Apply automated anonymization to a DataFrame. This function assumes
+    that the 'PatientID' and 'StudyID' tags are consistent and correct
+    to derive AnonPatientID = 'sub_{i:02d}' and AnonStudyID = 'ses_{i:02d}'.
 
-nifti_anon_csv
-    Create anonymization keys for a dataset that starts within NIfTI format. If the
-    'SeriesDescription's are not normalized, 'NormalizedSeriesDescription's must be
-    obtained externally before the NIfTI dataset can be reorganized.
+create_dicom_dataset
+    Create a DICOM dataset CSV compatible with subsequent `preprocessing`
+    scripts. The final CSV provides a series level summary of the location
+    of each series alongside metadata extracted from DICOM headers.  If the
+    previous organization schems of the dataset does not enforce a DICOM
+    series being isolated to a unique directory (instances belonging to
+    multiple series must not share the same lowest level directory),
+    reorganization must be applied for NIfTI conversion.
 
-reorganize_dicoms
-    Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found recursively
-    within this directory will be reorganized (at least one level of subdirectories
-    is assumed). Anonomyzation keys for PatientIDs and StudyIDs are provided within
-    a CSV.
-
-reorganize_niftis
-    Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files lack metadata,
-    anonymization keys must be provided in the form of a CSV, such as one obtained with
-    `nifti_anon_csv`.
+create_nifti_dataset
+    Create a NIfTI dataset CSV compatible with subsequent `preprocessing`
+    scripts. The final CSV provides a series level summary of the location
+    of each series alongside metadata generated to simulate DICOM headers.
+    Specifically, ['PatientID', 'StudyDate', 'SeriesInstanceUID',
+    'SeriesDescription', 'StudyInstanceUID'] (and optionally
+    'NormalizedSeriesDescription') are inferred or randomly generated.
 """
 
-# from .reorganize import (
-#     find_anon_keys,
-#     reorganize_dicoms,
-#     nifti_anon_csv,
-#     reorganize_niftis,
-# )
 from .nifti_conversion import convert_to_nifti, convert_study, convert_batch_to_nifti
-#from .anonymization import anonymize_df
-from .datasets import create_nifti_dataset, create_dicom_dataset
+from .datasets import anonymize_df, create_nifti_dataset, create_dicom_dataset
 
 
 __all__ = [
     "convert_to_nifti",
     "convert_study",
     "convert_batch_to_nifti",
-    # "find_anon_keys",
-    # "nifti_anon_csv",
-    # "reorganize_dicoms",
-    # "reorganize_niftis",
     "anonymize_df",
     "create_nifti_dataset",
-    "create_dicom_dataset"
+    "create_dicom_dataset",
 ]

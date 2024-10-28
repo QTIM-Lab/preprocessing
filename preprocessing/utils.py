@@ -18,7 +18,7 @@ check_required_columns
     Checks DataFrames for the presence of required columns.
 
 source_external_software
-    Sources external software from the paths where they are located on Martinos Machines.
+    Sources external software from the paths where they are located on QTIM Machines.
     If the paths do not exist, the required software is checked using 'shutil.which'.
 
 sitk_to_surfa
@@ -92,13 +92,13 @@ class MissingSoftwareError(Exception):
         """
         super().__init__(
             f"The required software '{software}' is not installed. This library depends on: {required_software}. "
-            "Please ensure these are installed and sourced correctly if you are not on a Martinos machine."
+            "Please ensure these are installed and sourced correctly if you are not on a QTIM machine."
         )
 
 
 def source_external_software():
     """
-    Sources external software from the paths where they are located on Martinos Machines. If the paths do not exist,
+    Sources external software from the paths where they are located on QTIM Machines. If the paths do not exist,
     the required software is checked using 'shutil.which'.
 
     Parameters
@@ -113,7 +113,7 @@ def source_external_software():
 
     if os.path.exists(
         "/usr/pubsw/packages/fsl/6.0.6/bin"
-    ):  # Source on Martinos Machine
+    ):  # Source on QTIM Machine
         os.environ["PATH"] = ("/usr/pubsw/packages/fsl/6.0.6/bin:") + os.environ.get(
             "PATH", "/usr/bin/"
         )
@@ -286,17 +286,17 @@ def initialize_models() -> str:
         """
 The `preprocessing` library utilizes external models from Synthstrip and Synthmorph.
 The directory that contains these files is specified using the 'PREPROCESSING_MODELS_PATH',
-which is not currently defined. If you are on a Martinos Machine, please enter 'Martinos' below.
+which is not currently defined. If you are on a QTIM Machine, please enter 'QTIM' below.
 Otherwise, enter the path where you wish to store the Synthstrip and Synthmorph models
 (this directory will be created if it does not yet exist):\n
 """
     )
 
-    if models_dir.lower() == "martinos":
-        models_dir = "/autofs/vast/qtim/tools/preprocessing_models"
+    if models_dir.lower() == "qtim":
+        models_dir = "/autofs/space/crater_001/tools/preprocessing_models"
 
     add_to_rc = input(
-        f"\nWould you like to add 'export PREPROCESSING_MODELS_PATH={models_dir}' to your RC file? (y/n):\n\n"
+        f"\nWould you like to add 'export PREPROCESSING_MODELS_PATH={models_dir}' to your RC file? (y/N):\n\n"
     )
 
     if add_to_rc.lower() == "y":
@@ -531,8 +531,8 @@ def parse_string(s: str, pattern: str) -> Dict[str, str]:
 
     pattern: str
         The string defining the search pattern. Variable names are encoded using '{}'
-        (e.g. `pattern`='{patient}_{study}_{series}') would find values for the
-        `patient`, `study`, and `series` variables.
+        (e.g. `pattern`='{patient}_{study}_{series}' would find values for the
+        `patient`, `study`, and `series` variables).
 
     Returns
     -------
@@ -576,7 +576,22 @@ def queue_batch(
     subdir: Path, queue: Queue, pattern: str = "*", batch_size: int | None = None
 ):
     """
-    Processes a subdir by recursively globbing and placing batches of files into the queue.
+    Processes a subdir by recursively 'globbing' and placing batches of files into the queue.
+
+    Parameters
+    ----------
+    subdir: Path
+        The subdirectory to be 'globbed'.
+
+    queue: Queue
+        The queue used to store files or batches of files matching the search pattern.
+
+    pattern: str
+        The search pattern used to select files ('**/' already applied).
+
+    batch_size: int | None
+        The length of the sequences of files placed in the queue. If `None`, single files
+        will be stored.
     """
     generator = subdir.glob(f"**/{pattern}")
 
@@ -605,7 +620,31 @@ def cglob(
 ):
     """
     Uses multiprocessing to parallelize the processing of top-level subdirectories,
-    each handled by a separate process, while recursively globbing inside each subdirectory.
+    each handled by a separate process, while recursively 'globbing' inside each subdirectory.
+
+    Parameters
+    ----------
+    root: Path | str
+        The root directory to be 'globbed', assumed to have subdirectories.
+
+    pattern: str
+        The search pattern used to select files ('**/' already applied).
+
+    batch_size: int | None
+        The length of the sequences of files placed in the queue. If `None`, single files
+        will be stored.
+
+    queue_size: int
+        The maximum size of the queue in terms of numbers of batches.
+
+    cpus: int
+        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
+
+    Yields
+    ------
+    Sequence[Path] | Path
+        This function yields a file matching the search pattern within `root` or a batch
+        of such files dependent on `batch_size`.
     """
     root = Path(root)
     cpus = max(cpus, 1)

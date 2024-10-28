@@ -16,6 +16,21 @@ The following commands are available:
     validate-installation       Check that the `preprocessing` library is installed correctly along
                                 with all of its dependencies.
 
+    dicom-dataset               Create a DICOM dataset CSV compatible with subsequent `preprocessing`
+                                scripts. The final CSV provides a series level summary of the location
+                                of each series alongside metadata extracted from DICOM headers.  If the
+                                previous organization schems of the dataset does not enforce a DICOM
+                                series being isolated to a unique directory (instances belonging to
+                                multiple series must not share the same lowest level directory),
+                                reorganization must be applied for NIfTI conversion.
+
+    nifti-dataset               Create a NIfTI dataset CSV compatible with subsequent `preprocessing`
+                                scripts. The final CSV provides a series level summary of the location
+                                of each series alongside metadata generated to simulate DICOM headers.
+                                Specifically, ['PatientID', 'StudyDate', 'SeriesInstanceUID',
+                                'SeriesDescription', 'StudyInstanceUID'] (and optionally
+                                'NormalizedSeriesDescription') are inferred or randomly generated.
+
     dataset-to-nifti            Convert DICOMs to NIfTI file format. A CSV is required to map a
                                 DICOM series to the resulting .nii.gz file and to provide
                                 the context for filenames. The outputs will follow a BIDS inspired
@@ -55,7 +70,13 @@ dicom_dataset = subparsers.add_parser(
     "dicom-dataset",
     description=(
         """
-        Create a DICOM dataset
+        Create a DICOM dataset CSV compatible with subsequent `preprocessing`
+        scripts. The final CSV provides a series level summary of the location
+        of each series alongside metadata extracted from DICOM headers.  If the
+        previous organization schems of the dataset does not enforce a DICOM
+        series being isolated to a unique directory (instances belonging to
+        multiple series must not share the same lowest level directory),
+        reorganization must be applied for NIfTI conversion.
         """
     )
 )
@@ -64,20 +85,31 @@ dicom_dataset.add_argument(
     "dicom_dir",
     metavar="dicom-dir",
     type=Path,
-    help=("")
+    help=("The directory in which the DICOM data is originally stored.")
 )
 
 dicom_dataset.add_argument(
     "csv",
     type=Path,
-    help=("")
+    help=(
+        """
+        The filepath of the output CSV which defines the constructed
+        dataset. A corresponding instance level CSV will also be written
+        out.
+        """
+    )
 )
 
 dicom_dataset.add_argument(
     "--reorg-dir",
     type=Path,
     default=None,
-    help=("")
+    help=(
+        """
+        The directory to which files are reorganized if a value
+        other than `None` is provided. Defaults to `None`.
+        """
+    )
 )
 
 dicom_dataset.add_argument(
@@ -85,7 +117,25 @@ dicom_dataset.add_argument(
     "--anon",
     choices=["is_anon", "auto", "deferred"],
     default="auto",
-    help=("")
+    help=(
+        """
+        The anonymization scheme to apply to the completed CSV. Choose
+        from:
+            'is_anon'
+                Assumes the data is already anonymized and uses the
+                'PatientID' and 'StudyDate' values.
+
+            'auto'
+                Apply automated anonymization to the CSV. This function
+                assumes that the 'PatientID' and 'StudyID' tags are
+                consistent and correct to derive 'AnonPatientID' = 'sub_{i:02d}'
+                and 'AnonStudyID' = 'ses_{i:02d}'.
+
+            'deferred'
+                Skip anonymization of the generated CSV. This step will be
+                required for subsequent scripts.
+        """
+    )
 )
 
 dicom_dataset.add_argument(
@@ -93,13 +143,13 @@ dicom_dataset.add_argument(
     "--batch",
     type=int,
     default=1,
-    help=("")
+    help=("The size of the groups of files on which metadata extraction is applied.")
 )
 
 dicom_dataset.add_argument(
     "--assume-extension",
     action="store_true",
-    help=("")
+    help=("Assume that the DICOM instances all share the '.dcm' file extension.")
 )
 
 dicom_dataset.add_argument(
@@ -108,7 +158,10 @@ dicom_dataset.add_argument(
     choices=["arbitrary", "midas"],
     default="arbitrary",
     help=(
-        "Mode"
+        """
+        The assumed data orgnaization scheme under `dicom_dir`. The choices
+        are ['arbitrary', 'midas']. Defaults to 'arbitrary'.
+        """
     ),
 )
 
@@ -126,7 +179,12 @@ nifti_dataset = subparsers.add_parser(
     "nifti-dataset",
     description=(
         """
-        Create a NIfTI dataset
+        Create a NIfTI dataset CSV compatible with subsequent `preprocessing`
+        scripts. The final CSV provides a series level summary of the location
+        of each series alongside metadata generated to simulate DICOM headers.
+        Specifically, ['PatientID', 'StudyDate', 'SeriesInstanceUID',
+        'SeriesDescription', 'StudyInstanceUID'] (and optionally
+        'NormalizedSeriesDescription') are inferred or randomly generated.
         """
     )
 )
@@ -135,20 +193,33 @@ nifti_dataset.add_argument(
     "nifti_dir",
     metavar="nifti-dir",
     type=Path,
-    help=("")
+    help=("The directory in which the DICOM data is originally stored.")
 )
 
 nifti_dataset.add_argument(
     "csv",
     type=Path,
-    help=("")
+    help=(
+        """
+        The filepath of the output CSV which defines the constructed
+        dataset.
+        """
+    )
 )
 
 nifti_dataset.add_argument(
     "file_pattern",
     metavar="file-pattern",
     type=str,
-    help=("")
+    help=(
+        """
+        The file naming convention (without file extensions) of NIfTIs within a
+        dataset. Variable names are encoded using '{}' (e.g. `file_pattern` =
+        '{patient}_{study}_{series}' would find values for the `patient`, `study`,
+        and `series` variables). The `patient`, `study`, and `series` variables
+        must be defined.
+        """
+    )
 )
 
 nifti_dataset.add_argument(
@@ -156,7 +227,25 @@ nifti_dataset.add_argument(
     "--anon",
     choices=["is_anon", "auto", "deferred"],
     default="auto",
-    help=("")
+    help=(
+        """
+        The anonymization scheme to apply to the completed CSV. Choose
+        from:
+            'is_anon'
+                Assumes the data is already anonymized and uses the
+                'PatientID' and 'StudyDate' values.
+
+            'auto'
+                Apply automated anonymization to the CSV. This function
+                assumes that the 'PatientID' and 'StudyID' tags are
+                consistent and correct to derive 'AnonPatientID' = 'sub_{i:02d}'
+                and 'AnonStudyID' = 'ses_{i:02d}'.
+
+            'deferred'
+                Skip anonymization of the generated CSV. This step will be
+                required for subsequent scripts.
+        """
+    )
 )
 
 nifti_dataset.add_argument(
@@ -164,7 +253,7 @@ nifti_dataset.add_argument(
     "--batch",
     type=int,
     default=20,
-    help=("")
+    help=("The size of the groups of files on which metadata extraction is applied.")
 )
 
 nifti_dataset.add_argument(
@@ -172,7 +261,13 @@ nifti_dataset.add_argument(
     "--seg-series",
     type=str,
     default=None,
-    help=("")
+    help=(
+        """
+        The series description of segmentations within the dataset, assuming a
+        consistent value is present. Must also specify `seg_target` to handle
+        segmentations properly. Defaults to `None`.
+        """
+    )
 )
 
 nifti_dataset.add_argument(
@@ -180,7 +275,13 @@ nifti_dataset.add_argument(
     "--seg-target",
     type=str,
     default=None,
-    help=("")
+    help=(
+        """
+        The series description of the series from which segmentations are derived,
+        assuming a consistent value is present. Must also specify `seg_series` to
+        handle segmentations properly. Defaults to `None`.
+        """
+    )
 )
 
 nifti_dataset.add_argument(

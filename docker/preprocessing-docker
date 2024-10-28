@@ -16,30 +16,26 @@ logging.basicConfig(
 
 #Same as main parser
 USAGE_STR = """
-preprocessing_docker <command> [<args>]
+preprocessing-docker <command> [<args>]
 
 The following commands are available:
     validate-installation       Check that the `preprocessing` library is installed correctly along
                                 with all of its dependencies.
 
-    old-project-anon-keys       Create anonymization keys for anonymous PatientID and VisitID
-                                from previous QTIM organizational scheme. Should be compatible
-                                with data following a following <Patient_ID>/<Study_ID> directory
-                                hierarchy.
+    dicom-dataset               Create a DICOM dataset CSV compatible with subsequent `preprocessing`
+                                scripts. The final CSV provides a series level summary of the location
+                                of each series alongside metadata extracted from DICOM headers.  If the
+                                previous organization schems of the dataset does not enforce a DICOM
+                                series being isolated to a unique directory (instances belonging to
+                                multiple series must not share the same lowest level directory),
+                                reorganization must be applied for NIfTI conversion.
 
-    nifti-dataset-anon-keys     Create anonymization keys for a dataset that starts within NIfTI
-                                format. If the 'SeriesDescription's are not normalized,
-                                'NormalizedSeriesDescription's must be obtained externally before
-                                the NIfTI dataset can be reorganized.
-
-    reorganize-dicoms           Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found
-                                recursively within this directory will be reorganized (at least
-                                one level of subdirectories is assumed). Anonomyzation keys for
-                                PatientIDs and StudyIDs are provided within a CSV.
-
-    reorganize-niftis           Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files
-                                lack metadata, anonymization keys must be provided in the form of a
-                                CSV, such as one obtained with `nifti-dataset-anon-keys`.
+    nifti-dataset               Create a NIfTI dataset CSV compatible with subsequent `preprocessing`
+                                scripts. The final CSV provides a series level summary of the location
+                                of each series alongside metadata generated to simulate DICOM headers.
+                                Specifically, ['PatientID', 'StudyDate', 'SeriesInstanceUID',
+                                'SeriesDescription', 'StudyInstanceUID'] (and optionally
+                                'NormalizedSeriesDescription') are inferred or randomly generated.
 
     dataset-to-nifti            Convert DICOMs to NIfTI file format. A CSV is required to map a
                                 DICOM series to the resulting .nii.gz file and to provide
@@ -57,7 +53,7 @@ The following commands are available:
                                 was used when preprocessing the data.
 
 
-Run `preprocessing_docker <command> --help` for more details about how to use each individual command.
+Run `preprocessing-docker <command> --help` for more details about how to use each individual command.
 
 """
 
@@ -76,123 +72,106 @@ validate_installation = subparsers.add_parser(
     )
 )
 
-old_project_anon_keys = subparsers.add_parser(
-    "old-project-anon-keys",
+dicom_dataset = subparsers.add_parser(
+    "dicom-dataset",
     description=(
         """
-        Create anonymization keys for anonymous PatientID and StudyID
-        from the previous QTIM organizational scheme. Is compatible
-        with data following a following <Patient_ID>/<Study_ID> directory
-        hierarchy.
+        Create a DICOM dataset CSV compatible with subsequent `preprocessing`
+        scripts. The final CSV provides a series level summary of the location
+        of each series alongside metadata extracted from DICOM headers.  If the
+        previous organization schems of the dataset does not enforce a DICOM
+        series being isolated to a unique directory (instances belonging to
+        multiple series must not share the same lowest level directory),
+        reorganization must be applied for NIfTI conversion.
         """
-    ),
+    )
 )
 
-
-old_project_anon_keys.add_argument(
-    "input_dir",
-    metavar="input-dir",
-    type=str,
-    help=(
-        """
-        The directory containing all of the dicom files for a project.
-        It is expected to follow the <Patient_ID>/<Study_ID> convention.
-        """
-    ),
-)
-
-old_project_anon_keys.add_argument(
-    "output_dir",
-    metavar="output-dir",
-    type=str,
-    help=(
-        """
-        The directory that will contain the output CSV and potentially
-        an error file.
-        """
-    ),
-)
-
-nifti_dataset_anon_keys = subparsers.add_parser(
-    "nifti-dataset-anon-keys",
-    description=(
-        """
-        Create anonymization keys for a dataset that starts within NIfTI
-        format. If the 'SeriesDescription's are not normalized,
-        'NormalizedSeriesDescription's must be obtained externally before
-        the NIfTI dataset can be reorganized.
-        """
-    ),
-)
-
-nifti_dataset_anon_keys.add_argument(
-    "nifti_dir",
-    metavar="nifti-dir",
+dicom_dataset.add_argument(
+    "dicom_dir",
+    metavar="dicom-dir",
     type=Path,
-    help=("The directory containing all of the NIfTI files you wish to anonymize."),
+    help=("The directory in which the DICOM data is originally stored.")
 )
 
-nifti_dataset_anon_keys.add_argument(
-    "output_dir",
-    metavar="output-dir",
-    type=Path,
-    help=(
-        "The directory that will contain the output CSV and potentially an error file."
-    ),
-)
-
-nifti_dataset_anon_keys.add_argument(
-    "--normalized-descriptions",
-    action="store_true",
-    help=(
-        "Whether the 'SeriesDescription' in the NIfTI file name is already normalized."
-    ),
-)
-
-reorganize_d = subparsers.add_parser(
-    "reorganize-dicoms",
-    description=(
-        """
-        Reorganize DICOMs to follow a BIDS inspired convention. Any DICOMs found
-        recursively within this directory will be reorganized (at least
-        one level of subdirectories is assumed). Anonomyzation keys for
-        PatientIDs and StudyIDs are provided within a CSV.
-        """
-    ),
-)
-
-reorganize_d.add_argument(
-    "original_dicom_dir",
-    metavar="original-dicom-dir",
-    type=Path,
-    help=("The directory containing all of the DICOM files you wish to reorganize."),
-)
-
-reorganize_d.add_argument(
-    "new_dicom_dir",
-    metavar="new-dicom-dir",
+dicom_dataset.add_argument(
+    "csv",
     type=Path,
     help=(
         """
-        The directory that will contain the same DICOM files reorganized to
-        follow a BIDS inspired convention.
+        The filepath of the output CSV which defines the constructed
+        dataset. A corresponding instance level CSV will also be written
+        out.
         """
-    ),
+    )
 )
 
-reorganize_d.add_argument(
-    "--anon-csv",
+dicom_dataset.add_argument(
+    "--reorg-dir",
     type=Path,
     default=None,
     help=(
         """
-        A CSV mapping PatientID and StudyInstanceUID to anonymous values. If None is
-        provided, the anonymization will be inferred from the DICOM headers.
+        The directory to which files are reorganized if a value
+        other than `None` is provided. Defaults to `None`.
+        """
+    )
+)
+
+dicom_dataset.add_argument(
+    "-a",
+    "--anon",
+    choices=["is_anon", "auto", "deferred"],
+    default="auto",
+    help=(
+        """
+        The anonymization scheme to apply to the completed CSV. Choose
+        from:
+            'is_anon'
+                Assumes the data is already anonymized and uses the
+                'PatientID' and 'StudyDate' values.
+
+            'auto'
+                Apply automated anonymization to the CSV. This function
+                assumes that the 'PatientID' and 'StudyID' tags are
+                consistent and correct to derive 'AnonPatientID' = 'sub_{i:02d}'
+                and 'AnonStudyID' = 'ses_{i:02d}'.
+
+            'deferred'
+                Skip anonymization of the generated CSV. This step will be
+                required for subsequent scripts.
+        """
+    )
+)
+
+dicom_dataset.add_argument(
+    "-b",
+    "--batch",
+    type=int,
+    default=1,
+    help=("The size of the groups of files on which metadata extraction is applied.")
+)
+
+dicom_dataset.add_argument(
+    "--assume-extension",
+    action="store_true",
+    help=("Assume that the DICOM instances all share the '.dcm' file extension.")
+)
+
+dicom_dataset.add_argument(
+    "-m",
+    "--mode",
+    choices=["arbitrary", "midas"],
+    default="arbitrary",
+    help=(
+        """
+        The assumed data orgnaization scheme under `dicom_dir`. The choices
+        are ['arbitrary', 'midas']. Defaults to 'arbitrary'.
         """
     ),
 )
 
-reorganize_d.add_argument(
+dicom_dataset.add_argument(
     "-c",
     "--cpus",
     type=int,
@@ -202,50 +181,116 @@ reorganize_d.add_argument(
     ),
 )
 
-reorganize_d.add_argument(
-    "--include-incomplete",
-    action="store_true",
-    help=(
-        "Whether to keep other instances in a series after some instances have failed to be "
-        "copied."
+nifti_dataset = subparsers.add_parser(
+    "nifti-dataset",
+    description=(
+        """
+        Create a NIfTI dataset CSV compatible with subsequent `preprocessing`
+        scripts. The final CSV provides a series level summary of the location
+        of each series alongside metadata generated to simulate DICOM headers.
+        Specifically, ['PatientID', 'StudyDate', 'SeriesInstanceUID',
+        'SeriesDescription', 'StudyInstanceUID'] (and optionally
+        'NormalizedSeriesDescription') are inferred or randomly generated.
+        """
     )
 )
 
-reorganize_n = subparsers.add_parser(
-    "reorganize-niftis",
-    description=(
-        """
-        Reorganize a NIfTI dataset to follow a BIDS inspired convention. As NIfTI files
-        lack metadata, anonymization keys must be provided in the form of a
-        CSV, such as one obtained with `nifti-dataset-anon-keys`.
-        """
-    ),
-)
-
-reorganize_n.add_argument(
+nifti_dataset.add_argument(
     "nifti_dir",
     metavar="nifti-dir",
     type=Path,
-    help=("The directory in which the reorganized NIfTIs will be stored."),
+    help=("The directory in which the DICOM data is originally stored.")
 )
 
-reorganize_n.add_argument(
-    "anon_csv",
-    metavar="anon-csv",
+nifti_dataset.add_argument(
+    "csv",
     type=Path,
     help=(
         """
-        A CSV containing the original location of NIfTI files and metadata
-        required for preprocessing commands. It must contain the columns:
-        'AnonPatientID', 'AnonStudyID', 'PatientID', 'StudyDate',
-        'SeriesInstanceUID', 'StudyInstanceUID', 'SeriesDescription',
-        'OriginalNifti', and 'NormalizedSeriesDescription'. 'SeriesType'
-        can also be provided, otherwise "anat" will be assumed.
+        The filepath of the output CSV which defines the constructed
+        dataset.
         """
-    ),
+    )
 )
 
-reorganize_n.add_argument(
+nifti_dataset.add_argument(
+    "file_pattern",
+    metavar="file-pattern",
+    type=str,
+    help=(
+        """
+        The file naming convention (without file extensions) of NIfTIs within a
+        dataset. Variable names are encoded using '{}' (e.g. `file_pattern` =
+        '{patient}_{study}_{series}' would find values for the `patient`, `study`,
+        and `series` variables). The `patient`, `study`, and `series` variables
+        must be defined.
+        """
+    )
+)
+
+nifti_dataset.add_argument(
+    "-a",
+    "--anon",
+    choices=["is_anon", "auto", "deferred"],
+    default="auto",
+    help=(
+        """
+        The anonymization scheme to apply to the completed CSV. Choose
+        from:
+            'is_anon'
+                Assumes the data is already anonymized and uses the
+                'PatientID' and 'StudyDate' values.
+
+            'auto'
+                Apply automated anonymization to the CSV. This function
+                assumes that the 'PatientID' and 'StudyID' tags are
+                consistent and correct to derive 'AnonPatientID' = 'sub_{i:02d}'
+                and 'AnonStudyID' = 'ses_{i:02d}'.
+
+            'deferred'
+                Skip anonymization of the generated CSV. This step will be
+                required for subsequent scripts.
+        """
+    )
+)
+
+nifti_dataset.add_argument(
+    "-b",
+    "--batch",
+    type=int,
+    default=20,
+    help=("The size of the groups of files on which metadata extraction is applied.")
+)
+
+nifti_dataset.add_argument(
+    "-ss",
+    "--seg-series",
+    type=str,
+    default=None,
+    help=(
+        """
+        The series description of segmentations within the dataset, assuming a
+        consistent value is present. Must also specify `seg_target` to handle
+        segmentations properly. Defaults to `None`.
+        """
+    )
+)
+
+nifti_dataset.add_argument(
+    "-st",
+    "--seg-target",
+    type=str,
+    default=None,
+    help=(
+        """
+        The series description of the series from which segmentations are derived,
+        assuming a consistent value is present. Must also specify `seg_series` to
+        handle segmentations properly. Defaults to `None`.
+        """
+    )
+)
+
+nifti_dataset.add_argument(
     "-c",
     "--cpus",
     type=int,

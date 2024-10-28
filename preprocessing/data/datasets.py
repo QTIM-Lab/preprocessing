@@ -1,3 +1,31 @@
+"""
+The `datasets` module contains tools for constructing DICOM and NIfTI
+datasets from a collection of files in the corresponding format.
+
+Public Functions
+----------------
+anonymize_df
+    Apply automated anonymization to a DataFrame. This function assumes
+    that the 'PatientID' and 'StudyID' tags are consistent and correct
+    to derive AnonPatientID = 'sub_{i:02d}' and AnonStudyID = 'ses_{i:02d}'.
+
+create_dicom_dataset
+    Create a DICOM dataset CSV compatible with subsequent `preprocessing`
+    scripts. The final CSV provides a series level summary of the location
+    of each series alongside metadata extracted from DICOM headers.  If the
+    previous organization schems of the dataset does not enforce a DICOM
+    series being isolated to a unique directory (instances belonging to
+    multiple series must not share the same lowest level directory),
+    reorganization must be applied for NIfTI conversion.
+
+create_nifti_dataset
+    Create a NIfTI dataset CSV compatible with subsequent `preprocessing`
+    scripts. The final CSV provides a series level summary of the location
+    of each series alongside metadata generated to simulate DICOM headers.
+    Specifically, ['PatientID', 'StudyDate', 'SeriesInstanceUID',
+    'SeriesDescription', 'StudyInstanceUID'] (and optionally
+    'NormalizedSeriesDescription') are inferred or randomly generated.
+"""
 import pandas as pd
 import datetime
 import csv
@@ -5,7 +33,7 @@ import csv
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import as_completed, ProcessPoolExecutor
-from typing import Literal, Callable, Sequence, Tuple, Dict
+from typing import Literal, Callable, Sequence, Tuple, Dict, Any
 from preprocessing.utils import (
     parse_string,
     update_errorfile,
@@ -19,9 +47,9 @@ from pydicom import dcmread, config
 
 def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
     """
-    Apply automated anonymization to a DatFrame. This function assumes
+    Apply automated anonymization to a DataFrame. This function assumes
     that the 'PatientID' and 'StudyID' tags are consistent and correct
-    to derive AnonPatientID = 'sub_{i:02d}' and AnonStudyID = 'ses_{i:02d}'.
+    to derive 'AnonPatientID' = 'sub_{i:02d}' and 'AnonStudyID' = 'ses_{i:02d}'.
 
     Parameters
     ----------
@@ -88,6 +116,26 @@ def dcm_batch_processor(
     batch: Sequence[Path],
     reorg_dir: Path | str | None = None
 ):
+    """
+    Extracts metadata from a sequence of DICOM files and writes
+    the file to a new location if a reorganization directory is
+    specified.
+
+    Parameters
+    ----------
+    batch: Sequence[Path]
+        A sequence of DICOM instances from which to extract metadata.
+
+    reorg_dir: Path | str | None
+        The directory to which files are reorganized if a value
+        other than `None` is provided. Defaults to `None`.
+
+    Returns
+    -------
+    List[Dict[str, str]]
+        A list of dictionaries mapping metadata keys to the values
+        in a DICOM instance.
+    """
     rows = []
 
     config.settings.reading_validation_mode = config.IGNORE
@@ -104,7 +152,7 @@ def dcm_batch_processor(
                     row[key] = str(getattr(dcm, key))
 
                 else:
-                    row[key] = getattr(dcm, key, None)
+                    row[key] = str(getattr(dcm, key, None))
 
 
         except Exception:
@@ -120,15 +168,37 @@ def dcm_batch_processor(
         row["Dicoms"] = file
         rows.append(row)
 
-    return rows # pd.DataFrame(rows)
+    return rows
 
 
-def series_meta(patient, file_extension):
+def series_meta(
+    patient: Path | str,
+    file_extension: Literal["*", "*.dcm"] = "*"
+):
+    """
+    Extracts metadata from each series within a patient directory
+    following the organizational scheme of a MIDAS pull.
+
+    Parameters
+    ----------
+    batch: Path | str
+        A sequence of DICOM instances from which to extract metadata.
+
+    file_extension: str
+        The assumed file extension used to identify DICOMs. The choices
+        are ['*', '*.dcm']. Defaults to '*'.
+
+    Returns
+    -------
+    List[Dict[str, str]]
+        A list of dictionaries mapping metadata keys to the values
+        of a DICOM series.
+    """
     rows = []
 
     config.settings.reading_validation_mode = config.IGNORE
 
-    for series in patient.glob("*/*/*/"):
+    for series in Path(patient).glob("*/*/*/"):
         row = {}
 
         for file in list(series.glob(file_extension)):
@@ -164,6 +234,68 @@ def create_dicom_dataset(
     mode: Literal["arbitrary", "midas"] = "arbitrary",
     cpus: int = 1
 ):
+    """
+    Create a DICOM dataset CSV compatible with subsequent `preprocessing`
+    scripts. The final CSV provides a series level summary of the location
+    of each series alongside metadata extracted from DICOM headers.  If the
+    previous organization schems of the dataset does not enforce a DICOM
+    series being isolated to a unique directory (instances belonging to
+    multiple series must not share the same lowest level directory),
+    reorganization must be applied for NIfTI conversion.
+
+
+    Parameters
+    ----------
+    dicom_dir: Path | str
+        The directory in which the DICOM data is originally stored.
+
+    dataset_csv: Path | str
+        The filepath of the output CSV which defines the constructed
+        dataset. A corresponding instance level CSV will also be written
+        out.
+
+    reorg_dir: Path | str | None
+        The directory to which files are reorganized if a value
+        other than `None` is provided. Defaults to `None`.
+
+    anon: str
+        The anonymization scheme to apply to the completed CSV. Choose
+        from:
+            'is_anon'
+                Assumes the data is already anonymized and uses the
+                'PatientID' and 'StudyDate' values.
+
+            'auto'
+                Apply automated anonymization to the CSV. This function
+                assumes that the 'PatientID' and 'StudyID' tags are
+                consistent and correct to derive 'AnonPatientID' = 'sub_{i:02d}'
+                and 'AnonStudyID' = 'ses_{i:02d}'.
+
+            'deferred'
+                Skip anonymization of the generated CSV. This step will be
+                required for subsequent scripts.
+
+    batch_size: int
+        The size of the groups of files on which metadata extraction is applied.
+
+    file_extension: str
+        The assumed file extension used to identify DICOMs. The choices
+        are ['*', '*.dcm']. Defaults to '*'.
+
+    mode: str
+        The assumed data orgnaization scheme under `dicom_dir`. The choices
+        are ['arbitrary', 'midas']. Defaults to 'arbitrary'.
+
+    cpus: int
+        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
+
+    Returns
+    -------
+    None
+        This function does not return anything+, but a CSV is generated to the location
+        specified by `dataset_csv`. An instance level CSV is also generated to `str(dataset_csv).replace('.csv', '_instances.csv')`.
+        An error file is potentially generated to the same parent directory of these CSVs.
+    """
     dicom_dir = Path(dicom_dir)
     dataset_csv = Path(dataset_csv)
     cpus = max(cpus, 1)
@@ -287,7 +419,7 @@ def create_dicom_dataset(
     else:
         print(
             "Anonymization has been skipped. Add the 'AnonPatientID' and "
-            "'AnonPatientID' manually before running subsequent commands."
+            "'AnonStudyID' manually before running subsequent commands."
         )
 
     df.to_csv(dataset_csv, index=False)
@@ -304,6 +436,47 @@ def nifti_batch_processor(
     seg_series: str | None = None,
     seg_target: str | None = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Record the locations of NIfTI following a consistent naming convention. For
+    subsequent `preprocessing` scripts, DICOM metadata is simulated for
+    compatibility. Specifically, ['PatientID', 'StudyDate', 'SeriesInstanceUID',
+    'SeriesDescription'] (and optionally 'NormalizedSeriesDescription') are
+    inferred or randomly generated.
+
+    Parameters
+    ----------
+    batch: Path | str
+        A sequence of DICOM instances from which to extract metadata.
+
+    file_pattern: str
+        The file naming convention (without file extensions) of NIfTIs within a
+        dataset. Variable names are encoded using '{}' (e.g. `file_pattern` =
+        '{patient}_{study}_{series}' would find values for the `patient`, `study`,
+        and `series` variables). The `patient`, `study`, and `series` variables
+        must be defined.
+
+    normalized_descriptions: bool
+        Whether series descriptions are assumed to be normalized. If `True`, the
+        'NormalizedSeriesDescription' column will be populated. Defaults to `True`.
+
+    seg_series: str | None
+        The series description of segmentations within the dataset, assuming a
+        consistent value is present. Must also specify `seg_target` to handle
+        segmentations properly. Defaults to `None`.
+
+    seg_target: str | None
+        The series description of the series from which segmentations are derived,
+        assuming a consistent value is present. Must also specify `seg_series` to
+        handle segmentations properly. Defaults to `None`.
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, pd.DataFrame]
+        A pair of DataFrames containing the locations of considered files. The first
+        contains files accepted into the dataset and their simulated metadata, while
+        the second records files that encountered an exception and what exception was
+        raised.
+    """
     accepted_rows = []
     rejected_rows = []
 
@@ -357,15 +530,74 @@ def create_nifti_dataset(
     anon: Literal["is_anon", "auto", "deferred"] = "auto",
     batch_size: int = 20,
     batch_processor: Callable = nifti_batch_processor,
-    processor_kwargs: Dict = {
+    processor_kwargs: Dict[str, Any] = {
         "file_pattern": "{patient}_{study}_{series}",
         "seg_series": "seg",
         "seg_target": "T1Post"
     },
     cpus: int = 1
 ):
+    """
+    Create a NIfTI dataset CSV compatible with subsequent `preprocessing`
+    scripts. The final CSV provides a series level summary of the location
+    of each series alongside metadata generated to simulate DICOM headers.
+    Specifically, ['PatientID', 'StudyDate', 'SeriesInstanceUID',
+    'SeriesDescription', 'StudyInstanceUID'] (and optionally
+    'NormalizedSeriesDescription') are inferred or randomly generated.
 
+    Parameters
+    ----------
+    nifti_dir: Path | str
+        The directory in which the DICOM data is originally stored.
 
+    dataset_csv: Path | str
+        The filepath of the output CSV which defines the constructed
+        dataset.
+
+    anon: str
+        The anonymization scheme to apply to the completed CSV. Choose
+        from:
+            'is_anon'
+                Assumes the data is already anonymized and uses the
+                'PatientID' and 'StudyDate' values.
+
+            'auto'
+                Apply automated anonymization to the CSV. This function
+                assumes that the 'PatientID' and 'StudyID' tags are
+                consistent and correct to derive 'AnonPatientID' = 'sub_{i:02d}'
+                and 'AnonStudyID' = 'ses_{i:02d}'.
+
+            'deferred'
+                Skip anonymization of the generated CSV. This step will be
+                required for subsequent scripts.
+
+    batch_size: int
+        The size of the groups of files on which metadata extraction is applied.
+
+    batch_processor: Callable
+        The function used to infer or generate metadata from a batch of NIfTI files.
+        It must accept the key word argument 'batch' and derive ['PatientID',
+        'StudyDate', 'SeriesInstanceUID', 'SeriesDescription'] (and optionally
+        'NormalizedSeriesDescription') for each file, returning a tuple containing a
+        DatFrame of accepted NIfTIs with these metadata and the file location recorded
+        under 'Nifti' and a second DataFrame with no constraints. This function can be
+        passed any other desired arguments provided they are specified in
+        `processor_kwargs`.
+
+    processor_kwargs: Dict[str, Any]
+        Additional arguments to be passed to `batch_processor` as key word arguments,
+        if applicable.
+
+    cpus: int
+        Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
+
+    Returns
+    -------
+    None
+        This function does not return anything+, but a CSV is generated to the location
+        specified by `dataset_csv`. An error file is potentially generated to the
+        same parent directory of the CSV.
+    """
     nifti_dir = Path(nifti_dir)
     dataset_csv = Path(dataset_csv)
     cpus = max(cpus, 1)
@@ -498,3 +730,10 @@ def create_nifti_dataset(
 
     if Path(errorfile).exists():
         print(f"Errors were encountered while running this script. Refer to {errorfile}")
+
+
+__all__ = [
+    "anonymize_df",
+    "create_dicom_dataset",
+    "create_nifti_dataset",
+]

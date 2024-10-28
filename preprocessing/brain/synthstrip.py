@@ -1,5 +1,5 @@
 """
-The `synthmstrip` module uses the Synthmorph models to perform image registration.
+The `synthstrip` module uses the Synthmorph models to perform image registration.
 
 Public Functions
 ----------------
