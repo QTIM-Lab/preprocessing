@@ -389,7 +389,7 @@ brain_preprocessing.add_argument(
     "-pk",
     "--pipeline-key",
     type=str,
-    default="preprocessed",
+    default="Preprocessed",
     help=(
         """
         The key that will be used in the CSV to indicate the new locations of preprocessed
