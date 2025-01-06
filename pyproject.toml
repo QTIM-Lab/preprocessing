@@ -16,7 +16,7 @@ dicom2nifti = "^2.4.9"
 surfa = {git = "https://github.com/freesurfer/surfa.git", branch = "master"} # rev = "026cabec14bb03d9dfbc6b5bdf14baec7bd51c7f"}
 voxelmorph = {git = "https://github.com/voxelmorph/voxelmorph.git", branch = "dev"} # rev = "ca3d47a2c254aae9a0c0e1b30c24c324c211ebc8"}
 neurite = {git = "https://github.com/adalca/neurite.git", branch = "dev"} #rev = "95b2b568b124cbc654467177ddcdb2cb3526788c"}
-pycrumbs = "^0.3.0"
+pycrumbs = {git = "https://github.com/mccle/pycrumbs.git", branch = "char_limit" } # "^0.3.0"
 simpleitk = "^2.3.1"
 connected-components-3d = "^3.12.4"
 scikit-image = "^0.22.0"
