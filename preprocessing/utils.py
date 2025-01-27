@@ -27,6 +27,9 @@ sitk_to_surfa
 surfa_to_sitk
     Convert a surfa.Volume to a SimpleITK.Image.
 
+hd_to_sitk
+    Convert a highdicom.volume.Volume to a SimpleITK.Image.
+
 initialize_models
     Set the path to the locations where the preprocessing models are (or will be stored).
 
@@ -53,6 +56,7 @@ import psutil
 import warnings
 import traceback
 import re
+import highdicom as hd
 
 from shutil import which
 from typing import Sequence, Dict, Any
@@ -66,7 +70,7 @@ from subprocess import run
 from pathlib import Path
 from multiprocessing import Process, Queue
 from itertools import islice
-from time import sleep
+
 
 
 class MissingSoftwareError(Exception):
@@ -271,6 +275,43 @@ def surfa_to_sitk(sf_im: Volume) -> Image:
     sitk_im.SetOrigin(ras_lps @ sf_im.geom.vox2world[:3, 3])
 
     return sitk_im
+
+
+def hd_to_sitk(hd_im: hd.volume.Volume) -> Image:
+    """
+    Convert a highdicom.volume.Volume to a SimpleITK.Image.
+
+    Parameters
+    ----------
+    hd_im: hd.volume.Volume
+        A highdicom.volume.Volume to convert.
+
+    Returns
+    -------
+    sitk_im: Image
+        The corresponding SimpleITK.Image.
+    """
+    data = hd_im.array.transpose(2, 1, 0)
+
+    if data.dtype == np.bool_:
+        data = data.astype(int)
+
+    spacing = hd_im.spacing
+
+    sitk_im = GetImageFromArray(data)
+
+    sitk_im.SetSpacing(spacing)
+
+    sitk_im.SetDirection(
+        (
+            hd_im.affine[:3, :3] / np.reshape(spacing * 3, (3, 3))
+        ).flatten()
+    )
+
+    sitk_im.SetOrigin(hd_im.affine[:3, 3])
+
+    return sitk_im
+
 
 
 def initialize_models() -> str:
@@ -695,6 +736,7 @@ __all__ = [
     "source_external_software",
     "sitk_to_surfa",
     "surfa_to_sitk",
+    "hd_to_sitk",
     "initialize_models",
     "check_for_models",
     "cpu_adjust",

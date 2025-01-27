@@ -36,12 +36,13 @@ create_nifti_dataset
     'NormalizedSeriesDescription') are inferred or randomly generated.
 """
 
-from .nifti_conversion import convert_to_nifti, convert_study, convert_batch_to_nifti
+from .nifti_conversion import convert_series, convert_seg, convert_study, convert_batch_to_nifti
 from .datasets import anonymize_df, create_nifti_dataset, create_dicom_dataset
 
 
 __all__ = [
-    "convert_to_nifti",
+    "convert_series",
+    "convert_seg",
     "convert_study",
     "convert_batch_to_nifti",
     "anonymize_df",
