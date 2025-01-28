@@ -523,7 +523,8 @@ def update_errorfile(
     func_name: str,
     kwargs: Dict[str, Any],
     errorfile: Path | str,
-    error: Exception
+    error: Exception,
+    verbose: bool = False,
 ) -> None:
     """
     Updates an errorfile with the full traceback of an encountered exception and
@@ -543,6 +544,9 @@ def update_errorfile(
     error: Exception
         The exception that was encountered.
 
+    verbose: bool
+        Whether to print the full traceback in addition to logging it
+        to `errorfile`. Defaults to False.
     """
     full_trace = "".join(
         traceback.TracebackException.from_exception(error).format()
@@ -558,6 +562,9 @@ def update_errorfile(
 
     with errorfile.open("a") as ef:
         ef.write(log)
+
+    if verbose:
+        print(log)
 
 
 def parse_string(s: str, pattern: str) -> Dict[str, str]:
