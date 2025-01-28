@@ -767,8 +767,6 @@ def main() -> None:
             from preprocessing import synthmorph
             from preprocessing import utils
 
-            utils.source_external_software()
-
             if "PREPROCESSING_MODELS_PATH" in os.environ:
                 pass
 

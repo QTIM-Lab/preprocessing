@@ -8,18 +8,10 @@ MissingColumnsError
     Exception to be raised in the cases where a DataFrame doesn't have the necessary
     columns to run a function.
 
-MissingSoftwareError
-    Exception to be raised in the cases where software external to Python is called and
-    that software has not been properly sourced.
-
 Public Functions
 ----------------
 check_required_columns
     Checks DataFrames for the presence of required columns.
-
-source_external_software
-    Sources external software from the paths where they are located on QTIM Machines.
-    If the paths do not exist, the required software is checked using 'shutil.which'.
 
 sitk_to_surfa
     Convert a SimpleITK.Image to a surfa.Volume.
@@ -58,7 +50,6 @@ import traceback
 import re
 import highdicom as hd
 
-from shutil import which
 from typing import Sequence, Dict, Any
 from SimpleITK import (
     Image,
@@ -70,63 +61,6 @@ from subprocess import run
 from pathlib import Path
 from multiprocessing import Process, Queue
 from itertools import islice
-
-
-
-class MissingSoftwareError(Exception):
-    """
-    Exception to be raised in the cases where software external to Python is called and that software has
-    not been properly sourced.
-    """
-
-    def __init__(self, software: str, required_software: Sequence[str]):
-        """
-        Parameters
-        ----------
-        software: str
-            The name of the software that is required but cannot be found.
-        required_software: Sequence[str]
-            A sequence of the names of all of the required software that must be installed.
-
-        Returns
-        -------
-        None:
-            If raised, a message indicating the software that cannot be found and the list of all required
-            software will be printed.
-        """
-        super().__init__(
-            f"The required software '{software}' is not installed. This library depends on: {required_software}. "
-            "Please ensure these are installed and sourced correctly if you are not on a QTIM machine."
-        )
-
-
-def source_external_software():
-    """
-    Sources external software from the paths where they are located on QTIM Machines. If the paths do not exist,
-    the required software is checked using 'shutil.which'.
-
-    Parameters
-    ----------
-    None
-
-    Returns
-    -------
-    None
-        'MissingSoftwareError' is raised if any software is not available.
-    """
-
-    if os.path.exists(
-        "/usr/pubsw/packages/fsl/6.0.6/bin"
-    ):  # Source on QTIM Machine
-        os.environ["PATH"] = ("/usr/pubsw/packages/fsl/6.0.6/bin:") + os.environ.get(
-            "PATH", "/usr/bin/"
-        )
-
-    else:
-        required_software = ["dcm2niix"]
-        for software in required_software:
-            if which(software) is None:
-                raise MissingSoftwareError(software, required_software)
 
 
 class MissingColumnsError(Exception):
@@ -146,10 +80,10 @@ class MissingColumnsError(Exception):
         missing_column: str
             The name of a required column that is not in the DataFrame.
 
-        required_software: Sequence[str]
+        required_columns: Sequence[str]
             A sequence of the names of all of the required columns for a given function.
 
-        required_software: Sequence[str]
+        optional_columns: Sequence[str]
             A sequence of the names of columns that are not required but provide additional behavior if
             provided.
 
@@ -738,9 +672,7 @@ def cglob(
 
 __all__ = [
     "MissingColumnsError",
-    "MissingSoftwareError",
     "check_required_columns",
-    "source_external_software",
     "sitk_to_surfa",
     "surfa_to_sitk",
     "hd_to_sitk",
