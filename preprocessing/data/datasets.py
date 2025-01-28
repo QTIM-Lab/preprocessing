@@ -85,23 +85,22 @@ def anonymize_df(df: pd.DataFrame, check_columns: bool = True):
         total=len(patients)
     ):
         anon_patient_dict[patient] = f"sub-{i+1:02d}"
+        patient_df = (
+            df[df["PatientID"] == patient]
+            .copy()
+            .sort_values(["StudyDate", "StudyInstanceUID"])
+        )
 
-        patient_df = df[df["PatientID"] == patient].copy()
-        study_dates = sorted(patient_df["StudyDate"].unique())
-        for j, study_date in enumerate(study_dates):
-            anon_study_dict[(patient, study_date)] = f"ses-{j+1:02d}"
+
+        for j, study in enumerate(patient_df["StudyInstanceUID"].unique()):
+            anon_study_dict[study] = f"ses-{j+1:02d}"
 
     df["AnonPatientID"] = df["PatientID"].apply(
         lambda x: anon_patient_dict[x] if not pd.isna(x) else x
     )
 
-    df["AnonStudyID"] = df.apply(
-        (
-            lambda x: anon_study_dict[(x["PatientID"], x["StudyDate"])]
-            if not (pd.isna(x["PatientID"]) or pd.isna(x["StudyDate"]))
-            else None
-        ),
-        axis=1,
+    df["AnonStudyID"] = df["StudyInstanceUID"].apply(
+        lambda x: anon_study_dict[x] if not pd.isna(x) else x
     )
 
     df = (
