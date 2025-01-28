@@ -333,6 +333,13 @@ dataset_to_nifti.add_argument(
 )
 
 dataset_to_nifti.add_argument(
+    "-t",
+    "--conversion-tolerance",
+    type=float,
+    help="The conversion tolerance for `highdicom`'s NIfTI conversion. Defaults to 0.05.",
+)
+
+dataset_to_nifti.add_argument(
     "-c",
     "--cpus",
     type=int,
@@ -824,6 +831,7 @@ def main() -> None:
             "nifti_dir": args.nifti_dir,
             "csv": args.csv,
             "overwrite_nifti": args.overwrite,
+            "tolerance": args.conversion_tolerance
         }
 
         tracked_command(

@@ -6,13 +6,15 @@ Public Functions
 convert_series
     Convert a DICOM series to a NIfTI file.
 
+convert_seg
+    Convert a DICOM SEG to a NIfTI file.
+
 convert_study
     Convert a DICOM study to NIfTI files representing each series.
 
 convert_batch_to_nifti
     Convert a DICOM dataset to NIfTI files representing each series.
 """
-from warnings import warn
 import pandas as pd
 import numpy as np
 import datetime
@@ -33,7 +35,7 @@ from numpy.linalg import norm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
-def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-3) -> bool:
+def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-2) -> bool:
     """
     Check the integrity of a DICOM series. This includes verification of consistent
     values for the 'ImageOrientationPatient', 'SliceThickness', and 'PixelSpacing'
@@ -111,7 +113,8 @@ def convert_series(
     normalized_series_description: str,
     subdir: Literal["anat", "func", "dwi"] = "anat",
     overwrite: bool = False,
-) -> str | None:
+    tolerance: float = 0.05,
+) -> str:
     """
     Convert a DICOM series to a NIfTI file.
 
@@ -144,10 +147,13 @@ def convert_series(
         Whether to overwrite the NIfTI file if there is already one with the same output name.
         Defaults to False.
 
+    tolerance: float
+        The conversion tolerance for `highdicom`'s NIfTI conversion. Defaults to 0.05.
+
     Returns
     -------
-    str | None
-        The output name of the NIfTI file if it is successfully created, else None.
+    str
+        The output name of the NIfTI file if it is successfully created, else ''.
     """
     image_converted = False
 
@@ -163,11 +169,11 @@ def convert_series(
         return str(output_nifti)
 
 
-    if not dicom_integrity_checks(dicom_dir):
+    if not dicom_integrity_checks(dicom_dir, eps=tolerance):
         print(
             f"{dicom_dir} does not pass integrity checks and will not be converted to NIfTI"
         )
-        return ''
+        return ""
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -184,11 +190,21 @@ def convert_series(
 
     for i, group in enumerate(dcm_groups):
         try:
-            hd_im = hd.image.get_volume_from_series(group, atol=1e-3)
+            hd_im = hd.image.get_volume_from_series(group, atol=tolerance)
 
         except Exception as error:
-            #print([hasattr(d, "PixelData") for d in group])
-            print(error)
+            errorfile = output_dir / "conversion_errors.txt"
+            update_errorfile(
+                func_name="preprocessing.data.convert_series",
+                kwargs={
+                    "dicom_dir": dicom_dir,
+                    "nifti_dir": nifti_dir,
+                },
+                errorfile=errorfile,
+                error=error,
+                verbose=True
+            )
+
             continue
 
         sitk_im = hd_to_sitk(hd_im)
@@ -201,7 +217,7 @@ def convert_series(
     if image_converted:
         return str(output_nifti)
 
-    return ''
+    return ""
 
 
 
@@ -210,6 +226,27 @@ def convert_seg(
     output_nifti: Path | str,
     overwrite: bool = False,
 ) -> str | None:
+    """
+    Convert a DICOM SEG to a NIfTI file.
+
+    Parameters
+    ----------
+    dicom_dir: Path | str
+        The path to a directory containing only the DICOM SEG instance.
+
+    output_nifti: Path | str
+        The path to the converted NIfTI file.
+
+    overwrite: bool
+        Whether to overwrite the NIfTI file if there is already one with the same output name.
+        Defaults to False.
+
+    Returns
+    -------
+    str
+        The output name of the NIfTI file if it is successfully created, else ''.
+    """
+
     if Path(output_nifti).exists() and not overwrite:
         return str(output_nifti)
 
@@ -234,8 +271,9 @@ def convert_seg(
 def convert_study(
     study_df: pd.DataFrame,
     nifti_dir: Path | str,
-    seg_source: str = "T1Post",
+    seg_source: str | None = None,
     overwrite_nifti: bool = False,
+    tolerance: float = 0.05,
     check_columns: bool = True,
 ) -> pd.DataFrame:
     """
@@ -255,6 +293,9 @@ def convert_study(
     overwrite: bool
         Whether to overwrite the NIfTI file if there is already one with the same output name.
         Defaults to False.
+
+    tolerance: float
+        The conversion tolerance for `highdicom`'s NIfTI conversion. Defaults to 0.05.
 
     check_columns: bool
         Whether to check 'study_df' for the required columns. Defaults to True.
@@ -278,48 +319,63 @@ def convert_study(
 
         check_required_columns(study_df, required_columns)
 
-    rows = study_df.to_dict("records")
+    vol_rows = study_df[study_df["Modality"] != "SEG"].to_dict("records")
+    seg_rows = study_df[study_df["Modality"] == "SEG"].to_dict("records")
 
+    diffs = []
     encountered_series_descriptions = []
 
-    for row in rows: # i, row in enumerate(rows):
-        if row["Modality"] != "SEG":
-            if pd.isna(row["NormalizedSeriesDescription"]) or row["NormalizedSeriesDescription"] in encountered_series_descriptions:
-                continue
+    for row in vol_rows:
+        diff = {"SeriesInstanceUID": row["SeriesInstanceUID"]}
 
-            row["Nifti"] = convert_series(
-                dicom_dir=row["Dicoms"],
-                nifti_dir=nifti_dir,
-                anon_patient_id=row["AnonPatientID"],
-                anon_study_id=row["AnonStudyID"],
-                normalized_series_description=row["NormalizedSeriesDescription"],
-                subdir=row["SeriesType"],
-                overwrite=overwrite_nifti,
-            )
+        if row["NormalizedSeriesDescription"] in encountered_series_descriptions:
+            continue
+
+        encountered_series_descriptions.append(row["NormalizedSeriesDescription"])
+
+        diff["Nifti"] = convert_series(
+            dicom_dir=row["Dicoms"],
+            nifti_dir=nifti_dir,
+            anon_patient_id=row["AnonPatientID"],
+            anon_study_id=row["AnonStudyID"],
+            normalized_series_description=row["NormalizedSeriesDescription"],
+            subdir=row["SeriesType"],
+            overwrite=overwrite_nifti,
+            tolerance=tolerance,
+        )
+
+        if row["NormalizedSeriesDescription"] == seg_source and len(seg_rows) > 0:
+            if diff["Nifti"] != "":
+                output_nifti = diff["Nifti"].replace(".nii.gz", "_seg.nii.gz")
+
+                convert_seg(
+                    dicom_dir=seg_rows[0]["Dicoms"],
+                    output_nifti=output_nifti,
+                    overwrite=overwrite_nifti
+                )
+
+                diff["Seg"] = output_nifti
 
         else:
-            for r in rows:
-                if r["NormalizedSeriesDescription"] == seg_source and Path(r["Nifti"]).exists():
+            diff["Seg"] = ""
 
-                    output_nifti = r["Nifti"].replace(".nii.gz", "_seg.nii.gz")
+        diffs.append(diff)
 
-                    convert_seg(
-                        dicom_dir=row["Dicoms"],
-                        output_nifti=output_nifti,
-                        overwrite=overwrite_nifti
-                    )
+    diff = pd.DataFrame(diffs)
 
-                    r["Seg"] = output_nifti
+    if "SeriesInstanceUID" in diff.keys():
+        return pd.merge(study_df, pd.DataFrame(diffs), on="SeriesInstanceUID", how="left")
 
-                    break
-
-    return pd.DataFrame(rows)
+    else:
+        return study_df
 
 
 def convert_batch_to_nifti(
     nifti_dir: Path | str,
     csv: Path | str,
+    seg_source: str | None = None,
     overwrite_nifti: bool = False,
+    tolerance: float = 0.05,
     cpus: int = 1,
     check_columns: bool = True,
 ) -> pd.DataFrame:
@@ -340,6 +396,9 @@ def convert_batch_to_nifti(
     overwrite: bool
         Whether to overwrite the NIfTI file if there is already one with the same output name.
         Defaults to False.
+
+    tolerance: float
+        The conversion tolerance for `highdicom`'s NIfTI conversion. Defaults to 0.05.
 
     cpus: int
         Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing).
@@ -370,8 +429,7 @@ def convert_batch_to_nifti(
 
         check_required_columns(df, required_columns)
 
-    if "Nifti" not in df.columns:
-        df["Nifti"] = [""] * df.shape[0]
+    df = df.drop(columns=[c for c in df.columns if c in ["Nifti", "Seg"]])
 
     filtered_df = df[(~pd.isna(df["NormalizedSeriesDescription"])) | (df["Modality"] == "SEG")]
 
@@ -386,7 +444,9 @@ def convert_batch_to_nifti(
                 filtered_df["StudyInstanceUID"] == study_uid
             ].copy(),
             "nifti_dir": nifti_dir,
+            "seg_source": seg_source,
             "overwrite_nifti": overwrite_nifti,
+            "tolerance": tolerance,
             "check_columns": False,
         }
         for study_uid in study_uids
@@ -404,24 +464,6 @@ def convert_batch_to_nifti(
             try:
                 nifti_df = future.result()
 
-
-                df = (
-                    pd.read_csv(csv, dtype=str)
-                    .drop_duplicates(subset="SeriesInstanceUID")
-                    .reset_index(drop=True)
-                )
-
-                # print(f"nifti_df: {nifti_df['NormalizedSeriesDescription'].dtype}, df: {df['NormalizedSeriesDescription'].dtype}")
-
-                df = pd.merge(df, nifti_df, how="outer")  #df.merge(nifti_df, how="left")
-                df = (
-                    df.drop_duplicates(subset="SeriesInstanceUID")
-                    .sort_values(["AnonPatientID", "AnonStudyID"])
-                    .reset_index(drop=True)
-                )
-                df.to_csv(csv, index=False)
-                pbar.update(1)
-
             except Exception as error:
                 update_errorfile(
                     func_name="preprocessing.data.convert_study",
@@ -429,11 +471,23 @@ def convert_batch_to_nifti(
                     errorfile=errorfile,
                     error=error
                 )
-                print(error)
 
                 pbar.update(1)
                 continue
 
+            df = (
+                pd.read_csv(csv, dtype=str)
+                .drop_duplicates(subset="SeriesInstanceUID")
+                .reset_index(drop=True)
+            )
+            df = pd.merge(df, nifti_df, how="outer")
+            df = (
+                df.drop_duplicates(subset="SeriesInstanceUID")
+                .sort_values(["AnonPatientID", "AnonStudyID"])
+                .reset_index(drop=True)
+            )
+            df.to_csv(csv, index=False)
+            pbar.update(1)
 
     df = (
         pd.read_csv(csv, dtype=str)
