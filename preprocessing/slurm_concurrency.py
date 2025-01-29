@@ -22,7 +22,7 @@ def generate_array_template(
     account: str = "qtim",
     partition: str = "basic",
     time: str = "05:00:00",
-    memory: str = "10G",
+    memory: str = "15G",
     mail_update: bool = False,
     patients: Sequence[str] | None = None,
     cpus: int = 50,
@@ -52,7 +52,7 @@ def generate_array_template(
         The maximum time allotted for each job within the slurm array. Defaults to '05:00:00'.
 
     memory: str
-        The memory allotted for each job within the slurm array. Defaults to '10G'.
+        The memory allotted for each job within the slurm array. Defaults to '15G'.
 
     mail_update: bool
         Whether to send a mail update upon the completion or failure of the slurm array. Defaults
@@ -121,53 +121,63 @@ def generate_array_template(
     return str(outfile)
 
 
-def aggregate_slurm_results(slurm_dir: Path | str, csv: Path | str) -> None:
+def aggregate_slurm_results(
+    csv: Path | str,
+    preprocessed_dir: Path | str,
+    pipeline_key: str = "Preprocessed",
+) -> None:
     """
     Update the primary CSV with the results from the slurm array jobs. Do not run on directly
     on the cluster's login node.
 
     Parameters
     ----------
-    slurm_dir: Path | str
-        The directory that containing the job array script and its outputs.
-
     csv: Path | str
         The path to the primary CSV that you wish to update.
+
+    preprocessed_dir: Path
+        The directory that will contain the preprocessed NIfTI files.
+
+    pipeline_key: str
+        The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
+        Defaults to 'preprocessed'.
 
     Returns
     -------
     pd.DataFrame
         A DataFrame updated to reflect the results of the slurm array jobs.
     """
-    slurm_dir = Path(slurm_dir).resolve()
-
-    slurm_csvs = list(slurm_dir.glob("**/*.csv"))
+    preprocessed_dir = Path(preprocessed_dir).resolve()
 
     df = pd.read_csv(csv, dtype=str)
+    rows = df.to_dict("records")
 
-    for slurm_csv in tqdm(slurm_csvs, desc="Aggregating slurm results"):
-        slurm_df = pd.read_csv(slurm_csv, dtype=str)
-
-        df = (
-            pd.read_csv(csv, dtype=str)
-            .drop_duplicates(subset="SeriesInstanceUID")
-            .reset_index(drop=True)
+    for row in rows:
+        preprocessed_file = (
+            preprocessed_dir
+            / row["AnonPatientID"]
+            / row["AnonStudyID"]
+            / row["SeriesType"]
+            / Path(row["Nifti"]).name
         )
-        df = pd.merge(df, slurm_df, how="outer")
-        df = (
-            df.drop_duplicates(subset="SeriesInstanceUID")
-            .sort_values(["AnonPatientID", "AnonStudyID"])
-            .reset_index(drop=True)
-        )
-        df.to_csv(csv, index=False)
 
-    df = (
-        pd.read_csv(csv, dtype=str)
-        .drop_duplicates(subset="SeriesInstanceUID")
-        .sort_values(["AnonPatientID", "AnonStudyID"])
-        .reset_index(drop=True)
-    )
-    df.to_csv(csv, index=False)
+        if preprocessed_file.exists():
+            row[pipeline_key] = str(preprocessed_file)
+
+        if "Seg" in row.keys():
+            preprocessed_seg = (
+                preprocessed_dir
+                / row["AnonPatientID"]
+                / row["AnonStudyID"]
+                / row["SeriesType"]
+                / Path(row["Seg"]).name
+            )
+
+            if preprocessed_seg.exists():
+                row[f"{pipeline_key}Seg"] = str(preprocessed_seg)
+
+
+    pd.DataFrame(rows).to_csv(csv, index=False)
 
 
 def launch_slurm(
@@ -175,6 +185,8 @@ def launch_slurm(
     function_kwargs: Dict[str, Any],
     slurm_dir: Path | str,
     csv: Path | str,
+    preprocessed_dir: Path | str,
+    pipeline_key: str = "Preprocessed",
     account: str = "qtim",
     partition: str = "basic",
     time: str = "05:00:00",
@@ -200,6 +212,13 @@ def launch_slurm(
 
     csv: Path | str
         The primary CSV associated with running the desired function.
+
+    preprocessed_dir: Path
+        The directory that will contain the preprocessed NIfTI files.
+
+    pipeline_key: str
+        The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
+        Defaults to 'preprocessed'.
 
     account: str
         The account to use for the slurm array. Defaults to 'qtim'.
@@ -257,7 +276,7 @@ def launch_slurm(
 
     aggregation_command = (
         "python -c 'from preprocessing.slurm_concurrency import aggregate_slurm_results; "
-        f"aggregate_slurm_results({quotewrap(Path(slurm_dir).resolve())}, {quotewrap(Path(csv).resolve())})'"
+        f"aggregate_slurm_results({quotewrap(Path(csv).resolve())}, {quotewrap(Path(preprocessed_dir).resolve())}, {quotewrap(pipeline_key)})'"
     )
 
     aggregation_jobfile = generate_array_template(
@@ -350,8 +369,8 @@ parser.add_argument(
 parser.add_argument(
     "--mem-per-cpu",
     type=str,
-    default="10G",
-    help="The memory allotted for each job within the slurm array. Defaults to '10G'.",
+    default="15G",
+    help="The memory allotted for each job within the slurm array. Defaults to '15G'.",
 )
 
 parser.add_argument(
@@ -592,6 +611,8 @@ def slurm_cli() -> None:
             function_kwargs=function_kwargs,
             slurm_dir=args.slurm_dir,
             csv=args.csv,
+            preprocessed_dir=args.preprocessed_dir,
+            pipeline_key=args.pipeline_key,
             account=args.account,
             partition=args.partition,
             time=args.time,
