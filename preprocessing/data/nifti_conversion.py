@@ -202,7 +202,7 @@ def convert_series(
                 },
                 errorfile=errorfile,
                 error=error,
-                verbose=True
+                # verbose=True
             )
 
             continue
@@ -454,7 +454,7 @@ def convert_batch_to_nifti(
 
     with tqdm(
         total=len(kwargs_list), desc="Converting to NIfTI"
-    ) as pbar, ProcessPoolExecutor(cpus if cpus >= 1 else 1) as executor:
+    ) as pbar, ProcessPoolExecutor(int(max(cpus, 1))) as executor:
         futures = {
             executor.submit(convert_study, **kwargs): kwargs
             for kwargs in kwargs_list

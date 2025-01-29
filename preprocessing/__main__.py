@@ -831,7 +831,8 @@ def main() -> None:
             "nifti_dir": args.nifti_dir,
             "csv": args.csv,
             "overwrite_nifti": args.overwrite,
-            "tolerance": args.conversion_tolerance
+            "tolerance": args.conversion_tolerance,
+            "cpus": args.cpus
         }
 
         tracked_command(
