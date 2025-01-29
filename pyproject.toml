@@ -24,6 +24,10 @@ tensorflow = "2.14"
 torch = "^2.2.1"
 seaborn = "^0.13.2"
 psutil = "6.0.0"
+python-gdcm = ">=3.0.10"
+pylibjpeg = ">=2.0"
+pylibjpeg-libjpeg = ">=2.1"
+
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.2"
