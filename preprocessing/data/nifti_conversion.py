@@ -184,12 +184,16 @@ def convert_series(
 
     dicom_dir = Path(dicom_dir).resolve()
 
-    files = list(dicom_dir.glob("**/*.dcm"))
+    files = list(dicom_dir.glob("**/*"))
 
     dcms = []
 
     for file in files:
-        dcms.append(dcmread(file, stop_before_pixels=False))
+        try:
+            dcms.append(dcmread(file, stop_before_pixels=False))
+
+        except Exception:
+            continue
 
     dcm_groups = sort_slices(dcms, group_by_position=True)
 
