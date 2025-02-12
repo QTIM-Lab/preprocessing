@@ -113,6 +113,7 @@ def convert_series(
     normalized_series_description: str,
     subdir: Literal["anat", "func", "dwi"] = "anat",
     overwrite: bool = False,
+    skip_integrity_checks: bool = False,
     tolerance: float = 0.05,
 ) -> str:
     """
@@ -147,6 +148,10 @@ def convert_series(
         Whether to overwrite the NIfTI file if there is already one with the same output name.
         Defaults to False.
 
+    skip_integrity_checks: bool
+        Whether to skip performing the DICOM integrity checks before attempting conversion to
+        NIfTI.
+
     tolerance: float
         The conversion tolerance for `highdicom`'s NIfTI conversion. Defaults to 0.05.
 
@@ -168,12 +173,12 @@ def convert_series(
     if Path(output_nifti).exists() and not overwrite:
         return str(output_nifti)
 
-
-    if not dicom_integrity_checks(dicom_dir, eps=tolerance):
-        print(
-            f"{dicom_dir} does not pass integrity checks and will not be converted to NIfTI"
-        )
-        return ""
+    if not skip_integrity_checks:
+        if not dicom_integrity_checks(dicom_dir, eps=tolerance):
+            print(
+                f"{dicom_dir} does not pass integrity checks and will not be converted to NIfTI"
+            )
+            return ""
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -274,6 +279,7 @@ def convert_study(
     seg_source: str | None = None,
     overwrite_nifti: bool = False,
     tolerance: float = 0.05,
+    skip_integrity_checks: bool = False,
     check_columns: bool = True,
 ) -> pd.DataFrame:
     """
@@ -296,6 +302,10 @@ def convert_study(
 
     tolerance: float
         The conversion tolerance for `highdicom`'s NIfTI conversion. Defaults to 0.05.
+
+    skip_integrity_checks: bool
+        Whether to skip performing the DICOM integrity checks before attempting conversion to
+        NIfTI.
 
     check_columns: bool
         Whether to check 'study_df' for the required columns. Defaults to True.
@@ -341,6 +351,7 @@ def convert_study(
             normalized_series_description=row["NormalizedSeriesDescription"],
             subdir=row["SeriesType"],
             overwrite=overwrite_nifti,
+            skip_integrity_checks=skip_integrity_checks,
             tolerance=tolerance,
         )
 
@@ -375,6 +386,7 @@ def convert_batch_to_nifti(
     csv: Path | str,
     seg_source: str | None = None,
     overwrite_nifti: bool = False,
+    skip_integrity_checks: bool = False,
     tolerance: float = 0.05,
     cpus: int = 1,
     check_columns: bool = True,
@@ -396,6 +408,10 @@ def convert_batch_to_nifti(
     overwrite: bool
         Whether to overwrite the NIfTI file if there is already one with the same output name.
         Defaults to False.
+
+    skip_integrity_checks: bool
+        Whether to skip performing the DICOM integrity checks before attempting conversion to
+        NIfTI.
 
     tolerance: float
         The conversion tolerance for `highdicom`'s NIfTI conversion. Defaults to 0.05.
@@ -446,6 +462,7 @@ def convert_batch_to_nifti(
             "nifti_dir": nifti_dir,
             "seg_source": seg_source,
             "overwrite_nifti": overwrite_nifti,
+            "skip_integrity_checks": skip_integrity_checks,
             "tolerance": tolerance,
             "check_columns": False,
         }

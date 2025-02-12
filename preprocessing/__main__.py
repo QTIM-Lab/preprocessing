@@ -333,6 +333,12 @@ dataset_to_nifti.add_argument(
 )
 
 dataset_to_nifti.add_argument(
+    "--skip-integrity-checks",
+    action="store_true",
+    help="Whether to skip performing the DICOM integrity checks before attempting conversion to NIfTI.",
+)
+
+dataset_to_nifti.add_argument(
     "-t",
     "--conversion-tolerance",
     type=float,
@@ -831,6 +837,7 @@ def main() -> None:
             "nifti_dir": args.nifti_dir,
             "csv": args.csv,
             "overwrite_nifti": args.overwrite,
+            "skip_integrity_checks": args.skip_integrity_checks,
             "tolerance": args.conversion_tolerance,
             "cpus": args.cpus
         }
