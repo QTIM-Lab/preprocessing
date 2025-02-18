@@ -1,2 +1,4 @@
 .python-version
 **/*__pycache__
+**/*bak.csv 
+**/*preprocessing_cli_record.json
