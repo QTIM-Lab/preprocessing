@@ -327,6 +327,14 @@ dataset_to_nifti.add_argument(
 )
 
 dataset_to_nifti.add_argument(
+    "-ss",
+    "--seg-source",
+    type=str,
+    default=None,
+    help="The 'NormalizedSeriesDescription' of the source volume used for deriving segmentations.",
+)
+
+dataset_to_nifti.add_argument(
     "--overwrite",
     action="store_true",
     help="Whether to overwrite the .nii.gz files. False if not specified.",
@@ -342,6 +350,7 @@ dataset_to_nifti.add_argument(
     "-t",
     "--conversion-tolerance",
     type=float,
+    default=0.05,
     help="The conversion tolerance for `highdicom`'s NIfTI conversion. Defaults to 0.05.",
 )
 
@@ -836,6 +845,7 @@ def main() -> None:
         kwargs = {
             "nifti_dir": args.nifti_dir,
             "csv": args.csv,
+            "seg_source": args.seg_source,
             "overwrite_nifti": args.overwrite,
             "skip_integrity_checks": args.skip_integrity_checks,
             "tolerance": args.conversion_tolerance,

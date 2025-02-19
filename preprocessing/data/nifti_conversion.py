@@ -300,6 +300,9 @@ def convert_study(
         The root directory under which the converted NIfTI files will be written. Subdirectories
         will be created to follow a BIDS inspired convention.
 
+    seg_source: str | None
+        The 'NormalizedSeriesDescription' of the source volume used for deriving segmentations.
+
     overwrite: bool
         Whether to overwrite the NIfTI file if there is already one with the same output name.
         Defaults to False.
@@ -408,6 +411,9 @@ def convert_batch_to_nifti(
         The path to a CSV containing an entire dataset. It must contain the following
         columns: ['Dicoms', 'AnonPatientID', 'AnonStudyID', 'StudyInstanceUID',
         'SeriesInstanceUID', 'Manufacturer', 'NormalizedSeriesDescription', 'SeriesType'].
+
+    seg_source: str | None
+        The 'NormalizedSeriesDescription' of the source volume used for deriving segmentations.
 
     overwrite: bool
         Whether to overwrite the NIfTI file if there is already one with the same output name.
