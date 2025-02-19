@@ -2,4 +2,5 @@
 **/*__pycache__
 **/*bak.csv
 **/*instances.csv
+**/*.ipynb_checkpoints
 **/*preprocessing_cli_record.json
