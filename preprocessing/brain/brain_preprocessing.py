@@ -612,9 +612,8 @@ def preprocess_study(
             "StudyInstanceUID",
             "SeriesInstanceUID",
             "NormalizedSeriesDescription",
-            "SeriesType",
         ]
-        optional_columns = ["Seg"]
+        optional_columns = ["Seg", "SeriesType"]
 
         check_required_columns(study_df, required_columns, optional_columns)
 
@@ -643,7 +642,7 @@ def preprocess_study(
     ### copy files to new location
     for i in range(n):
         output_dir = (
-            preprocessed_dir / anon_patientID / anon_studyID / rows[i]["SeriesType"]
+            preprocessed_dir / anon_patientID / anon_studyID / rows[i].get("SeriesType", "anat")
         )
         os.makedirs(output_dir, exist_ok=True)
 
@@ -1166,9 +1165,8 @@ def preprocess_patient(
             "StudyInstanceUID",
             "SeriesInstanceUID",
             "NormalizedSeriesDescription",
-            "SeriesType",
         ]
-        optional_columns = ["Seg"]
+        optional_columns = ["Seg", "SeriesType"]
 
         check_required_columns(patient_df, required_columns, optional_columns)
 
@@ -1424,9 +1422,8 @@ def preprocess_from_csv(
         "StudyInstanceUID",
         "SeriesInstanceUID",
         "NormalizedSeriesDescription",
-        "SeriesType",
     ]
-    optional_columns = ["Seg"]
+    optional_columns = ["Seg", "SeriesType"]
 
     check_required_columns(df, required_columns, optional_columns)
 
