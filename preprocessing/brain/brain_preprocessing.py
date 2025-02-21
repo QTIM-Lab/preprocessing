@@ -49,7 +49,7 @@ from preprocessing.utils import (
 from preprocessing.synthmorph import synthmorph_registration
 from .synthstrip import synthstrip_skullstrip
 from typing import Sequence, List, Literal, Dict, Any, Tuple
-from scipy.ndimage import binary_fill_holes
+from scipy.ndimage import binary_fill_holes, generate_binary_structure
 from cc3d import connected_components
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -745,6 +745,7 @@ def preprocess_study(
             int(round(osz * osp / ns))
             for osz, osp, ns in zip(original_size, original_spacing, spacing)
         ]
+
         output_nifti = Resample(
             nifti,
             new_size,
@@ -770,19 +771,10 @@ def preprocess_study(
                 output_seg = preprocessed_seg
 
             nifti = sitk_im_cache[preprocessed_seg]
-            original_spacing = nifti.GetSpacing()
-            original_size = nifti.GetSize()
-            new_size = [
-                int(round(osz * osp / ns))
-                for osz, osp, ns in zip(original_size, original_spacing, spacing)
-            ]
             output_nifti = Resample(
                 nifti,
-                new_size,
+                sitk_im_cache[preprocessed_file],
                 interpolator=sitkNearestNeighbor,
-                outputOrigin=nifti.GetOrigin(),
-                outputSpacing=spacing,
-                outputDirection=nifti.GetDirection(),
             )
 
             sitk_im_cache[output_seg] = output_nifti
@@ -799,15 +791,28 @@ def preprocess_study(
 
             nifti = sitk_im_cache[preprocessed_file]
 
-            sitk_im_cache[SS_file] = nifti
+            sitk_im_cache = synthstrip_skullstrip(
+                image=sitk_im_cache[preprocessed_file],
+                sitk_im_cache=sitk_im_cache,
+                m=SS_mask,
+            )
 
             array = GetArrayFromImage(nifti)
-            ss_array = 1 - (array == 0).astype(int)
+            pre_ss_array = 1 - (array == 0).astype(int)
+            pre_ss_array = binary_fill_holes(pre_ss_array, structure=generate_binary_structure(3, 3))
+            synthstrip_array = GetArrayFromImage(sitk_im_cache[SS_mask])
 
-            out_nifti = GetImageFromArray(ss_array)
-            out_nifti.CopyInformation(nifti)
+            ss_array = synthstrip_array.astype(int) * pre_ss_array
 
-            sitk_im_cache[SS_mask] = out_nifti
+            final_mask = GetImageFromArray(ss_array)
+            final_mask.CopyInformation(nifti)
+
+            sitk_im_cache[SS_mask] = final_mask
+
+            ss_im = GetImageFromArray(array * ss_array)
+            ss_im.CopyInformation(nifti)
+
+            sitk_im_cache[SS_file] = ss_im
 
             if verbose:
                 print(f'"Loose" skullstrip mask obtained from {preprocessed_file}')
@@ -940,59 +945,7 @@ def preprocess_study(
         if verbose:
             print(f"{preprocessed_file} underwent N4 bias field correction")
 
-    ### appy final skullmask if skullstripping
-    if skullstrip:
-        for i in range(n):
-            preprocessed_file = rows[i][pipeline_key]
-
-            if debug:
-                output_file = preprocessed_file.replace(
-                    ".nii.gz", "_skullstripped.nii.gz"
-                )
-                rows[i][pipeline_key] = output_file
-
-            else:
-                output_file = preprocessed_file
-
-            nifti = sitk_im_cache[preprocessed_file]
-            array = GetArrayFromImage(nifti)
-
-            array = array * study_SS_mask_array
-
-            output_nifti = GetImageFromArray(array)
-            output_nifti.CopyInformation(nifti)
-
-            sitk_im_cache[output_file] = output_nifti
-
-            if verbose:
-                print(f"Study skullstrip mask applied to {preprocessed_file}")
-
-            if "Seg" in rows[i] and not pd.isna(rows[i]["Seg"]):
-                preprocessed_seg = rows[i][f"{pipeline_key}Seg"]
-
-                if debug:
-                    output_seg = preprocessed_seg.replace(
-                        ".nii.gz", "_skullstripped.nii.gz"
-                    )
-                    rows[i][f"{pipeline_key}Seg"] = output_seg
-
-                else:
-                    output_seg = preprocessed_seg
-
-                nifti = sitk_im_cache[preprocessed_seg]
-                array = GetArrayFromImage(nifti)
-
-                array = array * study_SS_mask_array
-
-                output_nifti = GetImageFromArray(array)
-                output_nifti.CopyInformation(nifti)
-
-                sitk_im_cache[output_seg] = output_nifti
-
-                if verbose:
-                    print(f"Study skullstrip mask applied to {preprocessed_seg}")
-
-    ### Normalization
+    ### Normalization + skullstripping
     for i in range(n):
         preprocessed_file = rows[i][pipeline_key]
 
@@ -1019,8 +972,33 @@ def preprocess_study(
             print(f"{preprocessed_file} intensity normalized")
 
         ### set background back to 0 for easy foreground cropping
-        if skullstrip:
+        if skullstrip or pre_skullstripped:
             array = array * study_SS_mask_array
+
+            if "Seg" in rows[i] and not pd.isna(rows[i]["Seg"]):
+                preprocessed_seg = rows[i][f"{pipeline_key}Seg"]
+
+                if debug:
+                    output_seg = preprocessed_seg.replace(
+                        ".nii.gz", "_0background.nii.gz"
+                    )
+                    rows[i][f"{pipeline_key}Seg"] = output_seg
+
+                else:
+                    output_seg = preprocessed_seg
+
+                seg = sitk_im_cache[preprocessed_seg]
+                seg_array = GetArrayFromImage(seg)
+
+                seg_array = seg_array * study_SS_mask_array
+
+                seg_out = GetImageFromArray(seg_array)
+                seg_out.CopyInformation(seg)
+
+                sitk_im_cache[output_seg] = seg_out
+
+                if verbose:
+                    print(f"Study skullstrip mask applied to {preprocessed_seg}")
 
         else:
             array = array * foreground_array
