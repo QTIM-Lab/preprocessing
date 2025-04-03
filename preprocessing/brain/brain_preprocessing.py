@@ -283,20 +283,20 @@ def local_reg(
     preprocessed_file = row[pipeline_key]
 
     if debug:
-        output_file = preprocessed_file.replace(".nii.gz", "_localreg.nii.gz")
+        output_file = preprocessed_file.replace(".nii", "_localreg.nii")
         row[pipeline_key] = output_file
 
     else:
         output_file = preprocessed_file
 
-    moving_image_path = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
+    moving_image_path = preprocessed_file.replace(".nii", "_SS.nii")
 
     accompanying_images = [{"moving": preprocessed_file, "moved": output_file}]
 
     if "Seg" in row and not pd.isna(row["Seg"]):
         preprocessed_seg = row[f"{pipeline_key}Seg"]
         if debug:
-            output_seg = preprocessed_seg.replace(".nii.gz", "_localreg.nii.gz")
+            output_seg = preprocessed_seg.replace(".nii", "_localreg.nii")
             row[f"{pipeline_key}Seg"] = output_seg
 
         else:
@@ -397,10 +397,10 @@ def long_reg(
         An updated version of the input `sitk_im_cache`, which contains the moved images.
     """
 
-    moving_image_path = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
+    moving_image_path = rows[0][pipeline_key].replace(".nii", "_SS.nii")
 
     if debug:
-        moved_image_path = moving_image_path.replace(".nii.gz", "_longreg.nii.gz")
+        moved_image_path = moving_image_path.replace(".nii", "_longreg.nii")
 
     else:
         moved_image_path = moving_image_path
@@ -408,7 +408,7 @@ def long_reg(
     accompanying_images = [
         {
             "moving": study_SS_mask_file,
-            "moved": study_SS_mask_file.replace(".nii.gz", "_longreg.nii.gz"),
+            "moved": study_SS_mask_file.replace(".nii", "_longreg.nii"),
             "interp_method": "nearest",
         }
     ]
@@ -417,7 +417,7 @@ def long_reg(
         preprocessed_file = row[pipeline_key]
 
         if debug:
-            output_file = preprocessed_file.replace(".nii.gz", "_longreg.nii.gz")
+            output_file = preprocessed_file.replace(".nii", "_longreg.nii")
             row[pipeline_key] = output_file
 
         else:
@@ -428,7 +428,7 @@ def long_reg(
         if "Seg" in row and not pd.isna(row["Seg"]):
             preprocessed_seg = row[f"{pipeline_key}Seg"]
             if debug:
-                output_seg = preprocessed_seg.replace(".nii.gz", "_longreg.nii.gz")
+                output_seg = preprocessed_seg.replace(".nii", "_longreg.nii")
                 row[f"{pipeline_key}Seg"] = output_seg
 
             else:
@@ -649,17 +649,23 @@ def preprocess_study(
         input_file = rows[i]["Nifti"]
         preprocessed_file = output_dir / os.path.basename(input_file)
 
+        if ".gz" not in str(preprocessed_file):
+            preprocessed_file = Path(str(preprocessed_file) + ".gz")
+
         rows[i][pipeline_key] = str(preprocessed_file)
 
-        sitk_im_cache[str(preprocessed_file)] = ReadImage(input_file)
+        sitk_im_cache[str(preprocessed_file)] = ReadImage(input_file, imageIO="NiftiImageIO")
 
         if "Seg" in rows[i] and not pd.isna(rows[i]["Seg"]):
             input_seg = rows[i]["Seg"]
             preprocessed_seg = output_dir / os.path.basename(input_seg)
 
+            if ".gz" not in str(preprocessed_seg):
+                preprocessed_seg = Path(str(preprocessed_seg) + ".gz")
+
             rows[i][f"{pipeline_key}Seg"] = str(preprocessed_seg)
 
-            sitk_im_cache[str(preprocessed_seg)] = ReadImage(input_seg)
+            sitk_im_cache[str(preprocessed_seg)] = ReadImage(input_seg, imageIO="NiftiImageIO")
 
     ### Optionally enforce binary segmentations
     if binarize_seg:
@@ -668,7 +674,7 @@ def preprocess_study(
                 preprocessed_seg = rows[i][f"{pipeline_key}Seg"]
 
                 if debug:
-                    output_seg = preprocessed_seg.replace(".nii.gz", "_binary.nii.gz")
+                    output_seg = preprocessed_seg.replace(".nii", "_binary.nii")
                     rows[i][f"{pipeline_key}Seg"] = output_seg
 
                 else:
@@ -695,7 +701,7 @@ def preprocess_study(
         preprocessed_file = rows[i][pipeline_key]
 
         if debug:
-            output_file = preprocessed_file.replace(".nii.gz", f"_{orientation}.nii.gz")
+            output_file = preprocessed_file.replace(".nii", f"_{orientation}.nii")
             rows[i][pipeline_key] = output_file
 
         else:
@@ -713,7 +719,7 @@ def preprocess_study(
             preprocessed_seg = rows[i][f"{pipeline_key}Seg"]
 
             if debug:
-                output_seg = preprocessed_seg.replace(".nii.gz", f"_{orientation}.nii.gz")
+                output_seg = preprocessed_seg.replace(".nii", f"_{orientation}.nii")
                 rows[i][f"{pipeline_key}Seg"] = output_seg
 
             else:
@@ -732,7 +738,7 @@ def preprocess_study(
         preprocessed_file = rows[i][pipeline_key]
 
         if debug:
-            output_file = preprocessed_file.replace(".nii.gz", "_spacing.nii.gz")
+            output_file = preprocessed_file.replace(".nii", "_spacing.nii")
             rows[i][pipeline_key] = output_file
 
         else:
@@ -764,7 +770,7 @@ def preprocess_study(
             preprocessed_seg = rows[i][f"{pipeline_key}Seg"]
 
             if debug:
-                output_seg = preprocessed_seg.replace(".nii.gz", "_spacing.nii.gz")
+                output_seg = preprocessed_seg.replace(".nii", "_spacing.nii")
                 rows[i][f"{pipeline_key}Seg"] = output_seg
 
             else:
@@ -786,8 +792,8 @@ def preprocess_study(
     if pre_skullstripped:
         for i in range(n):
             preprocessed_file = rows[i][pipeline_key]
-            SS_file = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
-            SS_mask = preprocessed_file.replace(".nii.gz", "_SS_mask.nii.gz")
+            SS_file = preprocessed_file.replace(".nii", "_SS.nii")
+            SS_mask = preprocessed_file.replace(".nii", "_SS_mask.nii")
 
             nifti = sitk_im_cache[preprocessed_file]
 
@@ -820,8 +826,8 @@ def preprocess_study(
     else:
         for i in range(n):
             preprocessed_file = rows[i][pipeline_key]
-            SS_file = preprocessed_file.replace(".nii.gz", "_SS.nii.gz")
-            SS_mask = preprocessed_file.replace(".nii.gz", "_SS_mask.nii.gz")
+            SS_file = preprocessed_file.replace(".nii", "_SS.nii")
+            SS_mask = preprocessed_file.replace(".nii", "_SS_mask.nii")
 
             sitk_im_cache = synthstrip_skullstrip(
                 image=sitk_im_cache[preprocessed_file],
@@ -837,7 +843,7 @@ def preprocess_study(
         if registration_target is not None:
             registration_target = str(registration_target)
             main_SS_file = registration_target.replace(
-                ".nii.gz", "_RAS_spacing_SS.nii.gz"
+                ".nii", "_RAS_spacing_SS.nii"
             )
 
             if not Path(main_SS_file).exists():
@@ -851,7 +857,7 @@ def preprocess_study(
     else:
         if registration_target is not None:
             registration_target = str(registration_target)
-            main_SS_file = registration_target.replace(".nii.gz", "_SS.nii.gz")
+            main_SS_file = registration_target.replace(".nii", "_SS.nii")
 
             if not Path(main_SS_file).exists():
                 main_SS_file = registration_target
@@ -861,8 +867,8 @@ def preprocess_study(
         else:
             main_SS_file = None
 
-    study_SS_file = rows[0][pipeline_key].replace(".nii.gz", "_SS.nii.gz")
-    study_SS_mask_file = rows[0][pipeline_key].replace(".nii.gz", "_SS_mask.nii.gz")
+    study_SS_file = rows[0][pipeline_key].replace(".nii", "_SS.nii")
+    study_SS_mask_file = rows[0][pipeline_key].replace(".nii", "_SS_mask.nii")
 
     ### Register based on loose skullstrip
     for i in range(1, n):
@@ -887,13 +893,13 @@ def preprocess_study(
             verbose,
             debug,
         )
-        study_SS_mask_file = study_SS_mask_file.replace(".nii.gz", "_longreg.nii.gz")
+        study_SS_mask_file = study_SS_mask_file.replace(".nii", "_longreg.nii")
     study_SS_mask_array = np.round(GetArrayFromImage(sitk_im_cache[study_SS_mask_file]))
 
     ### Bias correction
     if not skullstrip:
         foreground_file = rows[0][pipeline_key].replace(
-            ".nii.gz", "_foreground_mask.nii.gz"
+            ".nii", "_foreground_mask.nii"
         )
         nifti = sitk_im_cache[rows[0][pipeline_key]]
 
@@ -917,7 +923,7 @@ def preprocess_study(
         preprocessed_file = rows[i][pipeline_key]
 
         if debug:
-            output_file = preprocessed_file.replace(".nii.gz", "_N4.nii.gz")
+            output_file = preprocessed_file.replace(".nii", "_N4.nii")
             rows[i][pipeline_key] = output_file
 
         else:
@@ -950,7 +956,7 @@ def preprocess_study(
         preprocessed_file = rows[i][pipeline_key]
 
         if debug:
-            output_file = preprocessed_file.replace(".nii.gz", "_norm.nii.gz")
+            output_file = preprocessed_file.replace(".nii", "_norm.nii")
             rows[i][pipeline_key] = output_file
 
         else:
@@ -980,7 +986,7 @@ def preprocess_study(
 
                 if debug:
                     output_seg = preprocessed_seg.replace(
-                        ".nii.gz", "_0background.nii.gz"
+                        ".nii", "_0background.nii"
                     )
                     rows[i][f"{pipeline_key}Seg"] = output_seg
 
@@ -1006,7 +1012,7 @@ def preprocess_study(
         preprocessed_file = rows[i][pipeline_key]
 
         if debug:
-            output_file = preprocessed_file.replace(".nii.gz", "_0background.nii.gz")
+            output_file = preprocessed_file.replace(".nii", "_0background.nii")
             rows[i][pipeline_key] = output_file
 
         else:
@@ -1023,10 +1029,10 @@ def preprocess_study(
     ### Write files:
     for k, v in sitk_im_cache.items():
         if k != main_SS_file:
-            if any([s in Path(k).name.lower() for s in ["seg", "mask"]]):
-                WriteImage(Cast(v, sitkUInt8), k)
+            if "integer" in v.GetPixelIDTypeAsString():
+                WriteImage(Cast(v, sitkUInt8), k, compressionLevel=6)
             else:
-                WriteImage(Cast(v, sitkFloat32), k)
+                WriteImage(Cast(v, sitkFloat32), k, compressionLevel=6)
 
     ### copy metadata
     preprocessing_args = {
@@ -1041,8 +1047,8 @@ def preprocess_study(
         "binarize_seg": binarize_seg,
     }
 
-    for row in rows:
-        copy_metadata(row, preprocessing_args)
+    # for row in rows:
+    #     copy_metadata(row, preprocessing_args)
 
     preprocessed_df = pd.DataFrame(rows)
     out_df = pd.merge(study_df, preprocessed_df, "outer")
@@ -1267,20 +1273,20 @@ def preprocess_patient(
 
     if not debug:
         extra_files = (
-            list(patient_dir.glob("**/*SS.nii.gz"))
-            + list(patient_dir.glob("**/*mask.nii.gz"))
-            + list(patient_dir.glob("**/*longreg.nii.gz"))
-            + list(patient_dir.glob("**/*.mgz"))
-            + list(patient_dir.glob("**/*.m3z"))
-            + list(patient_dir.glob("**/*.txt"))
+            list(patient_dir.glob("**/*SS.nii*"))
+            + list(patient_dir.glob("**/*mask.nii*"))
+            + list(patient_dir.glob("**/*longreg.nii*"))
+            # + list(patient_dir.glob("**/*.mgz"))
+            # + list(patient_dir.glob("**/*.m3z"))
+            # + list(patient_dir.glob("**/*.txt"))
         )
 
-        print("......Clearing unnecessary files......")
+        # print("......Clearing unnecessary files......")
         for file in extra_files:
             os.remove(file)
 
-    print(f"Finished preprocessing {anon_patientID}:")
-    print(out_df)
+    # print(f"Finished preprocessing {anon_patientID}:")
+    # print(out_df)
     return out_df
 
 
