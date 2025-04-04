@@ -304,6 +304,7 @@ Otherwise, enter the path where you wish to store the Synthstrip and Synthmorph 
 def check_for_models(models_dir: str) -> None:
     """
     Checks that all of the Synthmorph and Synthstrip models have been successfully installed.
+    Can be disabled if $SUPPRESS_MODEL_DOWNLOADS is set.
 
     Parameters
     ----------
@@ -318,6 +319,8 @@ def check_for_models(models_dir: str) -> None:
         and quits Python.
 
     """
+    if eval(os.environ.get("SUPPRESS_MODEL_DOWNLOADS", "False")):
+        return
     os.makedirs(models_dir, exist_ok=True)
 
     if not os.path.exists(f"{models_dir}/synthmorph.affine.2.h5"):
