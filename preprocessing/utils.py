@@ -333,7 +333,8 @@ def surfa_to_hd(sf_im: Volume, dtype: np.dtype = np.float32) -> hd.volume.Volume
 def niftiseg_to_dicomseg(
     dicom_dir: Path,
     nifti_seg: Path,
-    dicom_seg: Path
+    dicom_seg: Path,
+    tolerance: float = 0.05
 ):
     """
     Convert a segmentation in NIfTI format to DICOM-SEG format.
@@ -349,6 +350,9 @@ def niftiseg_to_dicomseg(
     dicom_seg: Path
         Filepath to the output segmentation in DICOM-SEG format.
 
+    tolerance: float
+        The conversion tolerance for `highdicom`'s Volume construction. Defaults to 0.05.
+
     Returns
     -------
     None
@@ -356,7 +360,7 @@ def niftiseg_to_dicomseg(
     """
     dcms = hd.spatial.sort_datasets([dcmread(dcm) for dcm in dicom_dir.glob("**/*.dcm")])
 
-    hd_im = hd.image.get_volume_from_series(dcms)
+    hd_im = hd.image.get_volume_from_series(dcms, atol=tolerance)
     sitk_im = hd_to_sitk(hd_im)
     sitk_seg = ReadImage(nifti_seg)
 
