@@ -22,6 +22,21 @@ surfa_to_sitk
 hd_to_sitk
     Convert a highdicom.volume.Volume to a SimpleITK.Image.
 
+sitk_to_hd
+    Convert a SimpleITK.Image to a highdicom.volume.Volume.
+
+hd_to_surfa
+    Convert a hd.volume.Volume to a surfa.Volume.
+
+surfa_to_hd
+    Convert a hd.volume.Volume to a surfa.Volume.
+
+niftiseg_to_dicomseg
+    Convert a segmentation in NIfTI format to DICOM-SEG format.
+
+dicomseg_to_niftiseg
+    Convert a segmentation in DICOM-SEG format to NIfTI format.
+
 initialize_models
     Set the path to the locations where the preprocessing models are (or will be stored).
 
@@ -55,13 +70,18 @@ from SimpleITK import (
     Image,
     GetImageFromArray,
     GetArrayFromImage,
+    ReadImage,
+    WriteImage,
+    Resample,
+    sitkNearestNeighbor
 )
 from surfa import Volume, ImageGeometry
 from subprocess import run
 from pathlib import Path
 from multiprocessing import Process, Queue
 from itertools import islice
-
+from pydicom import dcmread
+from pydicom.sr.codedict import codes
 
 class MissingColumnsError(Exception):
     """
@@ -164,7 +184,7 @@ def sitk_to_surfa(sitk_im: Image) -> Volume:
     vox2world[:3, :3] = (
         lps_ras
         @ np.reshape(sitk_im.GetDirection(), (3, 3))
-        * np.reshape(spacing * 3, (3, 3))
+        * spacing
     )
     vox2world[:3, 3] = lps_ras @ np.array(sitk_im.GetOrigin())
 
@@ -189,21 +209,19 @@ def surfa_to_sitk(sf_im: Volume) -> Image:
     """
 
     ras_lps = np.diag([-1, -1, 1])
-    data = np.array(sf_im).transpose(2, 1, 0)
+    data = sf_im.data.transpose(2, 1, 0)
 
     if data.dtype == np.bool_:
         data = data.astype(int)
 
-    spacing = sf_im.geom.voxsize.tolist()
+    spacing = sf_im.geom.voxsize
 
     sitk_im = GetImageFromArray(data)
 
     sitk_im.SetSpacing(spacing)
 
     sitk_im.SetDirection(
-        (
-            ras_lps @ sf_im.geom.vox2world[:3, :3] / np.reshape(spacing * 3, (3, 3))
-        ).flatten()
+        (ras_lps @ sf_im.geom.vox2world[:3, :3] / spacing).flatten()
     )
 
     sitk_im.SetOrigin(ras_lps @ sf_im.geom.vox2world[:3, 3])
@@ -230,23 +248,184 @@ def hd_to_sitk(hd_im: hd.volume.Volume) -> Image:
     if data.dtype == np.bool_:
         data = data.astype(int)
 
-    spacing = hd_im.spacing
-
     sitk_im = GetImageFromArray(data)
-
-    sitk_im.SetSpacing(spacing)
-
-    sitk_im.SetDirection(
-        (
-            hd_im.affine[:3, :3] / np.reshape(spacing * 3, (3, 3))
-        ).flatten()
-    )
-
-    sitk_im.SetOrigin(hd_im.affine[:3, 3])
+    sitk_im.SetSpacing(hd_im.spacing)
+    sitk_im.SetDirection(hd_im.direction.flatten())
+    sitk_im.SetOrigin(hd_im.position)
 
     return sitk_im
 
+def sitk_to_hd(sitk_im: Image) -> hd.volume.Volume:
+    """
+    Convert a SimpleITK.Image to a highdicom.volume.Volume.
 
+    Parameters
+    ----------
+    sitk_im: Image
+        A SimpleITK.Image to convert.
+
+    Returns
+    -------
+    hd_im: hd.volume.Volume
+        The corresponding highdicom.volume.Volume.
+    """
+    data = GetArrayFromImage(sitk_im).transpose(2, 1, 0)
+
+    if data.dtype == np.bool_:
+        data = data.astype(int)
+
+    return hd.volume.Volume.from_components(
+        data,
+        spacing=sitk_im.GetSpacing(),
+        coordinate_system="PATIENT",
+        direction=np.reshape(sitk_im.GetDirection(), (3, 3)),
+        position=sitk_im.GetOrigin()
+    )
+
+def hd_to_surfa(hd_im: hd.volume.Volume) -> Volume:
+    """
+    Convert a hd.volume.Volume to a surfa.Volume.
+
+    Parameters
+    ----------
+    hd_im: hd.volume.Volume
+        A hd.volume.Volume to convert.
+
+    Returns
+    -------
+    sf_im: Volume
+        The corresponding surfa.Volume.
+    """
+    lps_ras = np.diag([-1, -1, 1])
+
+    vox2world = np.eye(4)
+    vox2world[:3, :3] = (lps_ras @ hd_im.affine[:3, :3])
+    vox2world[:3, 3] = lps_ras @ hd_im.affine[:3, 3]
+
+    geom = ImageGeometry(shape=hd_im.shape, voxsize=hd_im.spacing, vox2world=vox2world)
+
+    return Volume(hd_im.array, geom)
+
+def surfa_to_hd(sf_im: Volume, dtype: np.dtype = np.float32) -> hd.volume.Volume:
+    """
+    Convert a hd.volume.Volume to a surfa.Volume.
+
+    Parameters
+    ----------
+    hd_im: hd.volume.Volume
+        A hd.volume.Volume to convert.
+
+    Returns
+    -------
+    sf_im: Volume
+        The corresponding surfa.Volume.
+    """
+    lps_ras = np.diag([-1, -1, 1])
+
+    return hd.volume.Volume.from_components(
+        sf_im.data.astype(dtype),
+        spacing=sf_im.geom.voxsize,
+        coordinate_system="PATIENT",
+        position=lps_ras @ sf_im.geom.vox2world[:3, 3],
+        direction=lps_ras @ sf_im.geom.rotation
+    )
+
+def niftiseg_to_dicomseg(
+    dicom_dir: Path,
+    nifti_seg: Path,
+    dicom_seg: Path
+):
+    """
+    Convert a segmentation in NIfTI format to DICOM-SEG format.
+
+    Parameters
+    ----------
+    dicom_dir: Path
+        Filepath to the reference DICOM series directory.
+
+    nifti_seg: Path
+        Filepath to the segmentation in NIfTI format.
+
+    dicom_seg: Path
+        Filepath to the output segmentation in DICOM-SEG format.
+
+    Returns
+    -------
+    None
+        A file is written to `dicom_seg` but nothing is returned.
+    """
+    dcms = hd.spatial.sort_datasets([dcmread(dcm) for dcm in dicom_dir.glob("**/*.dcm")])
+
+    hd_im = hd.image.get_volume_from_series(dcms)
+    sitk_im = hd_to_sitk(hd_im)
+    sitk_seg = ReadImage(nifti_seg)
+
+    sitk_seg_resampled = Resample(sitk_seg, sitk_im, interpolator=sitkNearestNeighbor)
+    hd_seg = sitk_to_hd(sitk_seg_resampled)
+
+
+    algorithm_identification = hd.AlgorithmIdentificationSequence(
+        name='QTIM Meningioma Segmenter',
+        version='v1.0',
+        family=codes.cid7162.ArtificialIntelligence
+    )
+
+    description_segment_1 = hd.seg.SegmentDescription(
+        segment_number=1,
+        segment_label='Meningioma - Enhancing Tumor',
+        segmented_property_category=codes.SCT.MorphologicallyAbnormalStructure,
+        segmented_property_type=codes.SCT.Neoplasm,
+        algorithm_type=hd.seg.SegmentAlgorithmTypeValues.AUTOMATIC,
+        algorithm_identification=algorithm_identification,
+        tracking_uid=hd.UID(),
+        tracking_id='Meningioma'
+    )
+
+    segmentation = hd.seg.Segmentation(
+        source_images=dcms,
+        pixel_array=hd_seg.array,
+        segmentation_type=hd.seg.SegmentationTypeValues.BINARY,
+        segment_descriptions=[description_segment_1],
+        series_instance_uid=hd.UID(),
+        series_number=201,
+        sop_instance_uid=hd.UID(),
+        instance_number=1,
+        manufacturer='Massachusetts General Hospital, QTIM Lab',
+        manufacturer_model_name='QTIM Meningioma Segmenter v1.0',
+        software_versions='v1.0',
+        device_serial_number='QTIM Meningioma Segmenter',
+        series_description="QTIM Meningioma Segmentation",
+        content_label="VOLUMESEG"
+    )
+
+    dicom_seg.parent.mkdir(parents=True, exist_ok=True)
+    segmentation.save_as(dicom_seg)
+
+def dicomseg_to_niftiseg(
+    dicom_seg: Path,
+    nifti_seg: Path,
+):
+    """
+    Convert a segmentation in DICOM-SEG format to NIfTI format.
+
+    Parameters
+    ----------
+    dicom_seg: Path
+        Filepath to the segmentation in DICOM-SEG format.
+
+    nifti_seg: Path
+        Filepath to the output segmentation in NIfTI format.
+
+    Returns
+    -------
+    None
+        A file is written to `nifti_seg` but nothing is returned.
+    """
+    hd_seg = hd.seg.segread(dicom_seg).get_volume()
+    sitk_seg = hd_to_sitk(hd_seg)
+
+    nifti_seg.parent.mkdir(parents=True, exist_ok=True)
+    WriteImage(sitk_seg, nifti_seg)
 
 def initialize_models() -> str:
     """
@@ -679,6 +858,11 @@ __all__ = [
     "sitk_to_surfa",
     "surfa_to_sitk",
     "hd_to_sitk",
+    "sitk_to_hd",
+    "hd_to_surfa",
+    "surfa_to_hd",
+    "niftiseg_to_dicomseg",
+    "dicomseg_to_niftiseg",
     "initialize_models",
     "check_for_models",
     "cpu_adjust",
