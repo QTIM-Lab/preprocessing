@@ -11,9 +11,9 @@ numpy = "<2.0"
 pydicom = ">=2.4.3,<=4.0.0"
 pandas = "^2.1.3"
 tqdm = "^4.57.0"
-surfa = {git = "https://github.com/freesurfer/surfa.git", branch = "master"} # rev = "026cabec14bb03d9dfbc6b5bdf14baec7bd51c7f"}
-voxelmorph = {git = "https://github.com/voxelmorph/voxelmorph.git", branch = "dev"} # rev = "ca3d47a2c254aae9a0c0e1b30c24c324c211ebc8"}
-neurite = {git = "https://github.com/adalca/neurite.git", branch = "dev"} #rev = "95b2b568b124cbc654467177ddcdb2cb3526788c"}
+surfa = {git = "https://github.com/freesurfer/surfa.git", branch = "master"}
+voxelmorph = {git = "https://github.com/voxelmorph/voxelmorph.git", rev = "2cd706189cb5919c6335f34feec672f05203e36b"}
+neurite = {git = "https://github.com/adalca/neurite.git", rev = "40c6d0e277b12dc9dddb6e76f2dbdd373b7d22b1"}
 pycrumbs = {git = "https://github.com/mccle/pycrumbs.git", branch = "char_limit" } # "^0.3.0"
 simpleitk = "^2.3.1"
 connected-components-3d = "^3.12.4"
