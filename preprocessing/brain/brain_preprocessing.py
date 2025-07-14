@@ -250,7 +250,7 @@ def local_reg(
 
     pipeline_key:
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
-        Defaults to 'preprocessed'.
+        Defaults to 'Preprocessed'.
 
     fixed_image_path: str
         The path to the fixed image, which must be a key within `sitk_im_cache`.
@@ -371,7 +371,7 @@ def long_reg(
         A list of dictionaries with each representing a series row from the study DataFrame / CSV.
     pipeline_key:
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
-        Defaults to 'preprocessed'.
+        Defaults to 'Preprocessed'.
     fixed_image_path: str
         The path to the fixed image, which must be a key within `sitk_im_cache`.
     study_SS_mask_file: str
@@ -533,7 +533,7 @@ def fill_foreground_mask(initial_foreground: np.ndarray) -> np.ndarray:
 def preprocess_study(
     study_df: pd.DataFrame,
     preprocessed_dir: Path | str,
-    pipeline_key: str,
+    pipeline_key: str = "Preprocessed",
     registration_key: str = "T1Post",
     registration_target: Path | str | None = None,
     registration_model: Literal["rigid", "affine", "affine_crop", "joint", "deform"] = "affine",
@@ -561,7 +561,7 @@ def preprocess_study(
 
     pipeline_key: str
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
-        Defaults to 'preprocessed'.
+        Defaults to 'Preprocessed'.
 
     registration_key: str
         The value that will be used to select the fixed image during registration. This should correspond
@@ -1059,7 +1059,7 @@ def preprocess_study(
 def preprocess_patient(
     patient_df: pd.DataFrame,
     preprocessed_dir: Path | str,
-    pipeline_key: str = "preprocessed",
+    pipeline_key: str = "Preprocessed",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
     atlas_target: Path | str | None = None,
@@ -1088,7 +1088,7 @@ def preprocess_patient(
 
     pipeline_key: str
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
-        Defaults to 'preprocessed'.
+        Defaults to 'Preprocessed'.
 
     registration_key: str
         The value that will be used to select the fixed image during registration. This should correspond
@@ -1294,7 +1294,7 @@ def preprocess_from_csv(
     csv: Path | str,
     preprocessed_dir: Path | str,
     patients: Sequence[str] | None = None,
-    pipeline_key: str = "preprocessed",
+    pipeline_key: str = "Preprocessed",
     registration_key: str = "T1Post",
     longitudinal_registration: bool = False,
     atlas_target: Path | str | None = None,
@@ -1327,7 +1327,7 @@ def preprocess_from_csv(
 
     pipeline_key: str
         The key that will be added to the DataFrame to indicate the new locations of preprocessed files.
-        Defaults to 'preprocessed'.
+        Defaults to 'Preprocessed'.
 
     registration_key: str
         The value that will be used to select the fixed image during registration. This should correspond
