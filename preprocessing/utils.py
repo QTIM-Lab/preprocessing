@@ -460,7 +460,7 @@ def niftiseg_to_dicomseg(
         segmentation = hd.seg.Segmentation(
             source_images=dcms,
             pixel_array=hd_seg.array,
-            segmentation_type=hd.seg.SegmentationTypeValues.LABELMAP,
+            segmentation_type=hd.seg.SegmentationTypeValues.BINARY,
             segment_descriptions=[
                 description_segment_1,
                 description_segment_2,
