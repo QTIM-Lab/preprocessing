@@ -65,7 +65,7 @@ import traceback
 import re
 import highdicom as hd
 
-from typing import Sequence, Dict, Any
+from typing import Sequence, Dict, Any, Literal
 from SimpleITK import (
     Image,
     GetImageFromArray,
@@ -334,6 +334,7 @@ def niftiseg_to_dicomseg(
     dicom_dir: Path,
     nifti_seg: Path,
     dicom_seg: Path,
+    model: Literal["meningioma", "glioma"] = "meningioma",
     tolerance: float = 0.05
 ):
     """
@@ -349,6 +350,9 @@ def niftiseg_to_dicomseg(
 
     dicom_seg: Path
         Filepath to the output segmentation in DICOM-SEG format.
+
+    model: str
+        QTIM Lab segmentation model used to generate the segmentation. Choices include "meningioma" or "glioma".
 
     tolerance: float
         The conversion tolerance for `highdicom`'s Volume construction. Defaults to 0.05.
@@ -367,40 +371,113 @@ def niftiseg_to_dicomseg(
     sitk_seg_resampled = Resample(sitk_seg, sitk_im, interpolator=sitkNearestNeighbor)
     hd_seg = sitk_to_hd(sitk_seg_resampled)
 
+    if model == "meningioma":
+        algorithm_identification = hd.AlgorithmIdentificationSequence(
+            name='QTIM Meningioma Segmenter',
+            version='v1.0',
+            family=codes.cid7162.ArtificialIntelligence
+        )
 
-    algorithm_identification = hd.AlgorithmIdentificationSequence(
-        name='QTIM Meningioma Segmenter',
-        version='v1.0',
-        family=codes.cid7162.ArtificialIntelligence
-    )
+        description_segment_1 = hd.seg.SegmentDescription(
+            segment_number=1,
+            segment_label='Meningioma - Enhancing Tumor',
+            segmented_property_category=codes.SCT.MorphologicallyAbnormalStructure,
+            segmented_property_type=codes.SCT.Neoplasm,
+            algorithm_type=hd.seg.SegmentAlgorithmTypeValues.AUTOMATIC,
+            algorithm_identification=algorithm_identification,
+            tracking_uid=hd.UID(),
+            tracking_id='Meningioma'
+        )
 
-    description_segment_1 = hd.seg.SegmentDescription(
-        segment_number=1,
-        segment_label='Meningioma - Enhancing Tumor',
-        segmented_property_category=codes.SCT.MorphologicallyAbnormalStructure,
-        segmented_property_type=codes.SCT.Neoplasm,
-        algorithm_type=hd.seg.SegmentAlgorithmTypeValues.AUTOMATIC,
-        algorithm_identification=algorithm_identification,
-        tracking_uid=hd.UID(),
-        tracking_id='Meningioma'
-    )
+        segmentation = hd.seg.Segmentation(
+            source_images=dcms,
+            pixel_array=hd_seg.array,
+            segmentation_type=hd.seg.SegmentationTypeValues.BINARY,
+            segment_descriptions=[description_segment_1],
+            series_instance_uid=hd.UID(),
+            series_number=201,
+            sop_instance_uid=hd.UID(),
+            instance_number=1,
+            manufacturer='Massachusetts General Hospital, QTIM Lab',
+            manufacturer_model_name='QTIM Meningioma Segmenter v1.0',
+            software_versions='v1.0',
+            device_serial_number='QTIM Meningioma Segmenter',
+            series_description="QTIM Meningioma Segmentation",
+            content_label="MENINGIOMA"
+        )
 
-    segmentation = hd.seg.Segmentation(
-        source_images=dcms,
-        pixel_array=hd_seg.array,
-        segmentation_type=hd.seg.SegmentationTypeValues.BINARY,
-        segment_descriptions=[description_segment_1],
-        series_instance_uid=hd.UID(),
-        series_number=201,
-        sop_instance_uid=hd.UID(),
-        instance_number=1,
-        manufacturer='Massachusetts General Hospital, QTIM Lab',
-        manufacturer_model_name='QTIM Meningioma Segmenter v1.0',
-        software_versions='v1.0',
-        device_serial_number='QTIM Meningioma Segmenter',
-        series_description="QTIM Meningioma Segmentation",
-        content_label="VOLUMESEG"
-    )
+    elif model == "glioma":
+        algorithm_identification = hd.AlgorithmIdentificationSequence(
+            name='QTIM Glioma Segmenter',
+            version='v1.0',
+            family=codes.cid7162.ArtificialIntelligence
+        )
+
+        description_segment_1 = hd.seg.SegmentDescription(
+            segment_number=1,
+            segment_label='Glioma - Non-enhancing Tumor Core',
+            segmented_property_category=codes.SCT.MorphologicallyAbnormalStructure,
+            segmented_property_type=codes.SCT.Necrosis,
+            algorithm_type=hd.seg.SegmentAlgorithmTypeValues.AUTOMATIC,
+            algorithm_identification=algorithm_identification,
+            tracking_uid=hd.UID(),
+            tracking_id='Glioma'
+        )
+
+        description_segment_2 = hd.seg.SegmentDescription(
+            segment_number=2,
+            segment_label='Glioma - Surrounding Non-enhancing FLAIR Hyperintensity',
+            segmented_property_category=codes.SCT.MorphologicallyAbnormalStructure,
+            segmented_property_type=codes.SCT.Edema,
+            algorithm_type=hd.seg.SegmentAlgorithmTypeValues.AUTOMATIC,
+            algorithm_identification=algorithm_identification,
+            tracking_uid=hd.UID(),
+            tracking_id='Glioma'
+        )
+
+        description_segment_3 = hd.seg.SegmentDescription(
+            segment_number=3,
+            segment_label='Glioma - Enhancing Tumor',
+            segmented_property_category=codes.SCT.MorphologicallyAbnormalStructure,
+            segmented_property_type=codes.SCT.Neoplasm,
+            algorithm_type=hd.seg.SegmentAlgorithmTypeValues.AUTOMATIC,
+            algorithm_identification=algorithm_identification,
+            tracking_uid=hd.UID(),
+            tracking_id='Glioma'
+        )
+
+        description_segment_4 = hd.seg.SegmentDescription(
+            segment_number=4,
+            segment_label='Glioma - Resection Cavity',
+            segmented_property_category=codes.SCT.MorphologicallyAbnormalStructure,
+            segmented_property_type=hd.content.CodedConcept("63130001", "SCT", "Surgical Scar"),
+            algorithm_type=hd.seg.SegmentAlgorithmTypeValues.AUTOMATIC,
+            algorithm_identification=algorithm_identification,
+            tracking_uid=hd.UID(),
+            tracking_id='Glioma'
+        )
+
+        segmentation = hd.seg.Segmentation(
+            source_images=dcms,
+            pixel_array=hd_seg.array,
+            segmentation_type=hd.seg.SegmentationTypeValues.LABELMAP,
+            segment_descriptions=[
+                description_segment_1,
+                description_segment_2,
+                description_segment_3,
+                description_segment_4
+            ],
+            series_instance_uid=hd.UID(),
+            series_number=301,
+            sop_instance_uid=hd.UID(),
+            instance_number=1,
+            manufacturer='Massachusetts General Hospital, QTIM Lab',
+            manufacturer_model_name='QTIM Glioma Segmenter v1.0',
+            software_versions='v1.0',
+            device_serial_number='QTIM Glioma Segmenter',
+            series_description="QTIM Glioma Segmentation",
+            content_label="GLIOMA"
+        )
 
     dicom_seg.parent.mkdir(parents=True, exist_ok=True)
     segmentation.save_as(dicom_seg)
