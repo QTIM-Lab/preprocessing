@@ -411,7 +411,7 @@ def niftiseg_to_dicomseg(
         hd_im = hd.image.get_volume_from_series(dcms, atol=tolerance)
         sitk_im = hd_to_sitk(hd_im)
 
-    except:
+    except Exception:
         if nifti_source is not None:
             sitk_im = ReadImage(nifti_source)
 
@@ -554,7 +554,7 @@ def dicomseg_to_niftiseg(
     None
         A file is written to `nifti_seg` but nothing is returned.
     """
-    hd_seg = hd.seg.segread(dicom_seg).get_volume()
+    hd_seg = hd.seg.segread(dicom_seg).get_volume(combine_segments=True)
     sitk_seg = hd_to_sitk(hd_seg)
 
     nifti_seg.parent.mkdir(parents=True, exist_ok=True)
