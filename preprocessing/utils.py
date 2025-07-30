@@ -31,6 +31,10 @@ hd_to_surfa
 surfa_to_hd
     Convert a hd.volume.Volume to a surfa.Volume.
 
+dcm_meta_check
+    Ensures a series of DICOMs has the attributes required for volume and segmentation creation with highdicom.
+    May be removed if directly handled by highdicom.
+
 niftiseg_to_dicomseg
     Convert a segmentation in NIfTI format to DICOM-SEG format.
 
@@ -80,7 +84,7 @@ from subprocess import run
 from pathlib import Path
 from multiprocessing import Process, Queue
 from itertools import islice
-from pydicom import dcmread
+from pydicom import dcmread, FileDataset
 from pydicom.sr.codedict import codes
 
 class MissingColumnsError(Exception):
@@ -330,10 +334,45 @@ def surfa_to_hd(sf_im: Volume, dtype: np.dtype = np.float32) -> hd.volume.Volume
         direction=lps_ras @ sf_im.geom.rotation
     )
 
+def dcm_meta_check(dcms: Sequence[FileDataset]):
+    """
+    Ensures a series of DICOMs has the attributes required for volume and segmentation creation with highdicom.
+    May be removed if directly handled by highdicom.
+
+    Parameters
+    ----------
+    dcms: Sequence[FileDataset]
+        A sequence of FileDatasets representing a DICOM series.
+
+    Returns
+    -------
+    Sequence[FileDataset]
+        Attributes are assigned directly to dcms and the sequence is also returned.
+    """
+    frame_of_reference_uid = getattr(dcms[0], "FrameOfReferenceUID", hd.UID())
+
+    for dcm in dcms:
+        dcm.FrameOfReferenceUID = frame_of_reference_uid
+        for attr in [
+            "PatientID",
+            "PatientName",
+            "PatientBirthDate",
+            "AccessionNumber",
+            "StudyID",
+            "StudyDate",
+            "StudyTime",
+            "ReferringPhysicianName"
+        ]:
+            setattr(dcm, attr, getattr(dcm, attr, None))
+
+    return dcms
+
+
 def niftiseg_to_dicomseg(
     dicom_dir: Path,
     nifti_seg: Path,
     dicom_seg: Path,
+    nifti_source: Path | None = None,
     model: Literal["meningioma", "glioma"] = "meningioma",
     tolerance: float = 0.05
 ):
@@ -351,6 +390,10 @@ def niftiseg_to_dicomseg(
     dicom_seg: Path
         Filepath to the output segmentation in DICOM-SEG format.
 
+    nifti_source: Path | None
+        If the dicom_dir is unable to be converted to a volume, a NIfTI file may serve as an alternative input for the
+        source volume. Defaults to None.
+
     model: str
         QTIM Lab segmentation model used to generate the segmentation. Choices include "meningioma" or "glioma".
 
@@ -362,10 +405,19 @@ def niftiseg_to_dicomseg(
     None
         A file is written to `dicom_seg` but nothing is returned.
     """
-    dcms = hd.spatial.sort_datasets([dcmread(dcm) for dcm in dicom_dir.glob("**/*.dcm")])
+    dcms = dcm_meta_check(hd.spatial.sort_datasets([dcmread(dcm) for dcm in dicom_dir.glob("**/*.dcm")]))
 
-    hd_im = hd.image.get_volume_from_series(dcms, atol=tolerance)
-    sitk_im = hd_to_sitk(hd_im)
+    try:
+        hd_im = hd.image.get_volume_from_series(dcms, atol=tolerance)
+        sitk_im = hd_to_sitk(hd_im)
+
+    except:
+        if nifti_source is not None:
+            sitk_im = ReadImage(nifti_source)
+
+        else:
+            raise ValueError(f"{dicom_dir} could not be used to construct a volume, but no `nifti_source` has been provided.")
+
     sitk_seg = ReadImage(nifti_seg)
 
     sitk_seg_resampled = Resample(sitk_seg, sitk_im, interpolator=sitkNearestNeighbor)
@@ -942,6 +994,7 @@ __all__ = [
     "sitk_to_hd",
     "hd_to_surfa",
     "surfa_to_hd",
+    "dcm_meta_check",
     "niftiseg_to_dicomseg",
     "dicomseg_to_niftiseg",
     "initialize_models",

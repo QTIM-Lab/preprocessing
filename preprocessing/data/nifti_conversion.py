@@ -27,7 +27,8 @@ from pathlib import Path
 from preprocessing.utils import (
     check_required_columns,
     hd_to_sitk,
-    update_errorfile
+    update_errorfile,
+    dcm_meta_check
 )
 from preprocessing.dcm_tools import sort_slices, calc_slice_distance
 from pydicom import dcmread
@@ -199,7 +200,7 @@ def convert_series(
 
     for i, group in enumerate(dcm_groups):
         try:
-            hd_im = hd.image.get_volume_from_series(group, atol=tolerance)
+            hd_im = hd.image.get_volume_from_series(dcm_meta_check(group), atol=tolerance)
 
         except Exception as error:
             errorfile = output_dir / "conversion_errors.txt"
