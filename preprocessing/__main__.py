@@ -750,7 +750,8 @@ def main() -> None:
         seed_numpy=False,
         seed_tensorflow=False,
         seed_torch=False,
-        char_limit=None
+        char_limit=None,
+        create_parents=True
     )
     def tracked_command(
         func: Callable, kwargs: Dict[str, Any], record_dir: Path | str
