@@ -568,6 +568,133 @@ brain_preprocessing.add_argument(
     ),
 )
 
+liver_preprocessing = subparsers.add_parser(
+    "liver-preprocessing",
+    description=(
+        """
+        Preprocess NIfTI files for deep learning. A CSV is required to
+        indicate the location of source files and to procide the context
+        for filenames. The outputs will follow a BIDS inspired convention.
+        """
+    ),
+)
+
+liver_preprocessing.add_argument(
+    "preprocessed_dir",
+    metavar="preprocessed-dir",
+    type=Path,
+    help=("The directory that will contain the preprocessed NIfTI files."),
+)
+
+liver_preprocessing.add_argument(
+    "csv",
+    type=Path,
+    help=(
+        """
+        A CSV containing NIfTI location and information required for the output file names.
+        It must contain the columns: 'Nifti', 'AnonPatientID', 'AnonStudyID',
+        'StudyInstanceUID', 'SeriesInstanceUID', 'NormalizedSeriesDescription', and 'SeriesType'.
+        """
+    ),
+)
+
+liver_preprocessing.add_argument(
+    "-p",
+    "--patients",
+    type=str,
+    default=None,
+    help=(
+        """
+        A comma delimited list of patients to select from the 'AnonPatientID' column
+        of the CSV
+        """
+    ),
+)
+
+liver_preprocessing.add_argument(
+    "-pk",
+    "--pipeline-key",
+    type=str,
+    default="Preprocessed",
+    help=(
+        """
+        The key that will be used in the CSV to indicate the new locations of preprocessed
+        files. Defaults to 'preprocessed'.
+        """
+    ),
+)
+
+liver_preprocessing.add_argument(
+    "-o",
+    "--orientation",
+    type=str,
+    default="RAS",
+    help=(
+        "The orientation standard that you wish to set for preprocessed data. Defaults to 'RAS'."
+    ),
+)
+
+liver_preprocessing.add_argument(
+    "-s",
+    "--spacing",
+    type=str,
+    default="1,1,1",
+    help=(
+        """
+        A comma delimited list indicating the desired spacing of preprocessed data. Measurements
+        are in mm. Defaults to '1,1,1'.
+        """
+    ),
+)
+
+liver_preprocessing.add_argument(
+    "-b",
+    "--binarize-seg",
+    action="store_true",
+    help=(
+        """
+        Whether to binarize segmentations. Not recommended for multi-class labels. Binarization is not
+        applied by default.
+        """
+    ),
+)
+
+liver_preprocessing.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=1,
+    help=(
+        "Number of cpus to use for multiprocessing. Defaults to 1 (no multiprocessing)."
+    ),
+)
+
+liver_preprocessing.add_argument(
+    "-v",
+    "--verbose",
+    action="store_true",
+    help=(
+        """
+        If specified, the commands that are called and their outputs will be printed to
+        the console.
+        """
+    ),
+)
+
+liver_preprocessing.add_argument(
+    "-d",
+    "--debug",
+    action="store_true",
+    help=(
+        """
+        Whether to run in debug mode. Each intermediate step will be saved using a suffix
+        for differentiation. The input CSV will not be altered. Instead, a new copy will
+        be saved to the output directory.
+        """
+    ),
+)
+
+
 tumor_tracking = subparsers.add_parser(
     "track-tumors",
     description=(
@@ -784,6 +911,7 @@ def main() -> None:
             # check all packages
             from preprocessing import data
             from preprocessing import brain
+            from prerpocessing import liver
             from preprocessing import qc
             from preprocessing import constants
             from preprocessing import dcm_tools
@@ -876,6 +1004,27 @@ def main() -> None:
             "spacing": [float(s) for s in args.spacing.split(",")],
             "skullstrip": not args.no_skullstrip,
             "pre_skullstripped": args.pre_skullstripped,
+            "binarize_seg": args.binarize_seg,
+            "cpus": args.cpus,
+            "verbose": args.verbose,
+            "debug": args.debug,
+        }
+
+        tracked_command(preprocess_from_csv, kwargs=kwargs, record_dir=args.preprocessed_dir)
+
+    elif args.command == "liver-preprocessing":
+        from preprocessing.liver import preprocess_from_csv
+
+        if isinstance(args.patients, str):
+            args.patients = args.patients.split(",")
+
+        kwargs = {
+            "csv": args.csv,
+            "preprocessed_dir": args.preprocessed_dir,
+            "patients": args.patients,
+            "pipeline_key": args.pipeline_key,
+            "orientation": args.orientation,
+            "spacing": [float(s) for s in args.spacing.split(",")],
             "binarize_seg": args.binarize_seg,
             "cpus": args.cpus,
             "verbose": args.verbose,
