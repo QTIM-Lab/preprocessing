@@ -1412,7 +1412,7 @@ def preprocess_from_csv(
     check_required_columns(df, required_columns, optional_columns)
 
     preprocessed_dir = Path(preprocessed_dir).resolve()
-    errorfile = preprocessed_dir / f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
+    errorfile = preprocessed_dir / f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
     df = df.drop_duplicates(subset="SeriesInstanceUID").reset_index(drop=True)
 

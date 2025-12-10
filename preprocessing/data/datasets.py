@@ -299,7 +299,7 @@ def create_dicom_dataset(
     dataset_csv = Path(dataset_csv).resolve()
     cpus = max(cpus, 1)
     dataset_csv.parent.mkdir(parents=True, exist_ok=True)
-    errorfile = dataset_csv.parent /  f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
+    errorfile = dataset_csv.parent /  f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
     if mode == "arbitrary":
         instance_csv = Path(str(dataset_csv).replace(".csv", "_instances.csv"))
@@ -602,7 +602,7 @@ def create_nifti_dataset(
     cpus = max(cpus, 1)
     dataset_csv.parent.mkdir(parents=True, exist_ok=True)
     rejection_csv = str(dataset_csv).replace(".csv", "_rejections.csv")
-    errorfile = dataset_csv.parent /  f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
+    errorfile = dataset_csv.parent /  f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
     accepted_dfs = []
     rejected_dfs = []

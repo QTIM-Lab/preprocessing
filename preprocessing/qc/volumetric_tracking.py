@@ -136,7 +136,7 @@ def vol_plot_csv(
     check_required_columns(df, required_columns)
 
     plot_dir = Path(plot_dir).resolve()
-    errorfile = plot_dir / f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
+    errorfile = plot_dir / f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
     summary_csv = plot_dir / "summary.csv"
 
     if summary_csv.exists():

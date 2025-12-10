@@ -463,7 +463,7 @@ def convert_batch_to_nifti(
     study_uids = filtered_df["StudyInstanceUID"].unique()
 
     nifti_dir = Path(nifti_dir).resolve()
-    errorfile = nifti_dir / f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
+    errorfile = nifti_dir / f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
     kwargs_list = [
         {

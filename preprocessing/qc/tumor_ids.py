@@ -221,7 +221,7 @@ def track_tumors_csv(
     check_required_columns(df, required_columns)
 
     tracking_dir = Path(tracking_dir)
-    errorfile = tracking_dir / f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
+    errorfile = tracking_dir / f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
     filtered_df = df.dropna(subset=[f"{pipeline_key}Seg"])
 
