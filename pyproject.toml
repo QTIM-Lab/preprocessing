@@ -18,7 +18,7 @@ pycrumbs = {git = "https://github.com/mccle/pycrumbs.git", branch = "char_limit"
 simpleitk = "^2.3.1"
 connected-components-3d = "^3.12.4"
 scikit-image = "^0.22.0"
-highdicom = ">=0.24.0,<1.0.0"
+highdicom = {git = "https://github.com/ImagingDataCommons/highdicom.git" , rev = "6ff1f71b1061c4ef3f8d719e289de0d54d1544ca"}
 tensorflow = "2.14"
 torch = "^2.2.1"
 seaborn = "^0.13.2"

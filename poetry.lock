@@ -916,15 +916,13 @@ numpy = ">=1.19.3"
 
 [[package]]
 name = "highdicom"
-version = "0.25.0"
+version = "0.27.0"
 description = "High-level DICOM abstractions."
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
-files = [
-    {file = "highdicom-0.25.0-py3-none-any.whl", hash = "sha256:73e5b3985284c0800ae71568111316fbc0c0b931e378edb975115b3fc9876164"},
-    {file = "highdicom-0.25.0.tar.gz", hash = "sha256:1bd5592e216d4f76723e14978e7e6da253f753d917f12e7d78d19ad3063d9d78"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 numpy = ">=1.19"
@@ -934,9 +932,13 @@ pyjpegls = ">=1.0.0"
 typing-extensions = ">=4.0.0"
 
 [package.extras]
-docs = ["sphinx-autodoc-typehints (==1.17.0)", "sphinx-pyreverse (==0.0.17)", "sphinx-rtd-theme (==1.0.0)", "sphinxcontrib-autoprogram (==0.1.7)", "sphinxcontrib-websupport (==1.2.4)"]
 libjpeg = ["pylibjpeg (>=2.0)", "pylibjpeg-libjpeg (>=2.1)", "pylibjpeg-openjpeg (>=2.0.0)"]
-test = ["mypy (==0.971)", "pytest (==7.4.4)", "pytest-cov (==4.1.0)", "pytest-flake8 (==1.1.1)"]
+
+[package.source]
+type = "git"
+url = "https://github.com/ImagingDataCommons/highdicom.git"
+reference = "orientation_tolerance"
+resolved_reference = "6ff1f71b1061c4ef3f8d719e289de0d54d1544ca"
 
 [[package]]
 name = "idna"
@@ -4092,4 +4094,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">3.10,<3.12"
-content-hash = "ef9434b0ec1d22f58005c518d67b6b0eb97cf14632d642d59dd1fe20e16e755b"
+content-hash = "1a8ceb6380d7936e4b56238c44382c2e5175020faa9467617bdf2bdb79bff523"

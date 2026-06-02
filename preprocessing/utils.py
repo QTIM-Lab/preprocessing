@@ -68,6 +68,8 @@ import warnings
 import traceback
 import re
 import highdicom as hd
+import itertools
+import string
 
 from typing import Sequence, Dict, Any, Literal
 from SimpleITK import (
@@ -86,6 +88,10 @@ from multiprocessing import Process, Queue
 from itertools import islice
 from pydicom import dcmread, FileDataset
 from pydicom.sr.codedict import codes
+from preprocessing.dcm_tools import sort_slices, calc_slice_distance
+from numpy.linalg import norm
+from collections import Counter, defaultdict
+
 
 class MissingColumnsError(Exception):
     """
@@ -334,7 +340,7 @@ def surfa_to_hd(sf_im: Volume, dtype: np.dtype = np.float32) -> hd.volume.Volume
         direction=lps_ras @ sf_im.geom.rotation
     )
 
-def dcm_meta_check(dcms: Sequence[FileDataset]):
+def dcm_volume_selector(dcms: Sequence[FileDataset], conform_data: bool = True, otol=1e-3, stol=1e-2, min_slices: int = 10):
     """
     Ensures a series of DICOMs has the attributes required for volume and segmentation creation with highdicom.
     May be removed if directly handled by highdicom.
@@ -349,23 +355,146 @@ def dcm_meta_check(dcms: Sequence[FileDataset]):
     Sequence[FileDataset]
         Attributes are assigned directly to dcms and the sequence is also returned.
     """
-    frame_of_reference_uid = getattr(dcms[0], "FrameOfReferenceUID", hd.UID())
+    def conform_attr(dcms, attr, atol=otol):
+        counts = Counter([str(getattr(dcm, attr, None)) for dcm in dcms])
+        conformed_str = counts.most_common(1)[0][0]
 
+        for dcm in dcms:
+            conformed_value = getattr(dcm, attr, None)
+            if str(conformed_value) == conformed_str:
+                break
+
+        conformed = []
+        for dcm in dcms:
+            value = getattr(dcm, attr, None)
+
+            if value is not None and np.allclose(value, conformed_value, atol=otol):
+                setattr(dcm, attr, conformed_value)
+                conformed.append(dcm)
+
+        return conformed
+
+    def valid_dcm(dcm):
+        return all([
+            hasattr(dcm, k) for k in [
+                "ImageOrientationPatient",
+                "ImagePositionPatient",
+                "PixelSpacing"
+            ]
+        ])
+
+    def orientation_key(dcm):
+        return tuple(np.round(np.array(dcm.ImageOrientationPatient) / otol) * otol)
+
+    def spacing_key(dcm):
+        return tuple(np.round(np.array(dcm.PixelSpacing) / stol) * stol)
+
+    def shape_key(dcm):
+        return (int(dcm.Rows), int(dcm.Columns))
+
+    def position_key(dcm):
+        return tuple(np.round(np.array(dcm.ImagePositionPatient) / stol) * stol)
+
+    def longest_consistent_sequence(positions, spacing):
+        positions = np.array(sorted(positions), dtype=float)
+        n = len(positions)
+
+        if n < 2:
+            return np.ones(n, dtype=bool)
+
+        diffs = np.diff(positions)
+        consistent_spacing = np.abs(diffs - spacing) <= stol
+
+        mask = np.zeros(n, dtype=bool)
+        for i, g in enumerate(consistent_spacing):
+            if g:
+                mask[i] = True
+                mask[i+1] = True
+
+        best_start, best_len = 0, 0
+
+        for val, group in itertools.groupby(enumerate(mask), key=lambda x: x[1]):
+            indices = [i for i, _ in group]
+            if val:
+                length = len(indices)
+                if length > best_len:
+                    best_len = length
+                    best_start = indices[0]
+
+        final_mask = np.zeros(n, dtype=bool)
+        if best_len > 0:
+            final_mask[best_start:best_start + best_len] = True
+        else:
+            final_mask[:] = True
+
+        return positions[final_mask]
+
+    def assign_volumes(dcms):
+        dcms = hd.spatial.sort_datasets(dcms)
+        if len(dcms) < 2:
+            return [dcms]
+
+        pos_dict = defaultdict(list)
+        for dcm in dcms:
+            pos = calc_slice_distance(dcm.ImageOrientationPatient, dcm.ImagePositionPatient)
+            pos = np.round(pos / stol) * stol
+            pos_dict[pos].append(dcm)
+
+        n = max([len(v) for v in pos_dict.values()])
+
+        positions = np.array(sorted([k for k,v in pos_dict.items() if len(v) == n]))
+
+        if len(positions) < 2:
+            return [dcms]
+
+        rounded_diffs = np.round(np.diff(positions) / stol) * stol
+        spacing = Counter(rounded_diffs).most_common(1)[0][0]
+
+        positions = longest_consistent_sequence(positions, spacing)
+
+        for pos in positions:
+            pos_dict[pos] = sorted(pos_dict[pos], key=lambda x: getattr(dcm, "InstanceNumber", 0))
+
+        volumes = []
+        for _ in range(n):
+            volume = []
+            for pos in positions:
+                volume.append(pos_dict[pos].pop(0))
+
+            if len(volume) >= min_slices:
+                volumes.append(volume)
+
+        return volumes
+
+    dcms = list(filter(valid_dcm, dcms))
+    if len(dcms) == 0:
+        return dcms
+
+    all_volumes = []
+
+    series_groups = defaultdict(list)
     for dcm in dcms:
-        dcm.FrameOfReferenceUID = frame_of_reference_uid
-        for attr in [
-            "PatientID",
-            "PatientName",
-            "PatientBirthDate",
-            "AccessionNumber",
-            "StudyID",
-            "StudyDate",
-            "StudyTime",
-            "ReferringPhysicianName"
-        ]:
-            setattr(dcm, attr, getattr(dcm, attr, None))
+        k = (
+            getattr(dcm, "SeriesInstanceUID", None),
+            getattr(dcm, "FrameOfReferenceUID", None)
+        )
+        series_groups[k].append(dcm)
 
-    return dcms
+    for series_group in series_groups.values():
+        geom_groups = defaultdict(list)
+        for dcm in series_group:
+            k = (orientation_key(dcm), spacing_key(dcm), shape_key(dcm))
+            geom_groups[k].append(dcm)
+
+        for geom_group in geom_groups.values():
+            if conform_data:
+                geom_group = conform_attr(geom_group, "ImageOrientationPatient")
+                for dcm in geom_group:
+                    setattr(dcm, "SpacingBetweenSlices", spacing)
+
+            all_volumes += assign_volumes(geom_group)
+
+    return all_volumes
 
 
 def niftiseg_to_dicomseg(
@@ -985,6 +1114,15 @@ def cglob(
         p.join()
 
 
+def suffix_generator():
+    yield ""
+    for n in itertools.count(1):
+        for s in itertools.product(string.ascii_lowercase, repeat=n):
+            suffix = "_" + "".join(s)
+            if suffix != "_a":
+                yield suffix
+
+
 __all__ = [
     "MissingColumnsError",
     "check_required_columns",
@@ -994,7 +1132,7 @@ __all__ = [
     "sitk_to_hd",
     "hd_to_surfa",
     "surfa_to_hd",
-    "dcm_meta_check",
+    "dcm_volume_selector",
     "niftiseg_to_dicomseg",
     "dicomseg_to_niftiseg",
     "initialize_models",

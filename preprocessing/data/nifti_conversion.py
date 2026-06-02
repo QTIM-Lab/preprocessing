@@ -28,7 +28,8 @@ from preprocessing.utils import (
     check_required_columns,
     hd_to_sitk,
     update_errorfile,
-    dcm_meta_check
+    dcm_volume_selector,
+    suffix_generator
 )
 from preprocessing.dcm_tools import sort_slices, calc_slice_distance
 from pydicom import dcmread
@@ -59,7 +60,7 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-2) -> bool:
     """
     series_dir = Path(series_dir).resolve()
 
-    files = list(series_dir.glob("**/*.dcm"))
+    files = list(series_dir.glob("**/*"))
 
     dcms = []
 
@@ -71,14 +72,11 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-2) -> bool:
     # required metadata is present and consistent
     required_metadata = ["ImageOrientationPatient", "SliceThickness", "PixelSpacing"]
 
-    try:
-        for meta in required_metadata:
-            meta_0 = getattr(dcms[0], meta)
-            for dcm in dcms[1:]:
-                if not np.allclose(meta_0, getattr(dcm, meta), atol=eps):
-                    return False
-    except Exception:
-        return False
+    for meta in required_metadata:
+        meta_0 = getattr(dcms[0], meta)
+        for dcm in dcms[1:]:
+            if not np.allclose(meta_0, getattr(dcm, meta), atol=eps):
+                raise Exception(f"'{meta}' is not within tolerance. Received {meta_0} and {getattr(dcm, meta)}.")
 
     # orientaation is an orthonormal basis
     orientation = np.array(dcms[0].ImageOrientationPatient)
@@ -86,10 +84,10 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-2) -> bool:
     if not np.allclose(norm(orientation[:3]), 1, atol=eps) or not np.allclose(
         norm(orientation[3:]), 1, atol=eps
     ):
-        return False
+        raise Exception(f"'ImageOrientationPatient'={orientation} does not form an orthonormal basis")
 
     if not np.isclose(orientation[:3].dot(orientation[3:]), 0, atol=eps):
-        return False
+        raise Exception(f"'ImageOrientationPatient'={orientation} does not form an orthonormal basis")
 
     # consistent distance
     dists = []
@@ -101,9 +99,7 @@ def dicom_integrity_checks(series_dir: Path | str, eps: float = 1e-2) -> bool:
     spacing = np.diff(dists)
 
     if not np.allclose(spacing, spacing.mean(), atol=eps):
-        return False
-
-    return True
+        raise Exception(f"Slice distances are inconsistent. Received {spacing}")
 
 
 def convert_series(
@@ -166,69 +162,85 @@ def convert_series(
     nifti_dir = Path(nifti_dir).resolve()
 
     output_dir = nifti_dir / anon_patient_id / anon_study_id / subdir
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     output_nifti = (
         output_dir
         / f"{anon_patient_id}_{anon_study_id}_{normalized_series_description.replace(' ', '_')}.nii.gz"
     )
 
+    errorfile = output_dir / "conversion_errors.txt"
+
     if Path(output_nifti).exists() and not overwrite:
         return str(output_nifti)
 
-    if not skip_integrity_checks:
-        if not dicom_integrity_checks(dicom_dir, eps=tolerance):
-            print(
-                f"{dicom_dir} does not pass integrity checks and will not be converted to NIfTI"
-            )
-            return ""
-
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # if not skip_integrity_checks:
+    #     try:
+    #         dicom_integrity_checks(dicom_dir, eps=tolerance)
+    #
+    #     except Exception as error:
+    #         update_errorfile(
+    #             func_name="preprocessing.data.convert_series",
+    #             kwargs={
+    #                 "dicom_dir": dicom_dir,
+    #                 "nifti_dir": nifti_dir,
+    #             },
+    #             errorfile=errorfile,
+    #             error=error,
+    #             # verbose=True
+    #         )
+    #
+    #         return ""
+    #
 
     dicom_dir = Path(dicom_dir).resolve()
 
     files = list(dicom_dir.glob("**/*"))
 
     dcms = []
+    multiframe_dcms = []
 
     for file in files:
         try:
-            dcms.append(dcmread(file, stop_before_pixels=False))
+            dcm = dcmread(file, stop_before_pixels=False)
+            if getattr(dcm, "NumberOfFrames", 1) > 1:
+                multiframe_dcms.append(file)
+
+            else:
+                dcms.append(dcm)
 
         except Exception:
             continue
 
-    dcm_groups = sort_slices(dcms, group_by_position=True)
+    volumes = dcm_volume_selector(dcms) # sort_slices(dcms, group_by_position=True)
 
-    for i, group in enumerate(dcm_groups):
-        try:
-            hd_im = hd.image.get_volume_from_series(dcm_meta_check(group), atol=tolerance)
+    suffix_gen = suffix_generator()
 
-        except Exception as error:
-            errorfile = output_dir / "conversion_errors.txt"
-            update_errorfile(
-                func_name="preprocessing.data.convert_series",
-                kwargs={
-                    "dicom_dir": dicom_dir,
-                    "nifti_dir": nifti_dir,
-                },
-                errorfile=errorfile,
-                error=error,
-                # verbose=True
-            )
-
-            continue
-
+    for vol in volumes:
+        hd_im = hd.image.get_volume_from_series(
+            vol,
+            apply_real_world_transform=False,
+            atol=tolerance,
+            orientation_tol=tolerance,
+        )
         sitk_im = hd_to_sitk(hd_im)
 
-        outfile = str(output_nifti) if i == 0 else str(output_nifti).replace(".nii.gz", f"_{i}.nii.gz")
+        outfile = str(output_nifti).replace(".nii.gz", f"{next(suffix_gen)}.nii.gz")
         sitk.WriteImage(sitk_im, outfile)
+        image_converted = True
 
+    for vol in multiframe_dcms:
+        hd_im = hd.imread(vol).get_volume()
+        sitk_im = hd_to_sitk(hd_im)
+
+        outfile = str(output_nifti).replace(".nii.gz", f"{next(suffix_gen)}.nii.gz")
+        sitk.WriteImage(sitk_im, outfile)
         image_converted = True
 
     if image_converted:
         return str(output_nifti)
 
     return ""
-
 
 
 def convert_seg(
